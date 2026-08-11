@@ -130,6 +130,7 @@ void LARCStateMachine::begin()
     qtrRear.useDefaultCalibration(1);
 
     odomMove_.begin();
+    odomMove_.setCommandTimeout(100);
     odomMove_.resetPose();
     odomMove_.captureCurrentYawTarget();
     //resetOdomAverages();
@@ -143,8 +144,6 @@ void LARCStateMachine::update()
     vision.update();
     tofLeft.update();
     tofRight.update();
-    odomMove_.update();
-
     const uint32_t now = millis();
     startStateTime();
 
@@ -1223,4 +1222,9 @@ void LARCStateMachine::handleBenefits(uint32_t now, bool cornerRIGHTDetected, fl
 void LARCStateMachine::handleStopState()
 {
     LARC.brake();
+}
+
+void LARCStateMachine::updateControl()
+{
+    odomMove_.update();
 }

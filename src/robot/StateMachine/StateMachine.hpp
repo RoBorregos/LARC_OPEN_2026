@@ -36,6 +36,7 @@ public:
 
     void begin();
     void update();
+    void updateControl();
 
 private:
     STATES currentState = STATES::START;

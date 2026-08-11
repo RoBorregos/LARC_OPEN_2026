@@ -1,8 +1,17 @@
 #include <Arduino.h>
+#include "PeriodicRunner.hpp"
 #include "robot/StateMachine/StateMachine.hpp"
 #include "robot/instances/instances.hpp"
 
 LARCStateMachine stateMachine;
+
+namespace
+{
+    // These periods become vTaskDelayUntil() periods during the RTOS phase.
+    PeriodicRunner driveControlSchedule(10);
+    PeriodicRunner robotSchedule(20);
+    PeriodicRunner actuatorSchedule(20);
+}
 
 void setup()
 {
@@ -19,6 +28,14 @@ void setup()
 
 void loop()
 {
-    stateMachine.update();
+    const uint32_t now = millis();
 
+    if (driveControlSchedule.due(now))
+        stateMachine.updateControl();
+
+    if (robotSchedule.due(now))
+        stateMachine.update();
+
+    if (actuatorSchedule.due(now))
+        servos.update();
 }

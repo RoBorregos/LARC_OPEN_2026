@@ -13,6 +13,7 @@ public:
 
     void begin();
     void update();
+    void setCommandTimeout(uint32_t timeoutMs);
 
     void forward(float rpm);
     void backward(float rpm);
@@ -103,6 +104,9 @@ private:
     float R_theta_;
 
     uint32_t lastCycleMs_;
+    uint32_t lastCommandMs_ = 0;
+    uint32_t commandTimeoutMs_ = 100;
+    bool commandEnabled_ = false;
 
     static float wrapPi(float a);
     static void pushPeriod(Motor& m, unsigned long p);
@@ -115,6 +119,7 @@ private:
     void setMotorPWM(Motor& m, float pwm);
     void stopMotor(Motor& m);
     void stopAll();
+    void markCommandReceived();
 
     void pidStepWithRPM(Motor& m, float rpm, float extraRPM);
     void ekfStep(float dt, float rpmUL, float rpmUR, float rpmLL, float rpmLR);

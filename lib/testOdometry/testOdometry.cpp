@@ -311,14 +311,24 @@ void OdomMovement::ekfStep(float dt, float rpmUL, float rpmUR, float rpmLL, floa
 
 void OdomMovement::setRPMs(float ul, float ur, float ll, float lr)
 {
+    const bool ulChanged = fabsf(UL_.setpoint - ul) > 0.01f;
+    const bool urChanged = fabsf(UR_.setpoint - ur) > 0.01f;
+    const bool llChanged = fabsf(LL_.setpoint - ll) > 0.01f;
+    const bool lrChanged = fabsf(LR_.setpoint - lr) > 0.01f;
+
     UL_.setpoint = ul;
     UR_.setpoint = ur;
     LL_.setpoint = ll;
     LR_.setpoint = lr;
 
-    UL_.integral = UR_.integral = LL_.integral = LR_.integral = 0.0f;
-    UL_.last_error = UR_.last_error = LL_.last_error = LR_.last_error = 0.0f;
-    UL_.got_pulse = UR_.got_pulse = LL_.got_pulse = LR_.got_pulse = false;
+    // Preserve controller history while the same command is refreshed by the
+    // strategy loop. Reset only the wheel whose setpoint actually changed.
+    if (ulChanged) { UL_.integral = 0.0f; UL_.last_error = 0.0f; }
+    if (urChanged) { UR_.integral = 0.0f; UR_.last_error = 0.0f; }
+    if (llChanged) { LL_.integral = 0.0f; LL_.last_error = 0.0f; }
+    if (lrChanged) { LR_.integral = 0.0f; LR_.last_error = 0.0f; }
+
+    markCommandReceived();
 }
 
 void OdomMovement::begin()
@@ -355,6 +365,19 @@ void OdomMovement::begin()
     yawNow_ = ekf_th_;
 
     lastCycleMs_ = millis();
+    lastCommandMs_ = lastCycleMs_;
+    commandEnabled_ = false;
+}
+
+void OdomMovement::setCommandTimeout(uint32_t timeoutMs)
+{
+    commandTimeoutMs_ = timeoutMs;
+}
+
+void OdomMovement::markCommandReceived()
+{
+    lastCommandMs_ = millis();
+    commandEnabled_ = true;
 }
 
 void OdomMovement::captureCurrentYawTarget()
@@ -387,6 +410,7 @@ void OdomMovement::left(float rpm)
 
 void OdomMovement::stop()
 {
+    commandEnabled_ = false;
     stopAll();
 }
 
@@ -399,6 +423,14 @@ void OdomMovement::resetPose()
 void OdomMovement::update()
 {
     uint32_t now = millis();
+
+    // A future DriveControlTask must fail safe if RobotTask stops publishing.
+    if (commandEnabled_ && (now - lastCommandMs_) > commandTimeoutMs_)
+    {
+        commandEnabled_ = false;
+        stopAll();
+    }
+
     if (now - lastCycleMs_ < (uint32_t)(kTs * 1000)) return;
 
     float dt = (now - lastCycleMs_) / 1000.0f;
