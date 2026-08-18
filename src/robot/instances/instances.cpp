@@ -29,3 +29,5 @@ Vision vision(Serial);
 TCA9548A i2cMux;
 ToF tofLeft(Pins::kToFchFL, i2cMux, ToFType::L1X);
 ToF tofRight(Pins::kToFchFR, i2cMux, ToFType::L1X);
+
+OdomMovement odomMove_;
