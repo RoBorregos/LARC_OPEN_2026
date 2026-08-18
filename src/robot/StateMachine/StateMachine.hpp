@@ -7,6 +7,11 @@
 #include "testOdometry.hpp"
 #include "robot/instances/instances.hpp"
 
+//State machine (states) files...
+#include "States/TierOne/StartState.hpp"
+#include "States/TierOne/PoolState.hpp"
+#include "States/TierOne/LookForLineState.hpp"
+
 enum class STATES
 {
     START,
@@ -20,13 +25,6 @@ enum class STATES
     BENEFITSSTARTCORNER,  // Look for left corner
     BENEFITS,             // Rear Vision + liberating cacaos
     STOP                  // FINISH ALL TASKS      :D          !!! Ends in right corner
-};
-
-enum class PoolSubState
-{
-    FORWARD,
-    AVOID_LEFT,
-    AVOID_RIGHT
 };
 
 class LARCStateMachine
@@ -67,10 +65,8 @@ private:
     bool     lfCorrecting        = false;
     int8_t   lfCorrectionDir     = 0;
     uint32_t lfCorrectionStartMs = 0;
-    uint32_t lfLeftHoldMs        = 0;  
-    uint32_t lfRightHoldMs       = 0;  
-
-    OdomMovement odomMove_;
+    uint32_t lfLeftHoldMs        = 0;
+    uint32_t lfRightHoldMs       = 0;
 
     // Set states
     void setState(STATES newState);
