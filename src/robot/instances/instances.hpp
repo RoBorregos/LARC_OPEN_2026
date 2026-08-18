@@ -20,6 +20,8 @@
 #include "Vision.hpp"
 // VLX
 #include "TCA9548A/TCA9548A.h"
+// Odometry
+#include "testOdometry.hpp"
 
 
 extern Drive LARC;
@@ -42,5 +44,7 @@ extern ToF tofLeft;
 extern ToF tofRight;
 
 extern TCA9548A i2cMux;
+
+extern OdomMovement odomMove_;
 
 #endif
