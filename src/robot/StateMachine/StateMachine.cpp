@@ -142,8 +142,6 @@ void LARCStateMachine::update()
     ir.update();
     qtrFront.update();
     vision.update();
-    tofLeft.update();
-    tofRight.update();
     const uint32_t now = millis();
     startStateTime();
 
@@ -411,8 +409,6 @@ void LARCStateMachine::readVision()
 void LARCStateMachine::handleStartState(uint32_t now, bool backDetected)
 {
     vision.stop();
-    tofLeft.update();
-    tofRight.update();
 
     const bool limitPressed = (digitalRead(limitSwitch) == HIGH); // ==HIGH
 
@@ -507,8 +503,6 @@ void LARCStateMachine::handlePoolState(uint32_t now, bool obstacle, bool leftDet
 {
     vision.stop();
     vision.clearErrors();
-    tofLeft.update();
-    tofRight.update();
 
     switch (poolState)
     {
