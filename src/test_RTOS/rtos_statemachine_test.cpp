@@ -5,7 +5,7 @@
 #include <FreeRTOS_TEENSY4.h>
 
 #include "PeriodicRunner.hpp"
-#include "robot/StateMachine/AntiqueStateMachine/StateMachine.hpp"
+#include "robot/StateMachine/StateMachine.hpp"
 #include "robot/instances/instances.hpp"
 
 LARCStateMachine stateMachine;
