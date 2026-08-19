@@ -1,49 +1,52 @@
 /*
 *@author:  Ximena Patricia García Magdaleno
-* StartState.hpp
-* State Machine Tier One.2- Start State 
+* BenefitsState.hpp
+* State Machine Tier Three.2- Benefits State
 */
 
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
 
-class BenefitsStartCornerState {
+class BenefitsState {
 public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
     }
 
-    void update(uint32_t now, bool cornerLeftDetected, float vx, bool onLine, bool& transitionToBenefits) {
-        transitionToBenefits = false;
-
-        static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
+    void update(uint32_t now, bool cornerRIGHTDetected, float vx, bool onLine, bool& transitionToStop) {
+        transitionToStop = false;
 
         switch (action_stage) {
-            // ── Stage 0: Buscar esquina LEFT ────────────────────────────────
+            // ── Stage 0: Decidir si ya estamos en la esquina RIGHT ──────────
             case 0: {
-                if (cornerLeftDetected) {
+                if (!cornerRIGHTDetected) {
+                    action_stage = 1;
+                } else {
                     LARC.brake();
                     action_start_time = now;
-                    action_stage = 1;
-                    return;
+                    action_stage = 2;
                 }
-
-                if (!onLine) {
-                    LARC.left(kBaseSpeed);
-                    return;
-                }
-
-                LARC.setTranslation(vx, 0.48f);
                 break;
             }
 
-            // ── Stage 1: Brake por 1000 ms antes de transicionar ──────────
+            // ── Stage 1: Avanzar hasta detectar la esquina RIGHT ────────────
             case 1: {
+                LARC.setTranslation(vx, -0.48f);
+
+                if (cornerRIGHTDetected) {
+                    action_stage = 2;
+                }
+                break;
+            }
+
+            // ── Stage 2: Brake por 1000 ms antes de transicionar a STOP ────
+            case 2: {
                 LARC.brake();
+
                 if ((now - action_start_time) >= 1000) {
-                    transitionToBenefits = true;
+                    transitionToStop = true;
                 }
                 break;
             }
