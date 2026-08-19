@@ -39,14 +39,13 @@ public:
                 return;
             }
 
-            // ── Stage 2: Parado ────────────────────────────────────────────
+            // ── Stage 2: Parado (cae directo a stage 3 en el mismo tick, ─────
+            // igual que Antique: el case 2 original no tiene break/return ni
+            // avanza action_stage, así que el cuerpo de stage 3 se ejecuta de
+            // inmediato en la misma llamada mientras action_stage siga en 2).
             case 2: {
                 odomMove_.stop();
-                // Nota: El código original tiene lógica comentada para elevador
-                // Por ahora solo avanzamos a stage 3
-                action_start_time = now;
-                action_stage = 3;
-                return;
+                // [[fallthrough]]
             }
 
             // ── Stage 3: Retroceder buscando línea FRONT-LEFT ──────────────
