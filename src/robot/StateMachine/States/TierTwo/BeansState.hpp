@@ -15,17 +15,22 @@ public:
         action_start_time = 0;
     }
 
-    void update(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx, bool& transitionToBeansGoBack, bool& transitionToPoolsGoBack) {
+    void update(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx, bool& transitionToBeansGoBack, bool& transitionToPoolsGoBack, bool& transitionToStop) {
         transitionToBeansGoBack = false;
         transitionToPoolsGoBack = false;
+        transitionToStop = false;
 
         static constexpr uint32_t kLostLineTimeoutMs = 1200;
 
         // Check critical error from vision
         if (vision.hasCriticalError()) {
             vision.stop();
-            // Señal para transicionar a STOP
-            transitionToPoolsGoBack = true;  // O podrías tener un flag de error
+            // STOP here on purpose (matches Antique): this is where we used
+            // to end the round early for the match timer (TMR). The
+            // "correct" continuation, if we ever don't need to cut the
+            // round short, would instead be to keep going:
+            // transitionToBeansGoBack = true;
+            transitionToStop = true;
             return;
         }
 
