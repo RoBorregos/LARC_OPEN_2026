@@ -1,7 +1,7 @@
 /*
 *@author:  Ximena Patricia García Magdaleno
 * StartState.hpp
-* State Machine Tier One.2- Start State 
+* State Machine Tier One.3- Start State 
 */
 
 #pragma once

@@ -1,7 +1,7 @@
 /*
 *@author:  Ximena Patricia García Magdaleno
 * BenefitsState.hpp
-* State Machine Tier Three.2- Benefits State
+* State Machine Tier Three.3- Benefits State
 */
 
 #pragma once
