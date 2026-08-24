@@ -35,8 +35,16 @@
 
 constexpr uint8_t BNO_ADDRESS_PRIMARY   = 0x4A; // ADR to GND
 constexpr uint8_t BNO_ADDRESS_SECONDARY = 0x4B; // ADR to VCC
-constexpr uint32_t I2C_FREQUENCY        = 50000;
+constexpr uint32_t I2C_FREQUENCY        = 100000; // antes 50000 (heredado del BNO055) -- a 50kHz begin_I2C()
+                                                    // nunca completaba el handshake SH-2 (ver bno085_standalone.cpp)
 constexpr uint8_t MAX_ATTEMPTS          = 20;
+
+// El chip a veces deja de mandar reportes (getSensorEvent()/readBNO085()
+// siempre false) sin que el bus se caiga -- lastYaw/Pitch/Roll se quedan
+// pegados en el ultimo valor para siempre porque nada vuelve a pisarlos.
+// Si pasa este tiempo sin una lectura valida, se fuerza un reinit completo
+// (begin_I2C manda su propio software-reset SH-2 internamente).
+constexpr uint32_t STALL_TIMEOUT_MS = 1500;
 
 // Rotation report every 20 ms (50 Hz), faster than taskReadBNO's 20 Hz poll
 // so a fresh reading is always waiting.
@@ -55,8 +63,9 @@ struct BnoReading
     uint32_t timestamp = 0;
 };
 
-static volatile uint32_t bnoOkCount   = 0;
-static volatile uint32_t bnoFailCount = 0;
+static volatile uint32_t bnoOkCount       = 0;
+static volatile uint32_t bnoFailCount     = 0;
+static volatile uint32_t bnoRecoveryCount = 0;
 
 // Last decoded reading + accuracy (0=Unreliable .. 3=High), so the health
 // monitor can print without touching I2C again.
@@ -97,7 +106,7 @@ static bool tryBeginAt(uint8_t address)
 {
     for (uint8_t attempt = 1; attempt <= MAX_ATTEMPTS; ++attempt)
     {
-        if (bno.begin_I2C(address, &Wire))
+        if (bno.begin_I2C(address, &Wire2))
         {
             bnoAddress = address;
             return true;
@@ -168,8 +177,9 @@ void taskReadBNO(void *pvParameters)
 {
     (void)pvParameters;
 
-    TickType_t lastWake = xTaskGetTickCount();
+    TickType_t lastWake   = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
+    TickType_t lastOkTick = lastWake;
 
     for (;;)
     {
@@ -180,7 +190,6 @@ void taskReadBNO(void *pvParameters)
 
             uint8_t accuracy = 0;
             bool ok = readBNO085(reading, accuracy);
-            xSemaphoreGive(i2cMutex);
 
             if (ok)
             {
@@ -189,12 +198,26 @@ void taskReadBNO(void *pvParameters)
                 lastPitch    = reading.pitch;
                 lastRoll     = reading.roll;
                 lastAccuracy = accuracy;
+                lastOkTick   = xTaskGetTickCount();
                 xQueueSend(bnoQueue, &reading, 0);
             }
             else
             {
                 ++bnoFailCount;
+
+                // Sin esto, lastYaw/Pitch/Roll quedan pegados para siempre si
+                // el SH-2 deja de mandar reportes. begin_I2C() manda su propio
+                // software-reset SH-2 (i2chal_open), no hace falta un pin de
+                // reset de hardware para recuperarlo.
+                if ((xTaskGetTickCount() - lastOkTick) > pdMS_TO_TICKS(STALL_TIMEOUT_MS))
+                {
+                    ++bnoRecoveryCount;
+                    bnoReady   = initBNO085();
+                    lastOkTick = xTaskGetTickCount();
+                }
             }
+
+            xSemaphoreGive(i2cMutex);
         }
 
         vTaskDelayUntil(&lastWake, period);
@@ -224,9 +247,10 @@ void taskHealthMonitor(void *pvParameters)
         Serial.print(F(" | "));
 
         Serial.printf(
-            "accuracy=%s OK=%lu FAIL=%lu | stackFree ReadBNO=%u HealthMon=%u\n",
+            "accuracy=%s OK=%lu FAIL=%lu recoveries=%lu | stackFree ReadBNO=%u HealthMon=%u\n",
             kAccuracyName[lastAccuracy & 0x03],
             (unsigned long)bnoOkCount, (unsigned long)bnoFailCount,
+            (unsigned long)bnoRecoveryCount,
             (unsigned)uxTaskGetStackHighWaterMark(hReadBNO),
             (unsigned)uxTaskGetStackHighWaterMark(hHealthMonitor));
 
@@ -264,10 +288,10 @@ void setup()
     Serial.println(F("[BOOT] setup() started"));
     blinkCode(1);
 
-    // Teensy 4.1: SDA = pin 18, SCL = pin 19
-    Wire.begin();
-    Wire.setClock(I2C_FREQUENCY);
-    Serial.println(F("[BOOT] Wire ready, starting BNO085..."));
+    // Teensy 4.1 (Wire2): SDA2 = pin 25, SCL2 = pin 24
+    Wire2.begin();
+    Wire2.setClock(I2C_FREQUENCY);
+    Serial.println(F("[BOOT] Wire2 ready, starting BNO085..."));
     blinkCode(2);
 
     bnoReady = initBNO085();
