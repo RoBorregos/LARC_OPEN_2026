@@ -28,11 +28,12 @@ namespace Pins
     // M3=lower-left, M4=lower-right (mismo orden que la version anterior
     // de este archivo).
     // =========================================================
-    constexpr uint8_t kPwmPin[4] = {
+    constexpr uint8_t kPwmPin[5] = {
         8,  // PWM_M1
         9,  // PWM_M2
         10, // PWM_M3
-        11  // PWM_M4
+        11, // PWM_M4
+        12  //PWM_M5 (elevator)
     };
 
     constexpr uint8_t kUpperMotors[4] = {
@@ -47,6 +48,11 @@ namespace Pins
         38, // IN2_M3
         39, // IN1_M4 (LOWER RIGHT, m4)
         40  // IN2_M4
+    };
+
+    constexpr uint8_t kElevator[2] = {
+        16, //IN1_M5
+        17  //IN2_M5
     };
 
     // =========================================================
@@ -75,9 +81,6 @@ namespace Pins
     // hardcodear sus propios pines) -- estos valores no estan conectados
     // al comportamiento real todavia, eso es aparte de la duda de pines.
     // =========================================================
-    constexpr uint8_t kElevatorINA1 = 16; // IN1_M5
-    constexpr uint8_t kElevatorINA2 = 17; // IN2_M5
-    constexpr uint8_t kElevatorPWM  = 12; // PWM_M5
 
     // =========================================================
     // LIMIT SWITCH
