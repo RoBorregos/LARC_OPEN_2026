@@ -29,25 +29,25 @@ namespace Pins
     // de este archivo).
     // =========================================================
     constexpr uint8_t kPwmPin[5] = {
-        8,  // PWM_M1
+        10, // PWM_M4
+        11, // PWM_M3
         9,  // PWM_M2
-        10, // PWM_M3
-        11, // PWM_M4
-        12  //PWM_M5 (elevator)
+        8,  // PWM_M1
+        12  // PWM_M5 (elevator)
     };
 
     constexpr uint8_t kUpperMotors[4] = {
-        33, // IN1_M1 (UPPER LEFT, m1)
-        34, // IN2_M1
-        35, // IN1_M2 (UPPER RIGHT, m2)
-        36  // IN2_M2
+        37, // IN1_M3 (LOWER LEFT, m3)
+        38,  //IN2_M3
+        40, // IN1_M4 (LOWER RIGHT, m4)
+        39, // IN2_M4
     };
 
     constexpr uint8_t kLowerMotors[4] = {
-        37, // IN1_M3 (LOWER LEFT, m3)
-        38, // IN2_M3
-        39, // IN1_M4 (LOWER RIGHT, m4)
-        40  // IN2_M4
+        35,  // IN1_M2 (LOWER RIGHT, m2)
+        36,  // IN2_M2
+        33,  // IN1_M1 (LOWER LEFT, m1)
+        34   // IN2_M1
     };
 
     constexpr uint8_t kElevator[2] = {
