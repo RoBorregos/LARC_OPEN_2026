@@ -1,13 +1,15 @@
 #include "Drive.hpp"
 
+// Actualized for Erick's new circuit board
 //  Constructor
 
 Drive::Drive()
     : bno_(),
-      m1_ul_(Pins::kUpperMotors[0], Pins::kUpperMotors[1], Pins::kPwmPin[0], true, UL_ENC_A, UL_ENC_B, diameter),
-      m2_ur_(Pins::kUpperMotors[2], Pins::kUpperMotors[3], Pins::kPwmPin[1], true, UR_ENC_A, UR_ENC_B, diameter),
-      m3_ll_(Pins::kLowerMotors[0], Pins::kLowerMotors[1], Pins::kPwmPin[2], true, LL_ENC_A, LL_ENC_B, diameter),
-      m4_lr_(Pins::kLowerMotors[2], Pins::kLowerMotors[3], Pins::kPwmPin[3], true, LR_ENC_A, LR_ENC_B, diameter),
+    // Si no funciona, cambiar false o true, cambiar pines y despues false o true para 
+     m1_ul_(33, 34, 8, true, UL_ENC_A, UL_ENC_B, diameter), //M1
+     m2_ur_(37, 38, 10, true, LL_ENC_A, LL_ENC_B, diameter), //M3
+     m3_ll_(35, 36, 9, true, UR_ENC_A, UR_ENC_B, diameter), //M2
+     m4_lr_(40, 39, 11, true, LR_ENC_A, LR_ENC_B, diameter), //M4
       omni_(m1_ul_, m2_ur_, m3_ll_, m4_lr_),
       yawPid_(P, I, D, -kOmegaMax, +kOmegaMax),
       linePid_(0.00008f, 0.000005f, 0.0f, -kLinePidMax, +kLinePidMax)
@@ -99,8 +101,8 @@ void Drive::update() {
     // 4) Debug 10 Hz
     if (now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
-        // Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f\n",
-        //     ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw));
+        Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f\n",
+            ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw));
     }
 }
 

@@ -6,6 +6,7 @@
 #include "pins.h"
 #include "testOdometry.hpp"
 #include "robot/instances/instances.hpp"
+#include "robot/Perception/Perception.hpp"
 
 // State machine (states) files...
 #include "States/TierOne/StartState.hpp"
@@ -61,6 +62,9 @@ private:
 
     // ELEVATOR
     const int limitSwitch = Pins::kLimitSwitch;
+
+    // Shared sensor fusion (ToF/IR/QTR, encoders soon), computed once per tick
+    Perception perception_;
 
     // One instance per state class (see States/Tier*)
     StartState startState_;

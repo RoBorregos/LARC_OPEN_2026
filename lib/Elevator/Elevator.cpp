@@ -19,7 +19,7 @@
 **/
 #include "Elevator.hpp"
 
-Elevator::Elevator() : state(0), pin1(Pins::kElevatorINA1), pin2(Pins::kElevatorINA2), pwm(Pins::kElevatorPWM)
+Elevator::Elevator() : state(0), pin1(Pins::kElevator[0]), pin2(Pins::kElevator[1]), pwm(Pins::kPwmPin[4])
 {
 
 }

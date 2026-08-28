@@ -4,7 +4,7 @@
 #include <Wire.h>
 #include <math.h>
 #include "pins.h"
-#include "BNO/bno.hpp"
+#include "BNO085/BNO085.hpp"
 
 class OdomMovement
 {
@@ -84,7 +84,7 @@ private:
 
     static OdomMovement* instance_;
 
-    BNO bno_;
+    BNO085 bno_;
 
     uint8_t encUL_A_, encUL_B_, pwmUL_, inUL1_, inUL2_;
     uint8_t encUR_A_, encUR_B_, pwmUR_, inUR1_, inUR2_;

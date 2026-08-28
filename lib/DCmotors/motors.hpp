@@ -54,7 +54,7 @@ class DCMotor
         float getDistanceMeters() const;   
         void  setPPR(float ppr);     // to configure the motor
 
-        void testForwardBackward();
+        void testForwardBackward(const char* label = "motor");
 
 
     private:

@@ -1,5 +1,5 @@
 /*
-*@author:  Ximena Patricia García Magdaleno
+*@author: Ximena Patricia García Magdaleno
 * StartState.hpp
 * State Machine Tier One.1- Start State 
 */

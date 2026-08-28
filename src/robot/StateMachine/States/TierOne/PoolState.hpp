@@ -27,7 +27,7 @@ public:
  
         static constexpr float kNormalSpeed = 50.0f;
         static constexpr float kAvoidSpeed = 55.0f;
-        static constexpr uint32_t kNoObstacleToCornerMs = 3000;
+        static constexpr uint32_t kNoObstacleToCornerMs = 3000; //Time without detecting obstacle - Go to LookForLine state
         static constexpr uint32_t kClearDelayMs = 1500;
  
         switch (currentSubState) {

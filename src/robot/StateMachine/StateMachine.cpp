@@ -7,8 +7,6 @@
 
 namespace
 {
-    static constexpr float kObstacleDistanceCm = 20.0f;
-
     const __FlashStringHelper *mainStateName(STATES state)
     {
         switch (state)
@@ -101,15 +99,16 @@ void LARCStateMachine::update()
     const uint32_t now = millis();
     startStateTime();
 
-    const int linePos = qtrFront.getPosition(); // Para el PID → más suave
-    const bool onLine = qtrFront.onLine();
-    const float lineCorr = linePID.update(linePos, Constants::LineFollower::kSetpoint);
-    const float vx = -lineCorr;
+    perception_.update(now);
+    const PerceptionSnapshot &p = perception_.get();
 
-    const bool FL = ir.getState(IRLine::FL);
-    const bool FR = ir.getState(IRLine::FR);
-    const bool BL = ir.getState(IRLine::BL);
-    const bool BR = ir.getState(IRLine::BR);
+    const bool onLine = p.onLine;
+    const float vx = p.vx;
+
+    const bool FL = p.FL;
+    const bool FR = p.FR;
+    const bool BL = p.BL;
+    const bool BR = p.BR;
 
     static uint32_t debugPrintMs = 0;
     if ((now - debugPrintMs) >= 100)
@@ -152,71 +151,11 @@ void LARCStateMachine::update()
     const bool frontRightDetectedLine = FR;
     const bool backLeftDetectedLine = BL;
     const bool backRightDetectedLine = BR;
-    const bool frontDetectedLine = (FL || FR); // Hacer que con el qtr tambien detecte linea
-    const bool backDetected = (BL || BR);
-    const bool leftDetectedPool = (FL || BL);
-    const bool rightDetectedPool = (FR || BR);
-
-    // DESPUÉS
-    static constexpr uint32_t kTofWarmupMs = 500;
-    static uint32_t tofReadyTimestamp = 0;
-    if (tofReadyTimestamp == 0 && (tofLeft.isValid() || tofRight.isValid()))
-        tofReadyTimestamp = now;
-    const bool tofReady = tofReadyTimestamp != 0 &&
-                        (now - tofReadyTimestamp) > kTofWarmupMs;
-
-    const bool obstacleLeftNow  = tofReady
-                            && tofLeft.isValid()
-                            && tofLeft.getDistanceCm()  < kObstacleDistanceCm;
-
-    const bool obstacleRightNow = tofReady
-                            && tofRight.isValid()
-                            && tofRight.getDistanceCm() < kObstacleDistanceCm;
-
-    static bool obstacleLatched = false;
-    static uint32_t obstacleClearStartMs  = 0;
-    static uint32_t obstacleDetectStartMs = 0;
-    static constexpr uint32_t kObstacleReleaseMs  = 400;
-    static constexpr uint32_t kObstacleConfirmMs  = 0;
-
-    if (!obstacleLatched)
-    {
-    if (obstacleLeftNow || obstacleRightNow)
-    {
-    if (obstacleDetectStartMs == 0)
-        obstacleDetectStartMs = now;
-
-    if ((now - obstacleDetectStartMs) >= kObstacleConfirmMs)
-    {
-        obstacleLatched       = true;
-        obstacleClearStartMs  = 0;
-        obstacleDetectStartMs = 0;
-    }
-    }
-    else
-    {
-    obstacleDetectStartMs = 0; // reset si deja de verse
-    }
-    }
-    else
-    {
-        if (obstacleLeftNow || obstacleRightNow)
-        {
-            obstacleClearStartMs = 0;
-        }
-        else
-        {
-            if (obstacleClearStartMs == 0)
-                obstacleClearStartMs = now;
-
-            if ((now - obstacleClearStartMs) >= kObstacleReleaseMs)
-            {
-                obstacleLatched = false;
-                obstacleClearStartMs = 0;
-            }
-        }
-    }
-    const bool obstacle = obstacleLatched;
+    const bool frontDetectedLine = p.frontDetectedLine; // Hacer que con el qtr tambien detecte linea
+    const bool backDetected = p.backDetected;
+    const bool leftDetectedPool = p.leftDetectedPool;
+    const bool rightDetectedPool = p.rightDetectedPool;
+    const bool obstacle = p.obstacle;
 
     switch (currentState)
     {

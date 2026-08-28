@@ -155,15 +155,16 @@ float DCMotor::getPMeters() {
 }
 
 
-void DCMotor::testForwardBackward(){
+void DCMotor::testForwardBackward(const char* label){
     const int pwm = 120;
     const uint32_t time = 3000;
     const uint32_t pause = 600;
 
-  Serial.println("===>>> Test DCmotors: one by one <<<===");
+  Serial.print("===>>> Test DCmotors: ");
+  Serial.print(label);
+  Serial.println(" <<<===");
 
   // Forward
-  Serial.println("M1");
   move(pwm);
   delay(time);
   stop(); delay(pause);
