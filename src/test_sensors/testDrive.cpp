@@ -32,7 +32,7 @@ enum Step : uint8_t {
 static Step step = FWD;
 static uint32_t stepStart = 0;
 
-static constexpr uint32_t kStepMs = 2000;
+static constexpr uint32_t kStepMs = 8000;
 static constexpr float kSpeed = Constants::PID::kcurrentVelocity;
 
 void setStep(Step s) {
@@ -73,14 +73,14 @@ void loop() {
   }
 
   switch (step) {
-    case FWD:   drive.left(kSpeed);  break; //atras --->> ul and ll
-    case BACK:  drive.backward(kSpeed); break; // izquierda --->> ul and ll
-    case LEFT:  drive.left(kSpeed);     break; // adelante  --->> ul and ll
-    case RIGHT: drive.right(kSpeed);    break; // derecha  --->> ul and ll
+    case FWD:   drive.forward(kSpeed); Serial.println("Forward"); break; //atras --->> ul and ll
+    case BACK:  drive.forward(kSpeed); Serial.println("Backward");  break; // izquierda --->> ul and ll
+    case LEFT:  drive.forward(kSpeed); Serial.println("Left");  break; // adelante  --->> ul and ll
+    case RIGHT: drive.forward(kSpeed);   Serial.println("Right"); break; // derecha  --->> ul and ll
 
-    case STOP1: drive.stop(); break;
-    case STOP2: drive.stop(); break;
-    case STOP3: drive.stop(); break;
-    case STOP4: drive.stop(); break;
+    case STOP1: drive.stop();  Serial.println("STOP"); break;
+    case STOP2: drive.stop();  Serial.println("STOP"); break;
+    case STOP3: drive.stop();  Serial.println("STOP"); break;
+    case STOP4: drive.stop();  Serial.println("STOP");break;
   }
 }

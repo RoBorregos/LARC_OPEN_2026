@@ -6,10 +6,10 @@
 Drive::Drive()
     : bno_(),
     // Si no funciona, cambiar false o true, cambiar pines y despues false o true para 
-     m1_ul_(33, 34, 8, true, UL_ENC_A, UL_ENC_B, diameter), //M1
-     m2_ur_(37, 38, 10, true, LL_ENC_A, LL_ENC_B, diameter), //M3
-     m3_ll_(35, 36, 9, true, UR_ENC_A, UR_ENC_B, diameter), //M2
-     m4_lr_(40, 39, 11, true, LR_ENC_A, LR_ENC_B, diameter), //M4
+     m1_ul_(33, 34, 8, true, 1, 0, diameter), //M1
+     m2_ur_(36, 35, 9, true, 2, 13, diameter), //M3
+     m3_ll_(37, 38, 10, true, 32, 31, diameter), //M2
+     m4_lr_(40, 39, 11, false, 21, 20, diameter), //M4
       omni_(m1_ul_, m2_ur_, m3_ll_, m4_lr_),
       yawPid_(P, I, D, -kOmegaMax, +kOmegaMax),
       linePid_(0.00008f, 0.000005f, 0.0f, -kLinePidMax, +kLinePidMax)
@@ -101,8 +101,9 @@ void Drive::update() {
     // 4) Debug 10 Hz
     if (now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
-        Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f\n",
-            ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw));
+        Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f omega:%.4f err:%.4f\n",
+            ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw),
+            omega, yawPid_.getError());
     }
 }
 

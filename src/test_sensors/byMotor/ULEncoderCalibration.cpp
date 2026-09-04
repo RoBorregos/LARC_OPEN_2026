@@ -1,20 +1,24 @@
-// Calibration    <<<<<LR>>>>>>
+// UL calibration :: RPMs: 190  (02 Septiembre 2026)
+
+    // En proceso de calibracion  
+
+// Calibration    <<<<<UL>>>>>>
 
 //Use this code to calibrate
 
 // Almost last code or test for the Encoders
 // Works (4:50 am)
 // FINAL gives velocit to the motor
+
 #include <Arduino.h>
-#include "pins.h"
 
-const uint8_t encUL_B_Pin = Pins::kEncoders[7];
-const uint8_t encUL_A_Pin = Pins::kEncoders[6];
-const uint8_t motorPWM    = Pins::kPwmPin[3];
-const uint8_t motorIN1    = Pins::kLowerMotors[2];
-const uint8_t motorIN2    = Pins::kLowerMotors[3];
+const uint8_t encUL_B_Pin = 1;
+const uint8_t encUL_A_Pin = 0;
+const uint8_t motorPWM    = 8;
+const uint8_t motorIN1    = 33;
+const uint8_t motorIN2    = 34;
 
-//  Encoder / filter 
+// Encoder Filter
 #define FILTER_SIZE 8
 
 volatile unsigned long period_buf[FILTER_SIZE] = {0};
@@ -25,12 +29,12 @@ volatile bool          got_pulse   = false;
 
 
 //  PID 
-const float PPR = 486.0f;
-const float Ts  = 0.05f;   // 50ms — more stable than 10ms
+const float PPR = 190.0f;
+const float Ts  = 0.05f;   // 50ms — más estable que 10ms
 
-float Kp = 1.3f;
-float Ki = 1.0f;
-float Kd = 0.0035f;
+float Kp = 2.5f;
+float Ki = 2.8f;//2.2f;
+float Kd = 0.0022f;
 
 float setpoint   = 45.0f;
 float integral   = 0.0f;
@@ -52,7 +56,7 @@ void isrA()
     unsigned long now = micros();
     unsigned long p   = now - last_pulse_us;
     last_pulse_us     = now;
-    if (p > 200UL) pushPeriod(p);  // Ignores bounces < 200µs
+    if (p > 200UL) pushPeriod(p);  // Ignora rebotes < 200µs
 }
 
 void isrB()
@@ -60,7 +64,7 @@ void isrB()
     unsigned long now = micros();
     unsigned long p   = now - last_pulse_us;
     last_pulse_us     = now;
-    if (p > 200UL) pushPeriod(p);  // Ignores bounces < 200µs
+    if (p > 200UL) pushPeriod(p);  // Ignora rebotes < 200µs
 }
 
 //  Measurement RPM 
@@ -76,7 +80,7 @@ float measureRPM()
     if (!has_got) return 0.0f;
     if (micros() - last > 200000UL) return 0.0f;
 
-    // Promedio de períodos válidos
+    // Average of valid periods
     unsigned long sum   = 0;
     uint8_t       count = 0;
     for (uint8_t i = 0; i < FILTER_SIZE; i++) {
@@ -88,7 +92,7 @@ float measureRPM()
     return 60000000.0f / (avg_period * 4.0f * PPR);
 }
 
-//  Motor 
+// Motor 
 void setMotor(float pwm)
 {
     if (pwm >= 0.0f) {

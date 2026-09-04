@@ -28,26 +28,33 @@ namespace Pins
     // M3=lower-left, M4=lower-right (mismo orden que la version anterior
     // de este archivo).
     // =========================================================
+    // Valores tomados de src/test_sensors/motor_test.cpp (2026-08-31), que el
+    // equipo confirmo como los pines correctos ya verificados en hardware.
+    // motor_test.cpp cablea las variables de codigo m2_ur/m3_ll cruzadas
+    // respecto al chasis fisico ("M2 en codigo es M3 en chasis" y viceversa)
+    // -- los valores de abajo ya estan acomodados por POSICION FISICA
+    // (M1=upper-left, M2=upper-right, M3=lower-left, M4=lower-right), no por
+    // nombre de variable en ese archivo.
     constexpr uint8_t kPwmPin[5] = {
-        8, // PWM_M1    Upper RIGHT
-        9, // PWM_M2    Lower RIGHT
-        10, // PWM_M3
+        8,  // PWM_M1
+        10, // PWM_M2 (pin del PWM de m3_ll en motor_test.cpp)
+        9,  // PWM_M3 (pin del PWM de m2_ur en motor_test.cpp)
         11, // PWM_M4
         12  // PWM_M5 (elevator)
     };
 
     constexpr uint8_t kUpperMotors[4] = {
-        38, // IN1_M3 (LOWER LEFT, m3)
-        37,  //IN2_M3
-        39, // IN1_M4 (LOWER RIGHT, m4)
-        40, // IN2_M4
+        35, // IN1_M3 (pin de m2_ur en motor_test.cpp)
+        36, // IN2_M3
+        40, // IN1_M4
+        39, // IN2_M4
     };
 
     constexpr uint8_t kLowerMotors[4] = {
-        35,  // IN1_M2 (LOWER RIGHT, m2)
-        36,  // IN2_M2
-        34,  // IN1_M1 UPPER
-        32   // IN2_M1
+        37,  // IN1_M2 (pin de m3_ll en motor_test.cpp)
+        38,  // IN2_M2
+        33,  // IN1_M1
+        34   // IN2_M1
     };
 
     constexpr uint8_t kElevator[2] = {
@@ -62,11 +69,16 @@ namespace Pins
     // archivo (no es A,B,A,B... simetrico -- motor1 arranca en B), solo
     // se actualizaron los valores de pin.
     // =========================================================
+    // ENA_M2/ENB_M2 actualizados a 2/13 segun m3_ll en motor_test.cpp (pin de
+    // chasis M2 -- ver nota arriba sobre el cruce m2_ur/m3_ll). OJO: 2 y 13
+    // coinciden con kBnoRstReserved/kBnoIntReserved mas abajo -- mismo
+    // conflicto de pines que ya estaba documentado ahi, solo que ahora
+    // recae sobre el encoder de M2 en vez de M3.
     constexpr uint8_t kEncoders[8] = {
         0,  // ENB_M1
         1,  // ENA_M1
-        25, // ENA_M2
-        24, // ENB_M2
+        2,  // ENA_M2
+        13, // ENB_M2
         32, // ENA_M3
         31, // ENB_M3
         21, // ENA_M4
@@ -134,10 +146,10 @@ namespace Pins
     // Teensy -- sin cambios. El bus I2C (SDA=18, SCL=19) es compartido
     // por BNO, PCA9685 y TCA9548A (confirmado en el esquematico).
     // =========================================================
-    static constexpr uint8_t kToFchFR = 0; // Front Right
-    static constexpr uint8_t kToFchFL = 1; // Front Left
-    static constexpr uint8_t kToFchBL = 2; // Back Left / placeholder
-    static constexpr uint8_t kToFchBR = 3; // Back Right / placeholder
+    static constexpr uint8_t kToFchFR = 3; // Front Right
+    static constexpr uint8_t kToFchFL = 3; // Front Left
+    static constexpr uint8_t kToFchBL = 3; // Back Left / placeholder
+    static constexpr uint8_t kToFchBR = 0;//3; // Back Right / placeholder
 
     // =========================================================
     // SERVOS -- 6 conectores JST directos (SERVO1-SERVO6) confirmados

@@ -1,3 +1,6 @@
+// UR calibration :: RPMs: 188  (02 Septiembre 2026)
+
+
 // Calibration    <<<<<UR>>>>>>
 
 //Use this code to calibrate
@@ -9,11 +12,11 @@
 #include <Arduino.h>
 #include "pins.h"
 
-const uint8_t encUL_B_Pin = Pins::kEncoders[0];
-const uint8_t encUL_A_Pin = Pins::kEncoders[1];
-const uint8_t motorPWM    = Pins::kPwmPin[0];
-const uint8_t motorIN1    = Pins::kUpperMotors[0];
-const uint8_t motorIN2    = Pins::kUpperMotors[1];
+const uint8_t encUL_B_Pin = 13;
+const uint8_t encUL_A_Pin = 2;
+const uint8_t motorPWM    = 9;
+const uint8_t motorIN1    = 36;
+const uint8_t motorIN2    = 35;
 
 #define FILTER_SIZE 8
 

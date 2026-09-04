@@ -1,20 +1,26 @@
-// LL calibration 
+// REVISADO 2025
+// LR calibration :: RPMs: 188 (02 Septiembre 2026)
+
+
+
+
+// Calibration    <<<<<LR>>>>>>
 
 //Use this code to calibrate
 
-// Penultimo code o test para los Encoders
+// Almost last code or test for the Encoders
 // Works (4:50 am)
-// FINAL gives velocity to the motor
+// FINAL gives velocit to the motor
 #include <Arduino.h>
 #include "pins.h"
 
-const uint8_t encUL_B_Pin = Pins::kEncoders[5];
-const uint8_t encUL_A_Pin = Pins::kEncoders[4];
-const uint8_t motorPWM    = Pins::kPwmPin[2];
-const uint8_t motorIN1    = Pins::kLowerMotors[0];
-const uint8_t motorIN2    = Pins::kLowerMotors[1];
+const uint8_t encUL_B_Pin = 20;
+const uint8_t encUL_A_Pin = 21;
+const uint8_t motorPWM    = 11;
+const uint8_t motorIN1    = 39;
+const uint8_t motorIN2    = 40;
 
-//  Encoder / filter
+//  Encoder / filter 
 #define FILTER_SIZE 8
 
 volatile unsigned long period_buf[FILTER_SIZE] = {0};
@@ -25,12 +31,12 @@ volatile bool          got_pulse   = false;
 
 
 //  PID 
-const float PPR = 495.0f;
-const float Ts  = 0.05f;   // 50ms more stable than 10ms
+const float PPR = 189.0f;
+const float Ts  = 0.05f;   // 50ms — more stable than 10ms
 
-float Kp = 2.1f;
-float Ki = 3.9f; //2.2f;
-float Kd = 0.0012f;
+float Kp = 2.0f;
+float Ki = 0.8f; //0.8
+float Kd = 0.0035f;
 
 float setpoint   = 45.0f;
 float integral   = 0.0f;
@@ -52,7 +58,7 @@ void isrA()
     unsigned long now = micros();
     unsigned long p   = now - last_pulse_us;
     last_pulse_us     = now;
-    if (p > 200UL) pushPeriod(p);  // Ignore bounces < 200µs
+    if (p > 200UL) pushPeriod(p);  // Ignores bounces < 200µs
 }
 
 void isrB()
@@ -60,7 +66,7 @@ void isrB()
     unsigned long now = micros();
     unsigned long p   = now - last_pulse_us;
     last_pulse_us     = now;
-    if (p > 200UL) pushPeriod(p);  // Ignora rebotes < 200µs
+    if (p > 200UL) pushPeriod(p);  // Ignores bounces < 200µs
 }
 
 //  Measurement RPM 
@@ -76,7 +82,7 @@ float measureRPM()
     if (!has_got) return 0.0f;
     if (micros() - last > 200000UL) return 0.0f;
 
-// Average of valid periods
+    // Promedio de períodos válidos
     unsigned long sum   = 0;
     uint8_t       count = 0;
     for (uint8_t i = 0; i < FILTER_SIZE; i++) {
@@ -102,6 +108,7 @@ void setMotor(float pwm)
     analogWrite(motorPWM, (int)constrain(pwm, 0.0f, 255.0f));
 }
 
+//  Setup 
 void setup()
 {
     Serial.begin(115200);
@@ -121,6 +128,7 @@ void setup()
     last_time = millis();
 }
 
+//  Loop 
 void loop()
 {
     unsigned long now = millis();

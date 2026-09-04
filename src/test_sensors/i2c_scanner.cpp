@@ -1,11 +1,12 @@
 /**
  * @file i2c_scanner.cpp
- * @brief Escaneo del bus I2C completo (sin RTOS, sin asumir ningun
- *        dispositivo de antemano): recorre las 127 direcciones de 7 bits
- *        y reporta cuales responden. Sirve para confirmar en vivo, en el
- *        cableado actual, si el BNO055 (0x28/0x29), el BNO085 (0x4A/0x4B),
- *        el TCA9548A (0x70-0x77) o cualquier otro modulo esta realmente
- *        vivo en el bus antes de asumir que un driver especifico esta mal.
+ * @brief Escaneo del bus I2C principal (Wire, SDA=18/SCL=19) completo (sin
+ *        RTOS, sin asumir ningun dispositivo de antemano): recorre las 127
+ *        direcciones de 7 bits y reporta cuales responden. Sirve para
+ *        confirmar en vivo, en el cableado actual, si el BNO055
+ *        (0x28/0x29), el BNO085 (0x4A/0x4B), el TCA9548A (0x70-0x77) o
+ *        cualquier otro modulo esta realmente vivo en ESTE bus antes de
+ *        asumir que un driver especifico esta mal.
  *
  *        Modo "live": escanea cada SCAN_PERIOD_MS y solo imprime cuando
  *        una direccion aparece o desaparece (con timestamp). Pensado para
@@ -25,9 +26,9 @@ const char* guessDevice(uint8_t address)
 {
     switch (address)
     {
-        case 0x28:
-        case 0x29:
-            return "BNO055";
+        //case 0x28:
+        //case 0x29:
+        //    return "BNO055";
 
         case 0x4A:
         case 0x4B:
