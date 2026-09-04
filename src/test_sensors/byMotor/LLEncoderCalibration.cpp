@@ -37,6 +37,10 @@ float setpoint   = 45.0f;
 float integral   = 0.0f;
 float last_error = 0.0f;
 
+// Filtro EMA sobre el RPM medido (suaviza el ruido de cuantizacion del encoder)
+const float RPM_ALPHA = 0.3f; // 0=sin cambio, 1=sin filtro
+float rpm_filt = 0.0f;
+
 unsigned long last_time = 0;
 
 //  Helpers ISR 
@@ -129,8 +133,10 @@ void loop()
     {
         last_time += (unsigned long)(Ts * 1000.0f);
 
-        float rpm   = measureRPM();
-        float error = setpoint - rpm;
+        float rpm_raw = measureRPM();
+        rpm_filt      += RPM_ALPHA * (rpm_raw - rpm_filt);
+        float rpm     = rpm_filt;
+        float error   = setpoint - rpm;
 
         float derivative       = (error - last_error) / Ts;
         float output_unclamped = Kp * error + Ki * integral + Kd * derivative;

@@ -10,7 +10,6 @@
 // FINAL gives velocit to the motor
 
 #include <Arduino.h>
-#include "pins.h"
 
 const uint8_t encUL_B_Pin = 13;
 const uint8_t encUL_A_Pin = 2;
@@ -27,7 +26,7 @@ volatile bool          got_pulse   = false;
 
 
 
-const float PPR = 475.0f;
+const float PPR = 188.0f;
 const float Ts  = 0.05f;   // 50ms — más estable que 10ms
 
 float Kp = 3.4f;
@@ -37,6 +36,10 @@ float Kd = 0.001f;
 float setpoint   = 45.0f;
 float integral   = 0.0f;
 float last_error = 0.0f;
+
+// Filtro EMA sobre el RPM medido (suaviza el ruido de cuantizacion del encoder)
+const float RPM_ALPHA = 0.3f; // 0=sin cambio, 1=sin filtro
+float rpm_filt = 0.0f;
 
 unsigned long last_time = 0;
 
@@ -126,16 +129,22 @@ void loop()
     {
         last_time += (unsigned long)(Ts * 1000.0f);
 
-        float rpm   = measureRPM();
-        float error = setpoint - rpm;
+        float rpm_raw = measureRPM();
+        rpm_filt      += RPM_ALPHA * (rpm_raw - rpm_filt);
+        float rpm     = rpm_filt;
+        float error   = setpoint - rpm;
 
-        integral += error * Ts;
-        integral  = constrain(integral, -200.0f, 200.0f);
+        float derivative       = (error - last_error) / Ts;
+        float output_unclamped = Kp * error + Ki * integral + Kd * derivative;
 
-        float derivative = (error - last_error) / Ts;
-        float output     = Kp * error + Ki * integral + Kd * derivative;
-        output           = constrain(output, 0.0f, 255.0f);
-        last_error       = error;
+        // Solo integra si el output no esta saturado (anti-windup real)
+        if (output_unclamped > 0.0f && output_unclamped < 255.0f) {
+            integral += error * Ts;
+            integral  = constrain(integral, -100.0f, 100.0f);
+        }
+
+        float output = constrain(output_unclamped, 0.0f, 255.0f);
+        last_error    = error;
 
         setMotor(output);
 
