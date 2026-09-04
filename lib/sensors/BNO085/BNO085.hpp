@@ -28,6 +28,7 @@ public:
     float getYaw() const;
     float getRoll() const;
     float getPitch() const;
+    bool  hasValidYaw() const { return initialized && !firstYawSample_; }
 
     std::tuple<float, float, float> getLinealAcceleration();
 

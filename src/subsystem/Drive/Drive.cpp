@@ -9,7 +9,7 @@ Drive::Drive()
      m1_ul_(33, 34, 8, true, 1, 0, diameter), //M1
      m2_ur_(36, 35, 9, true, 2, 13, diameter), //M3
      m3_ll_(37, 38, 10, true, 32, 31, diameter), //M2
-     m4_lr_(40, 39, 11, false, 21, 20, diameter), //M4
+     m4_lr_(39, 40, 11, false, 21, 20, diameter), //M4
       omni_(m1_ul_, m2_ur_, m3_ll_, m4_lr_),
       yawPid_(P, I, D, -kOmegaMax, +kOmegaMax),
       linePid_(0.00008f, 0.000005f, 0.0f, -kLinePidMax, +kLinePidMax)
@@ -25,7 +25,17 @@ void Drive::begin() {
 
     Wire.begin();
     bno_.begin();
-    bno_.update(); delay(50); bno_.update();
+
+    // Wait for the first real orientation sample before trusting getYaw() --
+    // otherwise targetYaw_ below latches onto the default 0.0f instead of
+    // the robot's actual starting heading, and the yaw-hold PID then fights
+    // a permanent phantom error it can never close. Bounded so a dead/absent
+    // BNO can't hang the whole robot.
+    uint32_t yawWaitStart = millis();
+    while (!bno_.hasValidYaw() && millis() - yawWaitStart < 1000) {
+        bno_.update();
+        delay(10);
+    }
 
     yawPid_.setAngleWrapping(true);
     yawPid_.reset();

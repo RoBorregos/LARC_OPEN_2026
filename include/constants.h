@@ -42,7 +42,7 @@ namespace Constants
         static constexpr float kKi = 0.002f; // 0.002f
         static constexpr float kKd = 0.0042f;  // 0.0012f; // 0.06f; 0.0f
         static constexpr float kOmegaMax = 0.25f; //0.25f;
-        static constexpr float kcurrentVelocity = 0.20f; // Velocity according to PID
+        static constexpr float kcurrentVelocity = 0.30f; // Velocity according to PID
 
     } // namespace PID
     namespace UltrasonicConstants
