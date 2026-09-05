@@ -1,7 +1,7 @@
 // REVISADO 2025
 // LR calibration :: RPMs: 188 (02 Septiembre 2026)
 
-// Solo este queda pendiente por balance de peso
+// Balance de peso ya corregido (pendiente anterior resuelto)
 
 
 // Calibration    <<<<<LR>>>>>>
@@ -12,7 +12,6 @@
 // Works (4:50 am)
 // FINAL gives velocit to the motor
 #include <Arduino.h>
-#include "pins.h"
 
 const uint8_t encUL_B_Pin = 20;
 const uint8_t encUL_A_Pin = 21;
@@ -21,7 +20,7 @@ const uint8_t motorIN1    = 39;
 const uint8_t motorIN2    = 40;
 
 //  Encoder / filter 
-#define FILTER_SIZE 8
+#define FILTER_SIZE 12
 
 volatile unsigned long period_buf[FILTER_SIZE] = {0};
 volatile uint8_t       period_idx  = 0;
@@ -34,7 +33,7 @@ volatile bool          got_pulse   = false;
 const float PPR = 189.0f;
 const float Ts  = 0.05f;   // 50ms — more stable than 10ms
 
-float Kp = 2.0f;
+float Kp = 3.0f;
 float Ki = 0.8f; //0.8
 float Kd = 0.0035f;
 
@@ -43,7 +42,7 @@ float integral   = 0.0f;
 float last_error = 0.0f;
 
 // Filtro EMA sobre el RPM medido (suaviza el ruido de cuantizacion del encoder)
-const float RPM_ALPHA = 0.3f; // 0=sin cambio, 1=sin filtro
+const float RPM_ALPHA = 0.2f; // 0=sin cambio, 1=sin filtro
 float rpm_filt = 0.0f;
 
 unsigned long last_time = 0;
