@@ -30,7 +30,7 @@ const float PPR = 188.0f;
 const float Ts  = 0.05f;   // 50ms — más estable que 10ms
 
 float Kp = 3.4f;
-float Ki = 2.2f;
+float Ki = 1.0f;
 float Kd = 0.001f;
 
 float setpoint   = 45.0f;
