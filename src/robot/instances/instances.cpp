@@ -2,7 +2,7 @@
 #include "pins.h"
 
 Drive LARC;
-Mux74HC4067 mux(Pins::kMuxSig);
+Mux74HC4067 mux(Pins::kMuxSig2);
 ServoSystem servos;
 Elevator elevator;
 

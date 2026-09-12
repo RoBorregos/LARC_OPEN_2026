@@ -109,10 +109,12 @@ namespace Pins
     // 74HC4067 MULTIPLEXERS (x2)
     // shared S0-S3, different SIG. Segun el equipo, AMBOS muxes son
     // para QTR (front/rear) -- el IR ya NO pasa por mux (ver seccion
-    // IR mas abajo). kMuxSig2 solo esta declarado; instances.cpp hoy
-    // unicamente instancia un Mux74HC4067 con kMuxSig (mux1), asi que
-    // el segundo mux fisico esta disponible pero no usado en software
-    // todavia.
+    // IR mas abajo). El QTR real esta cableado a SIG_A1 (kMuxSig2), no a
+    // SIG_A0 (kMuxSig) -- confirmado comparando qtr_test.cpp (valores
+    // fijos en kMuxSig) contra vlx_qtr_test.cpp (valores variables en
+    // kMuxSig2). instances.cpp instancia su unico Mux74HC4067 con
+    // kMuxSig2 por eso; kMuxSig (mux1/SIG_A0) queda disponible pero sin
+    // usar hasta que se cablee un segundo QTR ahi.
     // =========================================================
     static constexpr uint8_t kMuxSig  = 26; // SIG_A0 -- mux1 (QTR front)
     static constexpr uint8_t kMuxSig2 = 22; // SIG_A1 -- mux2 (QTR rear)

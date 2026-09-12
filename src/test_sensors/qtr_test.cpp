@@ -1,9 +1,12 @@
 /**
  * @file qtr_test.cpp
  * @brief Diagnostico standalone (sin RTOS) del QTRX-MD-08A (array de
- *        reflectancia analogico, 8 canales) cableado a traves del mux
- *        74HC4067 (ver lib/sensors/mux.h e include/pins.h: kMuxSig /
- *        kMuxS0-S3, kQtrFrontFirstCh = canales 0..7 del mux).
+ *        reflectancia analogico, 8 canales) cableado a traves del mux2
+ *        74HC4067 (ver lib/sensors/mux.h e include/pins.h: kMuxSig2 /
+ *        kMuxS0-S3, kQtrFrontFirstCh = canales 0..7 del mux). El QTR real
+ *        esta conectado a SIG_A1 (kMuxSig2), no a SIG_A0 (kMuxSig) --
+ *        confirmado porque vlx_qtr_test.cpp (que escanea kMuxSig2) veia
+ *        valores variables mientras este test con kMuxSig se quedaba fijo.
  *
  *        Lee los 8 canales directo via Mux74HC4067::read() -- NO usa la
  *        clase QTR (lib/sensors/qtr) porque esta hardcodeada a N=7
@@ -20,7 +23,7 @@
 #include <Arduino.h>
 #include "mux.h"
 
-static Mux74HC4067 mux(Pins::kMuxSig);
+static Mux74HC4067 mux(Pins::kMuxSig2);
 static constexpr uint8_t kFirstCh = Pins::kQtrFrontFirstCh; // 0 (C0..C7)
 static constexpr uint8_t kNumCh   = 8;
 
@@ -42,7 +45,7 @@ void setup()
 
     Serial.println(F("[QTR TEST] QTRX-MD-08A (8 canales) via mux 74HC4067"));
     Serial.printf("[QTR TEST] SIG=%u S0=%u S1=%u S2=%u S3=%u, canales %u..%u\n",
-                  Pins::kMuxSig, Pins::kMuxS0, Pins::kMuxS1, Pins::kMuxS2, Pins::kMuxS3,
+                  Pins::kMuxSig2, Pins::kMuxS0, Pins::kMuxS1, Pins::kMuxS2, Pins::kMuxS3,
                   kFirstCh, kFirstCh + kNumCh - 1);
 }
 

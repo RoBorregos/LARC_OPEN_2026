@@ -56,9 +56,12 @@ private:
     static constexpr float kPwmDeadband = 60.0f;
     static constexpr float kPwmMax      = 150.0f;
 
-    static constexpr float kKp = 1.5f;
-    static constexpr float kKi = 1.2f;
-    static constexpr float kKd = 0.005f;
+    // Ganancias por rueda, de las calibraciones individuales en src/test_sensors/byMotor/
+    static constexpr float kKpUL = 2.2f,  kKiUL = 0.8f, kKdUL = 0.0022f;
+    static constexpr float kKpUR = 3.4f,  kKiUR = 1.0f, kKdUR = 0.001f;
+    static constexpr float kKpLL = 4.0f,  kKiLL = 1.6f, kKdLL = 0.0015f;
+    // LR: provisional, pendiente recalibrar con la pista ya extendida/plana
+    static constexpr float kKpLR = 3.0f,  kKiLR = 0.8f, kKdLR = 0.0035f;
 
     static constexpr float kYawKp  = 150.0f;
     static constexpr float kYawKi  = 0.5f;
@@ -93,9 +96,6 @@ private:
 
     Motor UL_, UR_, LL_, LR_;
 
-    volatile long ticksLL_count_;
-    long prevTicksLL_;
-
     float yawTarget_, yawIntegral_, yawPrevErr_, yawNow_;
 
     float ekf_x_, ekf_y_, ekf_th_;
@@ -114,7 +114,6 @@ private:
     float yawPidStep(float yawMeasured, float dt);
 
     float measureRPM(Motor& m);
-    float measureRPM_LL(float dtSec);
 
     void setMotorPWM(Motor& m, float pwm);
     void stopMotor(Motor& m);
@@ -131,7 +130,8 @@ private:
     static void isrUR_B();
     static void isrLR_A();
     static void isrLR_B();
-    static void isrLL();
+    static void isrLL_A();
+    static void isrLL_B();
 
     //Odometry
     float lastRpmUL_ = 0.0f;
