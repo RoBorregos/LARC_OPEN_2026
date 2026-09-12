@@ -70,6 +70,14 @@ public:
     // Reads the sensor and updates the cache
     void update();
 
+    // Fuerza al filtro de mediana-de-3 (ver update()) a "saltar" a la
+    // ultima posicion cruda leida en vez de arrastrar 2 lecturas viejas
+    // de un contexto anterior (ej. otro estado de la maquina que uso el
+    // sensor para seguir una parte distinta de la linea). Llamar justo
+    // al entrar a un estado/maniobra donde la posicion previa ya no es
+    // representativa.
+    void resetFilter();
+
     // Pos on the array from 0 (extreme left) to 7000 (extreme right)
     int getPosition() const;
 
@@ -114,6 +122,13 @@ private:
 
     // Final result for control.
     int position;
+
+    // Historial para el filtro de mediana-de-3 sobre position (rechaza
+    // picos aislados de una sola lectura, tipicamente ruido/EMI de los
+    // motores acoplado a la linea analogica compartida del mux).
+    int posHistory[3];
+    uint8_t posHistoryIdx;
+    int lastRawPos;
 
     void ensureCalValid();
 };

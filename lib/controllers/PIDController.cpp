@@ -104,6 +104,11 @@ void PIDController::setOutputLimits(float min, float max)
     pid_->SetOutputLimits((double)min, (double)max);
 }
 
+void PIDController::setSampleTime(int ms)
+{
+    pid_->SetSampleTime(ms);
+}
+
 void PIDController::setEnabled(bool enabled)
 {
     enabled_ = enabled;
