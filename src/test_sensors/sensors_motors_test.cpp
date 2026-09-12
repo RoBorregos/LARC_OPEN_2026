@@ -42,7 +42,8 @@ DCMotor m4_lr(Pins::kLowerMotors[2], Pins::kLowerMotors[3], Pins::kPwmPin[3], tr
 OmniMotors omni(m1_ul, m2_ur, m3_ll, m4_lr);
 
 // ---- Sensors: same wiring as robot/instances/instances.cpp ----
-Mux74HC4067 mux(Pins::kMuxSig);
+// QTR real cableado a SIG_A1 (kMuxSig2), no SIG_A0 (kMuxSig) -- ver pins.h.
+Mux74HC4067 mux(Pins::kMuxSig2);
 QTR qtrFront(Pins::kQtrFrontFirstCh, mux);
 
 const uint8_t irPins[IRLine::N] = {
