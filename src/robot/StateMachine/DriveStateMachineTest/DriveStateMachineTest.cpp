@@ -17,8 +17,25 @@
 
 namespace
 {
-    static constexpr float kVelocity = 0.20f;
+    static constexpr float kVelocity = 0.30f;
     static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
+
+    // Corrección lateral para el retroceso en LOOKFORCORNER / BEANSGOBACK.
+    // Se probo con PIDController (PID_v1) pero el Ki metia un ciclo limite
+    // lento (se pasa de largo, tarda en corregir al otro lado). Ya no hace
+    // falta: el ruido original que motivo el PID venia de lecturas sucias
+    // del QTR (arreglado con el filtro de mediana en QTR::update()), asi
+    // que un P puro manual -- calculado cada loop, sin el SampleTime de la
+    // libreria -- alcanza. kCornerKp se afina empiricamente en campo.
+    static constexpr float kCornerSetpoint = 2900.0f;
+    static constexpr float kCornerKp = 0.00012f;
+    // El swing violento que forzo bajar esto a 0.12 probablemente venia
+    // del signo invertido en LOOKFORCORNER (ya corregido): corregia hacia
+    // el lado equivocado, lo cual generaria justo ese tipo de oscilacion.
+    // Con el signo ya bien, 0.12 resulto insuficiente para recuperar de
+    // un error grande (lPos se quedaba clavado sin volver al setpoint) ->
+    // se sube.
+    static constexpr float kCornerCorrMax = 0.20f;
 
     static constexpr uint32_t kInitializedStoppedMs = 9000;
     static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
@@ -100,7 +117,7 @@ DriveStateMachineTest::DriveStateMachineTest()
 void DriveStateMachineTest::begin()
 {
 
-    currentState = DriveTestSTATES::START; // always in START
+    currentState = DriveTestSTATES::LOOKFORLINE; // always in START
     poolState = PoolSubState::FORWARD;
 
     state_start_time = millis();
@@ -216,6 +233,17 @@ void DriveStateMachineTest::update()
     Serial.print(F(" ❤ qtr| onLine:")); Serial.print(onLine);
     Serial.print(F(" lPos:"));  Serial.print(qtrFront.getPosition());
     Serial.print(F(" vx:")); Serial.print(vx);
+
+    // Diagnostico temporal: raw/norm crudos del QTR frontal, sensor por
+    // sensor, para confirmar si hay contraste real llegando (calibracion/
+    // wiring) o si onLine() nunca dispara porque el sensor no ve la linea.
+    const uint16_t* qtrRaw  = qtrFront.getRaw();
+    const uint16_t* qtrNorm = qtrFront.getNorm();
+    Serial.print(F(" | raw:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRaw[i]); Serial.print(','); }
+    Serial.print(F(" norm:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrNorm[i]); Serial.print(','); }
+
     Serial.println();
     }
 
@@ -223,8 +251,8 @@ void DriveStateMachineTest::update()
 
     const bool frontLeftDetectedLine = FL; // Also used for corner
     const bool frontRightDetectedLine = FR;
-    const bool backLeftDetectedLine = BL;
-    const bool backRightDetectedLine = BR;
+    const bool backLeftDetectedLine = BR;
+    const bool backRightDetectedLine = BL;
     const bool frontDetectedLine = (FL || FR); // Hacer que con el qtr tambien detecte linea
     const bool backDetected = (BL || BR);
     const bool leftDetectedPool = (FL || BL);
@@ -306,7 +334,7 @@ void DriveStateMachineTest::update()
         break;
 
     case DriveTestSTATES::LOOKFORCORNER:
-        handleLookForCornerState(now, backLeftDetectedLine, vx);
+        handleLookForCornerState(now, backLeftDetectedLine, vx, onLine);
         break;
 
     case DriveTestSTATES::BEANS:
@@ -360,6 +388,12 @@ void DriveStateMachineTest::setState(DriveTestSTATES newState)
     lfCorrecting        = false;
     lfCorrectionDir     = 0;
     lfCorrectionStartMs = 0;
+
+    // Filtro de mediana del QTR: sin esto, las primeras
+    // lecturas del nuevo estado quedan mezcladas con las últimas del
+    // estado anterior (que pudo estar viendo una parte de la línea muy
+    // distinta), retrasando la corrección real justo al entrar.
+    qtrFront.resetFilter();
 
     vision.resetGuards();
 
@@ -483,7 +517,7 @@ void DriveStateMachineTest::handleStartState(uint32_t now, bool backDetected)
     // ── Avanzar y transicionar a POOL ────────────────────────────────────
     case 5:
         elevator.ElevatorPosition(0);
-        LARC.forward(0.20f);
+        LARC.forward(0.30f);
 
         if ((now - action_start_time) >= kStartIgnoreTimeMs)
         {
@@ -509,8 +543,8 @@ void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool le
         static int8_t   lineCorrectionDir      = 0;
 
         static constexpr uint32_t kLineCorrectionMs    = 120;
-        static constexpr float    kLineCorrectionSpeed = 0.20f;
-        static constexpr float    kNormalSpeed = 0.20f;
+        static constexpr float    kLineCorrectionSpeed = 0.30f;
+        static constexpr float    kNormalSpeed = 0.30f;
 
         if (lineCorrectionActive)
         {
@@ -574,11 +608,11 @@ void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool le
 
         if (tooClose)
         {
-            LARC.backward(0.20f);
+            LARC.backward(0.30f);
             break;
         }
 
-        LARC.left(0.20f);
+        LARC.left(0.30f);
 
         const bool justEntered = (now - poolStateStartMs) < 150;
 
@@ -621,11 +655,11 @@ void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool le
 
         if (tooClose)
         {
-            LARC.backward(0.20f);
+            LARC.backward(0.30f);
             break;
         }
 
-        LARC.right(0.20f);
+        LARC.right(0.30f);
 
         const bool justEntered = (now - poolStateStartMs) < 150;
 
@@ -672,7 +706,7 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
         if (action_start_time == 0)
             action_start_time = now;
 
-        LARC.backward(0.20f);
+        LARC.backward(0.30f);
 
         if ((now - action_start_time) >= 200)
         {
@@ -685,7 +719,7 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
     // ── case 1: avanzar 400 ms ────────────────────────────────────────────
     if (action_stage == 1)
     {
-        LARC.backward(0.20f);
+        LARC.backward(0.30f);
 
         if ((now - action_start_time) >= 200)
         {
@@ -698,7 +732,7 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
     // ── case 2: stop 400 ms ───────────────────────────────────────────────
     if (action_stage == 2)
     {
-        LARC.forward(0.20f);
+        LARC.forward(0.30f);
 
         if ((now - action_start_time) >= 300)
         {
@@ -733,13 +767,13 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
         if ((now - lfCorrectionStartMs) < kBorderCorrectMs)
         {
             if (lfCorrectionDir < 0)
-                LARC.left(0.20f);
+                LARC.left(0.30f);
             else
-                LARC.right(0.20f);
+                LARC.right(0.30f);
             return;
         }
         lfCorrecting = false;
-        LARC.forward(0.20f);
+        LARC.forward(0.30f);
         return;
     }
 
@@ -748,7 +782,7 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
         lfCorrecting        = true;
         lfCorrectionDir     = +1;
         lfCorrectionStartMs = now;
-        LARC.right(0.20f);
+        LARC.right(0.30f);
         return;
     }
 
@@ -757,14 +791,14 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
         lfCorrecting        = true;
         lfCorrectionDir     = -1;
         lfCorrectionStartMs = now;
-        LARC.left(0.20f);
+        LARC.left(0.30f);
         return;
     }
 
-    LARC.forward(0.20f);
+    LARC.forward(0.30f);
 }
 
-void DriveStateMachineTest::handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx)
+void DriveStateMachineTest::handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx, bool onLine)
 {
 
     static constexpr uint32_t kCornerStopMs = 8200;//1200; //Para que vision empiece
@@ -782,9 +816,24 @@ void DriveStateMachineTest::handleLookForCornerState(uint32_t now, bool cornerLE
             action_start_time = now;
             return;
         }
-        const int error = 2900 - qtrFront.getPosition(); // ← invertido
-        const float corr = constrain(error * 0.0003f, -0.3f, 0.3f);
-        LARC.setTranslation(-0.20f, corr);
+
+        // Sin esto, en cuanto se pierde la línea qtrFront.getPosition() se
+        // queda congelada en la última lectura (ver QTR::update(), sum==0
+        // mantiene position anterior) y el P sigue empujando con ese error
+        // viejo -- normalmente hacia el borde por donde se perdió -- sin
+        // ninguna lectura fresca que lo traiga de vuelta. Resultado: sigue
+        // derivando para ese lado en vez de corregir. Al no ver línea,
+        // se congela corr en 0 (retrocede recto) hasta reencontrarla.
+        float corr = 0.0f;
+        if (onLine)
+        {
+            const float error = kCornerSetpoint - qtrFront.getPosition();
+            corr = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+        Serial.print(F("[LOOKFORCORNER] onLine:")); Serial.print(onLine);
+        Serial.print(F(" lPos:")); Serial.print(qtrFront.getPosition());
+        Serial.print(F(" corr:")); Serial.println(corr, 4);
+        LARC.setTranslation(-0.20f, -corr);
         break;
     }
 
@@ -842,7 +891,7 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
             if (action_start_time == 0)
                 action_start_time = now;
 
-            LARC.backward(0.20f);
+            LARC.backward(0.30f);
 
             if ((now - action_start_time) >= kLostLineTimeoutMs)
             {
@@ -857,7 +906,7 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
 
         const int error = 2200 - qtrFront.getPosition();
         const float corr = constrain(error * 0.0003f, -0.3f, 0.3f);
-        LARC.setTranslation(+0.20f, corr);
+        LARC.setTranslation(+0.30f, corr);
 
         break;
     }
@@ -921,13 +970,13 @@ void DriveStateMachineTest::handleBEANSGoBackState(uint32_t now, bool frontLeftD
 
         if (!onLine)
         {
-            LARC.backward(0.20f);
+            LARC.backward(0.30f);
         }
         else
         {
-            const int error = 2900 - qtrFront.getPosition();
-            const float corr = constrain(error * 0.0003f, -0.3f, 0.3f);
-            LARC.setTranslation(-0.20f, corr);
+            const float error = kCornerSetpoint - qtrFront.getPosition();
+            const float corr  = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+            LARC.setTranslation(-0.15f, corr);
         }
         return;
 
@@ -972,7 +1021,7 @@ case PoolSubState::FORWARD:
 
 case PoolSubState::AVOID_LEFT:
 {
-    LARC.left(0.20f);
+    LARC.left(0.30f);
 
     const bool canChangeSide = (now - poolStateStartMs) >= kMinAvoidTimeMs;
 
@@ -1014,7 +1063,7 @@ case PoolSubState::AVOID_LEFT:
 
 case PoolSubState::AVOID_RIGHT:
 {
-    LARC.right(0.20f);
+    LARC.right(0.30f);
 
     const bool canChangeSide = (now - poolStateStartMs) >= kMinAvoidTimeMs;
 
@@ -1143,7 +1192,7 @@ void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerL
             return;
         }
 
-        LARC.setTranslation(vx, 0.20f);
+        LARC.setTranslation(vx, 0.30f);
 
         break;
     }
@@ -1182,7 +1231,7 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
 
     case 1:
     {
-        LARC.setTranslation(vx, -0.20f);
+        LARC.setTranslation(vx, -0.30f);
 
         // Here goes the rutine
         if (cornerRIGHTDetected)

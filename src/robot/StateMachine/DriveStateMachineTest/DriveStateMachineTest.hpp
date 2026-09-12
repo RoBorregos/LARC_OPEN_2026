@@ -84,7 +84,7 @@ private:
                                                                                                           // Second part (AVOID)
     void handlePoolState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected);             // POOLS
     void handleLookForLineState(uint32_t now, bool frontDetected, bool leftDetected, bool rightDetected, bool onLine); // LOOKFORLINE(no obstacle detected | obstacle no longer detected)
-    void handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx);                       // LOOKFORCORNER (to start vision)
+    void handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx, bool onLine);          // LOOKFORCORNER (to start vision)
     // Third part (RECOLECT)
     void handleBEANS(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx); // BEANS state (recolection + sorting)
     void handleBEANSGoBackState(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx);

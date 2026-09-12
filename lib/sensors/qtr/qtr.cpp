@@ -13,7 +13,7 @@
 static constexpr bool LINE_IS_BLACK = false;
 
 QTR::QTR(uint8_t firstChannel, Mux74HC4067& mux_)
-    : firstCh(firstChannel), initialized(false), mux(mux_), position(0)
+    : firstCh(firstChannel), initialized(false), mux(mux_), position(0), posHistoryIdx(0), lastRawPos(0)
 {
     for (uint8_t i = 0; i < N; i++)
     {
@@ -22,6 +22,8 @@ QTR::QTR(uint8_t firstChannel, Mux74HC4067& mux_)
         calMax[i] = 1;
         norm[i]   = 0;
     }
+    for (uint8_t i = 0; i < 3; i++)
+        posHistory[i] = 0;
 }
 
 bool QTR::begin()
@@ -130,7 +132,23 @@ void QTR::update()
         return;
     }
 
-    position = (int)(weighted / sum); // 0 to 7000
+    const int rawPos = (int)(weighted / sum); // 0 to 7000
+    lastRawPos = rawPos;
+
+    // Filtro mediana-de-3: un pico de ruido en una sola lectura (EMI de
+    // motores, etc.) queda descartado en vez de propagarse al control.
+    posHistory[posHistoryIdx] = rawPos;
+    posHistoryIdx = (posHistoryIdx + 1) % 3;
+
+    const int a = posHistory[0], b = posHistory[1], c = posHistory[2];
+    position = max(min(a, b), min(max(a, b), c)); // mediana de a,b,c
+}
+
+void QTR::resetFilter()
+{
+    for (uint8_t i = 0; i < 3; i++)
+        posHistory[i] = lastRawPos;
+    position = lastRawPos;
 }
 
 int QTR::getPosition() const
