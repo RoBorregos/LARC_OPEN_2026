@@ -72,6 +72,13 @@ private:
     uint32_t lfLeftHoldMs        = 0;
     uint32_t lfRightHoldMs       = 0;
 
+    // Filtro paso-bajo para el corr lateral de LOOKFORCORNER: lPos trae
+    // ruido (EMI de motores) que hace saltar el error crudo entre +/-max
+    // en menos de un ms; sin suavizar, ese ruido pasa directo al comando
+    // de strafe y el robot vibra de lado en vez de corregir. Se resetea
+    // en setState() al entrar de nuevo al estado.
+    float cornerCorrFiltered = 0.0f;
+
     // Set states
     void setState(DriveTestSTATES newState);
     void setPoolState(PoolSubState newState);
@@ -87,7 +94,7 @@ private:
     void handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx, bool onLine);          // LOOKFORCORNER (to start vision)
     // Third part (RECOLECT)
     void handleBEANS(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx); // BEANS state (recolection + sorting)
-    void handleBEANSGoBackState(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx);
+    void handleBEANSGoBackState(uint32_t now, bool BL, bool BR, bool FL);
     // Fourth part (GO BACK)
     void handlePOOLSGoBackState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected);
     void handleLookForLineBackWards(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected);

@@ -128,9 +128,16 @@ namespace Pins
     // QTR ARRAYS ON MUX1/MUX2
     // Numeros de canal dentro del mux (0-15), no pines fisicos del
     // Teensy -- el esquematico no los afecta directamente, sin cambios.
+    //
+    // Orientacion fisica confirmada en campo (2026-09-12): dentro de
+    // qtrFront (indices 0-6 = C0-C6), C6 (indice 6, QTR::getPosition()
+    // alto/cerca de 6000) es el sensor mas ADELANTADO del arreglo; C0
+    // (position baja/cerca de 0) es el mas TRASERO. Usado para fijar el
+    // signo de la correccion QTR->vx en DriveStateMachineTest.cpp
+    // (handleLookForCornerState/handleBEANS).
     // =========================================================
-    static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C7
-    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C15
+    static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C6 (C7 no se usa, QTR::N=7)
+    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C14 (C15 no se usa, mismo patron que front: QTR::N=7)
 
     // =========================================================
     // IR SENSORS -- GPIO DIRECTO (ya NO van por mux; instances.cpp ya
