@@ -1,10 +1,14 @@
 /**
  * @file vlx_drive_test.cpp
- * @brief Combina los dos ToF (VL53L1X) detras del TCA9548A en Wire1 (canales
- *        3 y 4, ver vlx_single_test.cpp) con la clase Drive completa: mientras
- *        el canal 4 detecte algo mas cerca que kDetectMm, el robot se
- *        desplaza a la izquierda; en cuanto deja de detectar, retoma el
- *        avance hacia el frente (se re-evalua en cada ronda, sin estado).
+ * @brief Combina los 4 ToF (VL53L1X) detras del TCA9548A en Wire1 (canales
+ *        0/1/3/4, ver vlx_single_test.cpp -- que solo cubria 3 y 4) con la
+ *        clase Drive completa: mientras cualquiera detecte algo mas cerca
+ *        que kDetectMm, el robot se desplaza a la izquierda; en cuanto
+ *        ninguno detecta, retoma el avance hacia el frente (se re-evalua en
+ *        cada ronda, sin estado).
+ *
+ *        Posicion fisica por canal (confirmar en campo si difiere):
+ *        canal 0 = FL, canal 1 = FR, canal 3 = BL, canal 4 = BR.
  *
  * pio run -e vlx_drive_test -t upload -t monitor
  */
@@ -23,11 +27,27 @@ constexpr uint8_t kTcaAddress = 0x70;
 constexpr int16_t kDetectMm   = 600;   // umbral de deteccion, ajustar en campo
 constexpr float   kRightSpeed = 0.35f; // velocidad lateral, ajustar en campo
 
-Adafruit_VL53L1X vlx3 = Adafruit_VL53L1X();
-Adafruit_VL53L1X vlx4 = Adafruit_VL53L1X();
+Adafruit_VL53L1X vlxFL = Adafruit_VL53L1X(); // canal 0
+Adafruit_VL53L1X vlxFR = Adafruit_VL53L1X(); // canal 1
+Adafruit_VL53L1X vlxBL = Adafruit_VL53L1X(); // canal 3
+Adafruit_VL53L1X vlxBR = Adafruit_VL53L1X(); // canal 4
 
-bool sensor3Ok = false;
-bool sensor4Ok = false;
+struct ToFSlot
+{
+    const char*      name;
+    uint8_t          channel;
+    Adafruit_VL53L1X* sensor;
+    bool             ok;
+};
+
+ToFSlot tofs[] = {
+    {"FL", 0, &vlxFL, false},
+    {"FR", 1, &vlxFR, false},
+    {"BL", 3, &vlxBL, false},
+    {"BR", 4, &vlxBR, false},
+};
+
+constexpr uint8_t kNumToF = sizeof(tofs) / sizeof(tofs[0]);
 
 void tcaSelect(uint8_t channel)
 {
@@ -48,28 +68,22 @@ void setup()
     Wire1.begin();
     Wire1.setClock(100000);
 
-    Serial.println("=== Drive + VLX (canales 3 y 4) ===");
+    Serial.println("=== Drive + VLX (canales 0/1/3/4 = FL/FR/BL/BR) ===");
 
-    tcaSelect(3);
-    if (!vlx3.begin(0x29, &Wire1))
+    for (uint8_t i = 0; i < kNumToF; i++)
     {
-        Serial.println("ERROR inicializando VL53L1X canal 3");
-    }
-    else
-    {
-        sensor3Ok = vlx3.startRanging();
-        Serial.println(sensor3Ok ? "VL53L1X canal 3 OK" : "ERROR iniciando ranging canal 3");
-    }
+        ToFSlot& slot = tofs[i];
+        tcaSelect(slot.channel);
 
-    tcaSelect(4);
-    if (!vlx4.begin(0x29, &Wire1))
-    {
-        Serial.println("ERROR inicializando VL53L1X canal 4");
-    }
-    else
-    {
-        sensor4Ok = vlx4.startRanging();
-        Serial.println(sensor4Ok ? "VL53L1X canal 4 OK" : "ERROR iniciando ranging canal 4");
+        if (!slot.sensor->begin(0x29, &Wire1))
+        {
+            Serial.printf("ERROR inicializando VL53L1X %s (canal %u)\n", slot.name, slot.channel);
+            continue;
+        }
+
+        slot.ok = slot.sensor->startRanging();
+        Serial.printf("VL53L1X %s (canal %u): %s\n", slot.name, slot.channel,
+                      slot.ok ? "OK" : "ERROR iniciando ranging");
     }
 
     drive.begin();
@@ -81,72 +95,48 @@ void loop()
 {
     uint32_t roundStart = millis();
 
-    // =========================
-    // CANAL 3 -- igual que vlx_single_test.cpp
-    // =========================
-    tcaSelect(3);
+    bool anyDetect = false;
 
-    Serial.print("Canal 3: ");
-
-    int16_t distancia3 = -1;
-    if (sensor3Ok && vlx3.dataReady())
+    for (uint8_t i = 0; i < kNumToF; i++)
     {
-        distancia3 = vlx3.distance();
+        ToFSlot& slot = tofs[i];
+        tcaSelect(slot.channel);
 
-        if (distancia3 == -1)
+        Serial.print(slot.name);
+        Serial.print(": ");
+
+        int16_t distanciaMm = -1;
+        if (slot.ok && slot.sensor->dataReady())
         {
-            Serial.print("ERROR");
+            distanciaMm = slot.sensor->distance();
+
+            if (distanciaMm == -1)
+            {
+                Serial.print("ERROR");
+            }
+            else
+            {
+                Serial.print(distanciaMm);
+                Serial.print(" mm");
+            }
+
+            slot.sensor->clearInterrupt();
         }
         else
         {
-            Serial.print(distancia3);
-            Serial.print(" mm");
+            Serial.print(slot.ok ? "esperando..." : "sensor no inicializado");
         }
 
-        vlx3.clearInterrupt();
-    }
-    else
-    {
-        Serial.print(sensor3Ok ? "esperando..." : "sensor no inicializado");
-    }
+        Serial.print("   |   ");
 
-    Serial.print("   |   ");
-
-    // =========================
-    // CANAL 4 -- igual que vlx_single_test.cpp
-    // =========================
-    tcaSelect(4);
-
-    Serial.print("Canal 4: ");
-
-    int16_t distancia4 = -1;
-    if (sensor4Ok && vlx4.dataReady())
-    {
-        distancia4 = vlx4.distance();
-
-        if (distancia4 == -1)
-        {
-            Serial.print("ERROR");
-        }
-        else
-        {
-            Serial.print(distancia4);
-            Serial.print(" mm");
-        }
-
-        vlx4.clearInterrupt();
-    }
-    else
-    {
-        Serial.print(sensor4Ok ? "esperando..." : "sensor no inicializado");
+        if (distanciaMm != -1 && distanciaMm < kDetectMm)
+            anyDetect = true;
     }
 
     // =========================
     // Decision de movimiento
     // =========================
-    bool detect4 = (distancia4 != -1) && (distancia4 < kDetectMm);
-
-    if (detect4)
+    if (anyDetect)
     {
         drive.left(kRightSpeed);
         Serial.println("   ->  IZQUIERDA");

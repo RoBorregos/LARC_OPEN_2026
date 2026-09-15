@@ -35,7 +35,18 @@ namespace
     // Con el signo ya bien, 0.12 resulto insuficiente para recuperar de
     // un error grande (lPos se quedaba clavado sin volver al setpoint) ->
     // se sube.
+    //
+    // OJO: kCornerKp/kCornerCorrMax se afinaron en campo cuando la
+    // correccion iba en vy (strafe, ver setTranslation(-0.20f,
+    // -cornerCorrFiltered) mas abajo). Ahora que vx/vy se intercambiaron
+    // para que vx=correccion/vy=velocidad base (ver handleLookForCornerState),
+    // la respuesta mecanica del chasis puede ser distinta en ese eje ->
+    // revisar si siguen siendo apropiadas o hay que volver a afinarlas.
     static constexpr float kCornerCorrMax = 0.20f;
+
+    // handleBEANS usa 2200 (literal, ver mas abajo) como setpoint en vez de
+    // este mismo valor -- son el mismo QTR fisico, no deberia haber dos
+    // "centros" distintos. Dejado asi por ahora; revisar/unificar despues.
 
     static constexpr uint32_t kInitializedStoppedMs = 9000;
     static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
@@ -342,7 +353,7 @@ void DriveStateMachineTest::update()
         break;
 
     case DriveTestSTATES::BEANSGOBACK:
-        handleBEANSGoBackState(now, frontLeftDetectedLine, onLine, vx);
+        handleBEANSGoBackState(now, BL, BR, FL);
         break;
 
     case DriveTestSTATES::POOLSGOBACK:
@@ -388,6 +399,9 @@ void DriveStateMachineTest::setState(DriveTestSTATES newState)
     lfCorrecting        = false;
     lfCorrectionDir     = 0;
     lfCorrectionStartMs = 0;
+
+    // Reset filtro paso-bajo del corr lateral de LOOKFORCORNER
+    cornerCorrFiltered = 0.0f;
 
     // Filtro de mediana del QTR: sin esto, las primeras
     // lecturas del nuevo estado quedan mezcladas con las últimas del
@@ -823,17 +837,37 @@ void DriveStateMachineTest::handleLookForCornerState(uint32_t now, bool cornerLE
         // viejo -- normalmente hacia el borde por donde se perdió -- sin
         // ninguna lectura fresca que lo traiga de vuelta. Resultado: sigue
         // derivando para ese lado en vez de corregir. Al no ver línea,
-        // se congela corr en 0 (retrocede recto) hasta reencontrarla.
-        float corr = 0.0f;
+        // se congela el target en 0 hasta reencontrarla.
+        float corrTarget = 0.0f;
         if (onLine)
         {
             const float error = kCornerSetpoint - qtrFront.getPosition();
-            corr = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
         }
-        Serial.print(F("[LOOKFORCORNER] onLine:")); Serial.print(onLine);
-        Serial.print(F(" lPos:")); Serial.print(qtrFront.getPosition());
-        Serial.print(F(" corr:")); Serial.println(corr, 4);
-        LARC.setTranslation(-0.20f, -corr);
+
+        // Filtro paso-bajo: lPos trae ruido (EMI de los motores nuevos, ver
+        // debug con raw/norm) que hace saltar corrTarget entre +max y -max
+        // en menos de 1ms. Sin suavizar, ese ruido pasa directo al comando
+        // y el robot vibra en vez de corregir suave hacia el centro. alpha
+        // bajo = mas lento pero rechaza mejor el ruido.
+        static constexpr float kCornerCorrAlpha = 0.15f;
+        cornerCorrFiltered += (corrTarget - cornerCorrFiltered) * kCornerCorrAlpha;
+
+        //Serial.print(F("[LOOKFORCORNER] onLine:")); Serial.print(onLine);
+        //Serial.print(F(" lPos:")); Serial.print(qtrFront.getPosition());
+        //Serial.print(F(" corrTarget:")); Serial.print(corrTarget, 4);
+        //Serial.print(F(" corrFilt:")); Serial.println(cornerCorrFiltered, 4);
+
+        // vx = corrección QTR (adelante/atrás), vy = velocidad base hacia
+        // la izquierda -- ver Drive::forward()/left() en Drive.cpp
+        // (vx=adelante/atras, vy=izq/der). Signo confirmado en campo: C6
+        // (indice 6, position alto/cerca de 6000) es el sensor mas
+        // adelantado del arreglo, C0 (position bajo) el mas trasero. Si
+        // la linea esta hacia C6, position > setpoint -> error negativo
+        // -> corrFiltered negativo -> con el "-" de abajo, vx>0 (corrige
+        // hacia adelante, alcanzando la linea). Sin el "-", corregiria al
+        // reves.
+        LARC.setTranslation(-cornerCorrFiltered, kVelocity);
         break;
     }
 
@@ -886,6 +920,7 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
             return;
         }
 
+        /*
         if (!onLine)
         {
             if (action_start_time == 0)
@@ -900,13 +935,24 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
             }
 
             return;
-        }
+        }*/
 
         action_start_time = 0;
 
-        const int error = 2200 - qtrFront.getPosition();
-        const float corr = constrain(error * 0.0003f, -0.3f, 0.3f);
-        LARC.setTranslation(+0.30f, corr);
+        // 2200 en vez de kCornerSetpoint (2900) -- mismo QTR fisico que
+        // LOOKFORCORNER, ver nota junto a kCornerSetpoint sobre unificar
+        // esto despues.
+        float corr = 0.0f;
+        if (onLine)
+        {
+            const int error = 2200 - qtrFront.getPosition();
+            corr = constrain(error * 0.0003f, -0.3f, 0.3f);
+        }
+
+        // vx = corrección QTR (adelante/atrás), vy = velocidad base hacia
+        // la derecha -- mismo eje y mismo signo que handleLookForCornerState
+        // (C6=sensor mas adelantado, C0=mas trasero, confirmado en campo).
+        LARC.setTranslation(-corr, -kVelocity);
 
         break;
     }
@@ -924,71 +970,44 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
     }
 }
 
-void DriveStateMachineTest::handleBEANSGoBackState(uint32_t now, bool frontLeftDetected, bool onLine, float vx)
+void DriveStateMachineTest::handleBEANSGoBackState(uint32_t now, bool BL, bool BR, bool FL)
 {
     switch (action_stage)
     {
+    // ── case 0: retroceder hasta encontrar BR o BL ──────────────────────
     case 0:
         vision.stop();
         vision.clearErrors();
         elevator.ElevatorPosition(0);
-        LARC.stop();
-        action_start_time = now;
-        action_stage = 1;  // ← falta esto
-        return;
 
-    case 1:
-        elevator.ElevatorPosition(0);
-        LARC.stop();
-        action_start_time = now;
-        action_stage = 2;
-        return;
-
-    case 2:
-        //elevator.ElevatorPosition(1);
-        LARC.stop();
-        /*
-        if ((now - action_start_time) >= 3700)
-        {   vision.stop();
-            vision.clearErrors();
-            action_start_time = now;
-            action_stage = 3;
-        }
-        return;
-        */
-
-    case 3:
-        elevator.ElevatorPosition(0);
-
-        if (frontLeftDetected)
+        if (BR || BL)
         {
             LARC.stop();
-            action_start_time = now;
-            action_stage = 4;
+            action_stage = 1;
             return;
         }
 
-        if (!onLine)
-        {
-            LARC.backward(0.30f);
-        }
-        else
-        {
-            const float error = kCornerSetpoint - qtrFront.getPosition();
-            const float corr  = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
-            LARC.setTranslation(-0.15f, corr);
-        }
+        LARC.backward(0.30f);
         return;
 
-    case 4:
+    // ── case 1: LARC.left hasta encontrar FL ────────────────────────────
+    case 1:
+        elevator.ElevatorPosition(0);
+
+        if (FL)
+        {
+            LARC.stop();
+            action_stage = 2;
+            return;
+        }
+
+        LARC.left(0.30f);
+        return;
+
+    // ── case 2: detenido ─────────────────────────────────────────────────
+    case 2:
         elevator.ElevatorPosition(0);
         LARC.stop();
-
-        if ((now - action_start_time) >= 8000)
-        {
-            vision.startBeans();
-            setState(DriveTestSTATES::BEANS);
-        }
         return;
     }
 }
