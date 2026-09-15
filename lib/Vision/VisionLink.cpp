@@ -2,9 +2,7 @@
    @file VisionLink.cpp
    @date 2026-08-19
   
-   @brief Implementation of the Orin link: serial glue plus every policy
-          decision the protocol implies. See PROTOCOL.md sections 7 and 8
-          for the confirmation and watchdog rules encoded here.
+   @brief Implementation of the Orin link, including the confirmation filter and the safety watchdog.
  */
 
 #include "VisionLink.hpp"
@@ -37,12 +35,16 @@ VisionLink::VisionLink(Stream &port, ServoSystem &servos, uint32_t timeoutMs)
     , _appliedPhase(Phase::IDLE)
     , _status(0)
     , _separatorInvalid(false)
-    , _criticalError(false)
+    , _intakeError(false)
+    , _cameraError(false)
     , _separatorError(false)
     , _benefitsError(false)
+    , _linkLost(false)
     , _beansSent(false)
     , _benefitsSent(false)
     , _stopSent(false)
+    , _openRequest(false)
+    , _heldBenefit(kNoBenefit)
 {
     _confirm.reset((uint8_t)Phase::IDLE, 0);
 }
@@ -91,13 +93,21 @@ void VisionLink::update()
         _status = 0;
         // A dead link is a critical fault: the state machine must see that
         // nobody is steering the sorter any more.
-        _criticalError = true;
+        _linkLost = true;
         // Let the state machine re-request its phase once the Orin is back.
         resetGuards();
     }
 
-    // Benefit-door auto close timers
     _servos.update(now);
+
+    // Only reachable with a timed ServoSystem: the door shut itself, so
+    // re-arm it and let go of the hold.
+    if (_heldBenefit != kNoBenefit &&
+        _servos.benefitPhase(_heldBenefit) != ServoSystem::BenefitPhase::OPEN)
+    {
+        _servos.setBenefit(_heldBenefit, false);
+        _heldBenefit = kNoBenefit;
+    }
 }
 
 // Phase requests
@@ -134,6 +144,24 @@ void VisionLink::requestStatus()
     _serial.write(VisionProto::kCmdStatus);
 }
 
+void VisionLink::leave()
+{
+    stop();
+    resetGuards();
+}
+
+void VisionLink::openBenefit()
+{
+    if (_heldBenefit == kNoBenefit)
+        _openRequest = true;
+}
+
+void VisionLink::closeBenefit()
+{
+    _dropHold();
+    _servos.closeBenefits();
+}
+
 void VisionLink::resetGuards()
 {
     _beansSent    = false;
@@ -160,14 +188,63 @@ bool VisionLink::isBenefitsRunning() const
 
 void VisionLink::clearErrors()
 {
-    _criticalError  = false;
+    _intakeError    = false;
+    _cameraError    = false;
     _separatorError = false;
     _benefitsError  = false;
+    _linkLost       = false;
+}
+
+void VisionLink::safeState()
+{
+    _goSafe();
+    resetGuards();
+}
+
+void VisionLink::handleFaults()
+{
+    if (!hasCriticalError())
+        return;
+
+    stop();
+    safeState();
+    clearErrors();
+}
+
+const char *VisionLink::benefitName(uint8_t which)
+{
+    if (which == 0) return "RED";
+    if (which == 1) return "BLUE";
+    return "-";
+}
+
+void VisionLink::printState(Stream &out) const
+{
+    if (&out == &_serial)
+        return;
+
+    char err[5] = "----"; // intake, camera, separator, benefits
+    if (_intakeError)    err[0] = 'I';
+    if (_cameraError)    err[1] = 'C';
+    if (_separatorError) err[2] = 'S';
+    if (_benefitsError)  err[3] = 'B';
+
+    out.printf("link=%s orin=%s beans=%d benefits=%d up=%d lo=%d sep=%d door=%s err=%s\n",
+               isLinkUp() ? "UP" : "DOWN",
+               isOrinReady() ? "READY" : "-",
+               inBeansPhase(),
+               inBenefitsPhase(),
+               _servos.intakeUpperDeployed(),
+               _servos.intakeLowerDeployed(),
+               (int)_servos.separatorPos(),   // LEFT = mature, RIGHT = overmature
+               _openRequest ? "WAITING" : benefitName(_heldBenefit),
+               err);
 }
 
 void VisionLink::_latchFaults(uint8_t status)
 {
-    if (status & VisionProto::kStatusCriticalMask)  _criticalError  = true;
+    if (status & VisionProto::kStatusMainFault)      _intakeError    = true;
+    if (status & VisionProto::kStatusCameraFault)    _cameraError    = true;
     if (status & VisionProto::kStatusSeparatorFault) _separatorError = true;
     if (status & VisionProto::kStatusBenefitsFault)  _benefitsError  = true;
 }
@@ -182,6 +259,7 @@ void VisionLink::_applySafetyImmediate(const VisionProto::Command &cmd)
         if (_appliedPhase != cmd.phase)
         {
             _servos.safeState();
+            _dropHold();
             _appliedPhase = cmd.phase;
             // The payload of these phases is always 0 (validated upstream).
             _confirm.reset((uint8_t)cmd.phase, 0);
@@ -190,9 +268,13 @@ void VisionLink::_applySafetyImmediate(const VisionProto::Command &cmd)
     }
 
     if (_appliedPhase == Phase::BENEFITS && cmd.phase != Phase::BENEFITS)
+    {
         _servos.closeBenefits();
+        _dropHold();
+    }
 
-    if (cmd.phase == Phase::BENEFITS)
+    // A held door ignores the stream; only closeBenefit() shuts it.
+    if (cmd.phase == Phase::BENEFITS && _heldBenefit == kNoBenefit)
     {
         if (!cmd.benefit1Open) _servos.setBenefit(0, false);
         if (!cmd.benefit2Open) _servos.setBenefit(1, false);
@@ -216,8 +298,7 @@ void VisionLink::_applyCommand(const VisionProto::Command &cmd)
             _servos.setIntakeUpper(false);
             _servos.setIntakeLower(false);
             _servos.setSeparator(ServoSystem::SeparatorPos::NEUTRAL);
-            _servos.setBenefit(0, cmd.benefit1Open);
-            _servos.setBenefit(1, cmd.benefit2Open);
+            _applyBenefits(cmd);
             break;
 
         case Phase::IDLE:
@@ -227,9 +308,37 @@ void VisionLink::_applyCommand(const VisionProto::Command &cmd)
     }
 }
 
+void VisionLink::_applyBenefits(const VisionProto::Command &cmd)
+{
+    if (_heldBenefit != kNoBenefit)
+        return;
+
+    // Nobody asked for a door: the frame drives them as it always did.
+    if (!_openRequest)
+    {
+        _servos.setBenefit(0, cmd.benefit1Open);
+        _servos.setBenefit(1, cmd.benefit2Open);
+        return;
+    }
+
+    if (cmd.benefit1Open)      _heldBenefit = 0;
+    else if (cmd.benefit2Open) _heldBenefit = 1;
+    else                       return; // the Orin has not decided yet
+
+    _servos.setBenefit(_heldBenefit, true);
+    _openRequest = false;
+}
+
+void VisionLink::_dropHold()
+{
+    _openRequest = false;
+    _heldBenefit = kNoBenefit;
+}
+
 void VisionLink::_goSafe()
 {
     _servos.safeState();
+    _dropHold();
     _appliedPhase = Phase::IDLE;
     _confirm.reset((uint8_t)Phase::IDLE, 0);
 }

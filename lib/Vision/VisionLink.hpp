@@ -2,7 +2,7 @@
    @file VisionLink.hpp
    @date 2026-08-19
   
-   @brief The whole Orin link, behind five verbs.
+   @brief The whole Orin link, behind a handful of verbs.
   
     This is the ONLY class the state machine talks to about vision. It owns
     every piece of the protocol so nothing else has to know one exists:
@@ -62,6 +62,25 @@ public:
     void stop();
     void requestStatus();
 
+    // stop() plus resetGuards(), the pair every phase exit needs.
+    void leave();
+
+    // Benefit doors
+    // openBenefit() only arms the request. The next confirmed BENEFITS
+    // frame decides which door, and that door stays open until
+    // closeBenefit(). While one is held the Orin cannot pick another.
+    void openBenefit();
+    void closeBenefit();
+
+    static constexpr uint8_t kNoBenefit = 255;
+
+    bool    benefitHeld()    const { return _heldBenefit != kNoBenefit; }
+    bool    benefitPending() const { return _openRequest; }
+    uint8_t heldBenefit()    const { return _heldBenefit; } // 0 or 1, else kNoBenefit
+
+    // Which box a door belongs to. Mirrors BOX_DOOR in dispatcher.py.
+    static const char *benefitName(uint8_t which);
+
     // Re arm the request guards so the next start*/stop() transmits again.
     void resetGuards();
 
@@ -81,14 +100,34 @@ public:
     bool isBenefitsRunning() const;
 
     // They stay set until clearErrors().
-    bool hasCriticalError()  const { return _criticalError; }
+    bool hasIntakeError()    const { return _intakeError; }   // the Orin's intake source died
+    bool hasCameraError()    const { return _cameraError; }
     bool hasSeparatorError() const { return _separatorError; }
     bool hasBenefitsError()  const { return _benefitsError; }
-    bool hasError()          const { return _criticalError || _separatorError || _benefitsError; }
-    uint8_t lastStatus()     const { return _status; }
+    bool linkLost()          const { return _linkLost; }      // the watchdog fired
+
+    // The three reasons nobody is steering the sorter any more. Stop the
+    // robot on this one.
+    bool hasCriticalError() const { return _intakeError || _cameraError || _linkLost; }
+    bool hasError() const { return hasCriticalError() || _separatorError || _benefitsError; }
+
+    uint8_t lastStatus() const { return _status; }
     void clearErrors();
 
+    // Park and clear once a critical fault latches. Call every loop, or
+    // write the block yourself when the drive has to stop with it.
+    void handleFaults();
+
+    // Everything harmless now: servos safe, doors shut, phase IDLE and the
+    // guards re-armed so the next start*() transmits. Says nothing to the
+    // Orin; pair it with stop() when the Orin should quit too.
+    void safeState();
+
     // Debug
+
+    // One line of everything this object and the servos are doing.
+    void printState(Stream &out) const;
+
     const VisionProto::LinkStats &stats() const { return _link.stats(); }
 
     uint8_t confirmRemaining() const
@@ -107,17 +146,27 @@ private:
     uint8_t            _status;
     bool               _separatorInvalid;
 
-    bool _criticalError;
+    bool _intakeError;
+    bool _cameraError;
     bool _separatorError;
     bool _benefitsError;
+    bool _linkLost;
 
     bool _beansSent;
     bool _benefitsSent;
     bool _stopSent;
 
+    bool    _openRequest;
+    uint8_t _heldBenefit;
+
     void _applySafetyImmediate(const VisionProto::Command &cmd);
 
     void _applyCommand(const VisionProto::Command &cmd);
+
+    void _applyBenefits(const VisionProto::Command &cmd);
+
+    // Forget the held door without moving anything.
+    void _dropHold();
 
     // Everything safe, filters reset, phase back to IDLE.
     void _goSafe();
