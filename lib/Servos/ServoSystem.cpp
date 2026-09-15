@@ -14,11 +14,12 @@ static constexpr uint8_t kBenefitOpen[2]   = { kBenefit1Open,   kBenefit2Open   
 
 // Lifecycle
 
-ServoSystem::ServoSystem()
+ServoSystem::ServoSystem(bool timedBenefits)
     : _pwm(Pins::Servos::kPcaI2cAddress)
     , _intakeUpper(false)
     , _intakeLower(false)
     , _separator(SeparatorPos::NEUTRAL)
+    , _timedBenefits(timedBenefits)
 {
     for (uint8_t i = 0; i < SERVO_COUNT; i++)
         _lastAngle[i] = 255; // unknown until begin() writes something
@@ -45,6 +46,9 @@ void ServoSystem::update()
 
 void ServoSystem::update(uint32_t nowMs)
 {
+    if (!_timedBenefits)
+        return;
+
     for (uint8_t i = 0; i < 2; i++)
     {
         BenefitState &b = _benefit[i];
@@ -134,7 +138,7 @@ ServoSystem::BenefitPhase ServoSystem::benefitPhase(uint8_t which) const
 
 uint32_t ServoSystem::benefitOpenRemainingMs(uint8_t which, uint32_t nowMs) const
 {
-    if (which > 1 || _benefit[which].phase != BenefitPhase::OPEN)
+    if (which > 1 || !_timedBenefits || _benefit[which].phase != BenefitPhase::OPEN)
         return 0;
 
     const uint32_t elapsed = nowMs - _benefit[which].openedAtMs;

@@ -40,12 +40,14 @@ public:
         WAIT_REARM = 2  // closed, needs an explicit close before it can open again
     };
 
-    ServoSystem();
+    // timedBenefits true closes an open door by itself after
+    // kBenefitOpenMs. False holds it until setBenefit(which, false).
+    explicit ServoSystem(bool timedBenefits = false);
 
     // Lifecycle
     void begin();
     void update(); // uses millis()
-    void update(uint32_t nowMs); // rollover safe
+    void update(uint32_t nowMs); // rollover safe, does nothing untimed
 
     // Commands (immediate, idempotent)
     void setIntakeUpper(bool deployed);
@@ -66,8 +68,9 @@ public:
     bool         intakeLowerDeployed() const { return _intakeLower; }
     SeparatorPos separatorPos()        const { return _separator; }
     BenefitPhase benefitPhase(uint8_t which) const;
+    bool         timedBenefits() const { return _timedBenefits; }
 
-    // ms left in the current open window; 0 when that door is not open.
+    // ms left in the current open window; 0 when untimed or not open.
     uint32_t benefitOpenRemainingMs(uint8_t which, uint32_t nowMs) const;
 
     // Last angle actually written, by Constants::ServoConfig::ServoIndex.
@@ -88,6 +91,7 @@ private:
     SeparatorPos _separator;
     BenefitState _benefit[2];
     uint8_t      _lastAngle[Constants::ServoConfig::SERVO_COUNT];
+    bool         _timedBenefits;
 
     // Skips the I2C write when the angle is already applied.
     void _writeAngle(uint8_t servoIndex, uint8_t angleDeg);
