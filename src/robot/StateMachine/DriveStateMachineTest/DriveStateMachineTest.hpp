@@ -79,6 +79,10 @@ private:
     // en setState() al entrar de nuevo al estado.
     float cornerCorrFiltered = 0.0f;
 
+    // Mismo filtro paso-bajo pero para la corrección qtrRear de
+    // LOOKFORLINEBACKWARDS. Se resetea en setState() igual que la de arriba.
+    float rearCorrFiltered = 0.0f;
+
     // Set states
     void setState(DriveTestSTATES newState);
     void setPoolState(PoolSubState newState);
