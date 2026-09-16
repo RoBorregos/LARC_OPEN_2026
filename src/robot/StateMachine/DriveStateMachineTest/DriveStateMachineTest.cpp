@@ -48,6 +48,23 @@ namespace
     // este mismo valor -- son el mismo QTR fisico, no deberia haber dos
     // "centros" distintos. Dejado asi por ahora; revisar/unificar despues.
 
+    // Corrección lateral (izq/der) para el retroceso en LOOKFORLINEBACKWARDS,
+    // usando qtrRear -- mismo patron P + filtro paso-bajo que
+    // LOOKFORCORNER/BEANS, pero aqui la corrección va en vy (no vx) porque
+    // el desplazamiento principal de este estado es hacia atras (vx), no
+    // lateral (al reves que Corner/BEANS). kRearSetpoint usa el centro
+    // matematico (3000, indice 3 de 7 sensores) en vez de un valor afinado
+    // en campo como kCornerSetpoint -- sin afinar todavia. El signo de la
+    // correccion tampoco esta verificado: a diferencia de qtrFront (C6=
+    // adelante, C0=atras, confirmado en campo), no se sabe que canal de
+    // qtrRear (C8-C14) corresponde a izquierda/derecha. Si el robot se
+    // aleja de la linea en vez de corregir, invertir el signo en
+    // handleLookForLineBackWards.
+    static constexpr float kRearSetpoint  = 3000.0f;
+    static constexpr float kRearKp        = 0.00012f;
+    static constexpr float kRearCorrMax   = 0.20f;
+    static constexpr float kRearCorrAlpha = 0.15f;
+
     static constexpr uint32_t kInitializedStoppedMs = 9000;
     static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
     static constexpr uint32_t kClearDelayMs = 1500;  //6500;          // Tiempo para cambiar nuevamente a Forward
@@ -183,6 +200,7 @@ void DriveStateMachineTest::update()
 {
     ir.update();
     qtrFront.update();
+    qtrRear.update();
     vision.update();
     const uint32_t now = millis();
     startStateTime();
@@ -400,14 +418,16 @@ void DriveStateMachineTest::setState(DriveTestSTATES newState)
     lfCorrectionDir     = 0;
     lfCorrectionStartMs = 0;
 
-    // Reset filtro paso-bajo del corr lateral de LOOKFORCORNER
+    // Reset filtro paso-bajo del corr lateral de LOOKFORCORNER / LOOKFORLINEBACKWARDS
     cornerCorrFiltered = 0.0f;
+    rearCorrFiltered = 0.0f;
 
     // Filtro de mediana del QTR: sin esto, las primeras
     // lecturas del nuevo estado quedan mezcladas con las últimas del
     // estado anterior (que pudo estar viendo una parte de la línea muy
     // distinta), retrasando la corrección real justo al entrar.
     qtrFront.resetFilter();
+    qtrRear.resetFilter();
 
     vision.resetGuards();
 
@@ -972,13 +992,15 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
 
 void DriveStateMachineTest::handleBEANSGoBackState(uint32_t now, bool BL, bool BR, bool FL)
 {
+    // No bajar el elevador :: 
+
     switch (action_stage)
     {
     // ── case 0: retroceder hasta encontrar BR o BL ──────────────────────
     case 0:
         vision.stop();
         vision.clearErrors();
-        elevator.ElevatorPosition(0);
+        elevator.ElevatorPosition(0); //zero for stop
 
         if (BR || BL)
         {
@@ -1126,69 +1148,32 @@ case PoolSubState::AVOID_RIGHT:
 
 void DriveStateMachineTest::handleLookForLineBackWards(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected)
 {
-
-    switch (action_stage)
+    if (backDetected)
     {
-    case 0:
-    {
-        if (backDetected)
-        {
-            setState(DriveTestSTATES::BENEFITSSTARTCORNER);
-            return;
-        }
-
-        if (backLeftDetected && !backRightDetected)
-        {
-            action_stage = 1;
-            action_start_time = now;
-            return;
-        }
-
-        if (backRightDetected && !backLeftDetected)
-        {
-            action_stage = 2;
-            action_start_time = now;
-            return;
-        }
-
-        LARC.backward(kBaseSpeed);
-        break;
+        setState(DriveTestSTATES::BENEFITSSTARTCORNER);
+        return;
     }
 
-    case 1:
+    // Mismo patron que LOOKFORCORNER: si se pierde la línea, congelar el
+    // target en 0 en vez de arrastrar qtrRear.getPosition() congelada
+    // (ver QTR::update(), sum==0 mantiene la posición anterior).
+    float corrTarget = 0.0f;
+    if (qtrRear.onLine())
     {
-        if (backDetected)
-        {
-            setState(DriveTestSTATES::BENEFITSSTARTCORNER);
-            return;
-        }
-
-        LARC.right(kVelocity);
-
-        if ((now - action_start_time) >= 500)
-        {
-            action_stage = 0;
-        }
-        break;
+        const float error = kRearSetpoint - qtrRear.getPosition();
+        corrTarget = constrain(error * kRearKp, -kRearCorrMax, kRearCorrMax);
     }
 
-    case 2:
-    {
-        if (backDetected)
-        {
-            setState(DriveTestSTATES::BENEFITSSTARTCORNER);
-            return;
-        }
+    rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
 
-        LARC.left(kVelocity);
-
-        if ((now - action_start_time) >= 500)
-        {
-            action_stage = 0;
-        }
-        break;
-    }
-    }
+    // vx = velocidad base hacia atrás (fija), vy = corrección qtrRear
+    // (izq/der) -- al revés que LOOKFORCORNER/BEANS, porque aquí el
+    // desplazamiento principal es hacia atrás, no lateral. Signo de
+    // rearCorrFiltered SIN VERIFICAR en hardware todavía (a diferencia de
+    // qtrFront/C6-C0, no se sabe que canal de qtrRear -C8-C14- es
+    // izquierda/derecha). Si el robot se aleja de la línea en vez de
+    // corregir, invertir el signo aquí.
+    LARC.setTranslation(-kBaseSpeed, rearCorrFiltered);
 }
 
 void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerLeftDetected, float vx, bool onLine)

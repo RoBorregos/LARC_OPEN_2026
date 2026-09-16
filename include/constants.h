@@ -66,8 +66,8 @@ namespace Constants
 
         // PLACEHOLDERS
         constexpr Profile Front = {
-            {73, 71, 64, 66, 75, 73, 67},          // On white
-             {938, 923, 883, 875, 891, 906, 902}}; // black (up and DOWN)
+            {82, 74, 68, 72, 184, 114, 75},          // On white
+             {896, 881, 844, 862, 880, 868, 870}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
              {65, 64, 63, 64, 74, 74, 64},

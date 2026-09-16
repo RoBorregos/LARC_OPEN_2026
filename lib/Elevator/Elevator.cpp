@@ -55,10 +55,7 @@ void Elevator::moveElevator(int direction)
     }
     else{
         analogWrite(pwm, 0); //elevator stop
-
     }
-
-
 }
 
 /*
