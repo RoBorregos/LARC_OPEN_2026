@@ -397,7 +397,7 @@ void DriveStateMachineTest::update()
         handleBEANS(now, backRightDetectedLine, onLine, vx);
         break;
 
-    case DriveTestSTATES::BEANSGOBACK:
+    case DriveTestSTATES::BEANSGOBACK: //(17-09-2026) We are skipping this step by the moment
         handleBEANSGoBackState(now, BL, BR, FL);
         break;
 
