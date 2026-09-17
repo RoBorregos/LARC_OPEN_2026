@@ -414,7 +414,7 @@ void DriveStateMachineTest::update()
         break;
 
     case DriveTestSTATES::BENEFITS:
-        handleBenefits(now, backLeftDetectedLine, vx, onLine);
+        handleBenefits(now, frontRightDetectedLine, vx, onLine);
         break;
 
     case DriveTestSTATES::STOP:
@@ -1251,12 +1251,6 @@ void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerL
             return;
         }
 
-        if (!onLine)
-        {
-            LARC.left(kBaseSpeed); // <- Provicionial LARC.stop();
-            return;
-        }
-
         // EXACTAMENTE la misma formula que handleLookForCornerState
         // (kCornerSetpoint/kCornerKp/kCornerCorrMax compartidos con el
         // front) -- la unica diferencia real es leer qtrRear en vez de
@@ -1273,14 +1267,14 @@ void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerL
 
         rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
 
-        LARC.setTranslation(-rearCorrFiltered, -kVelocity);
+        LARC.setTranslation(rearCorrFiltered, kVelocity);
 
         break;
     }
 
     case 1:
     {
-        LARC.brake();
+        LARC.stop();
         if ((now - action_start_time) >= 1000)
         {
             setState(DriveTestSTATES::BENEFITS);
@@ -1303,7 +1297,7 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
         }
         else
         {
-            LARC.brake();
+            LARC.stop();
             action_start_time = now;
             action_stage = 2;
         }
@@ -1327,7 +1321,7 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
 
         rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
 
-        LARC.setTranslation(-rearCorrFiltered, -kVelocity);
+        LARC.setTranslation(rearCorrFiltered, -kVelocity);
 
         // Here goes the rutine
         if (cornerRIGHTDetected)
@@ -1339,7 +1333,7 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
 
     case 2:
     {
-        LARC.brake();
+        LARC.stop();
 
         if ((now - action_start_time) >= 1000)
         {
@@ -1352,7 +1346,7 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
 
 void DriveStateMachineTest::handleStopState()
 {
-    LARC.brake();
+    LARC.stop();
 }
 
 void DriveStateMachineTest::updateControl()

@@ -69,8 +69,8 @@ namespace Constants
              {896, 881, 844, 862, 880, 868, 870}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-             {65, 62, 65, 77, 80, 86, 328},
-            {813, 828, 780, 904, 888, 910, 943}};
+             {68, 64, 66, 71, 73, 74, 304},
+            {860, 843, 850, 939, 873, 874, 936}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
