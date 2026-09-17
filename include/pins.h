@@ -140,14 +140,26 @@ namespace Pins
     static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C14 (C15 no se usa, mismo patron que front: QTR::N=7)
 
     // =========================================================
-    // IR SENSORS -- GPIO DIRECTO (ya NO van por mux; instances.cpp ya
-    // los trata como pines directos, ver comentario "IR directos" ahi).
-    // L1-L4 y su posicion fisica (FL/FR/BL/BR) confirmados por el equipo.
+    // IR SENSORS
+    // L1 (FL) y L2 (FR) se quedan igual que antes: GPIO directo
+    // (instances.cpp los trata como pines directos, ver "IR directos" ahi).
+    //
+    // L3 (BL) y L4 (BR) se mueven al mux compartido con los QTR (ver
+    // seccion "QTR ARRAYS ON MUX1/MUX2" arriba), usando los canales que
+    // quedan libres en cada bloque de 8 -- QTR::N=7 solo usa C0..C6 y
+    // C8..C14, dejando C7 y C15 sin conexion. kIrChBL/kIrChBR (pines 15/14)
+    // quedan documentados abajo por referencia pero ya NO se usan para
+    // L3/L4.
+    // Canal fisico confirmado por el equipo (2026-09-16): L3->C15,
+    // L4->C7.
     // =========================================================
     static constexpr uint8_t kIrChFL = 15; // L1
     static constexpr uint8_t kIrChFR = 14; // L2
-    static constexpr uint8_t kIrChBL = 23; // L3
-    static constexpr uint8_t kIrChBR = 41; // L4
+    static constexpr uint8_t kIrChBL = 15;//23; // ya no usado para L3 (ver kIrChBLMux)
+    static constexpr uint8_t kIrChBR = 14;//41; // ya no usado para L4 (ver kIrChBRMux)
+
+    static constexpr uint8_t kIrChBLMux = 15; // L3 -- canal libre del bloque rear (C8..C15)
+    static constexpr uint8_t kIrChBRMux = 7;  // L4 -- canal libre del bloque front (C0..C7)
 
     // =========================================================
     // TOF SENSORS ON I2C MUX (TCA9548A)
