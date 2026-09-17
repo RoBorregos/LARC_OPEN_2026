@@ -64,14 +64,13 @@ namespace Constants
             uint16_t max[kNumSensors];
         };
 
-        // PLACEHOLDERS
         constexpr Profile Front = {
             {82, 74, 68, 72, 184, 114, 75},          // On white
              {896, 881, 844, 862, 880, 868, 870}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-             {65, 64, 63, 64, 74, 74, 64},
-            {3100, 3200, 3050, 3300, 3350, 3250, 3150, 3000}};
+             {65, 62, 65, 77, 80, 86, 328},
+            {813, 828, 780, 904, 888, 910, 943}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 

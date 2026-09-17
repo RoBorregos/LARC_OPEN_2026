@@ -46,10 +46,10 @@ OmniMotors omni(m1_ul, m2_ur, m3_ll, m4_lr);
 Mux74HC4067 mux(Pins::kMuxSig2);
 QTR qtrFront(Pins::kQtrFrontFirstCh, mux);
 
-const uint8_t irPins[IRLine::N] = {
-    Pins::kIrChFL, Pins::kIrChFR, Pins::kIrChBL, Pins::kIrChBR
-};
-IRLine ir(irPins, 0b0000);
+// L1 (FL)/L2 (FR) por GPIO directo, L3 (BL)/L4 (BR) por el mux (canales
+// libres que deja QTR::N=7 en cada bloque, ver pins.h).
+IRLine ir(Pins::kIrChFL, Pins::kIrChFR, mux,
+          Pins::kIrChBLMux, Pins::kIrChBRMux, 0b0000);
 
 TCA9548A i2cMux;
 ToF tofLeft(Pins::kToFchFL, i2cMux, ToFType::L1X);

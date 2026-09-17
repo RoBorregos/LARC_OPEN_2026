@@ -48,21 +48,28 @@ namespace
     // este mismo valor -- son el mismo QTR fisico, no deberia haber dos
     // "centros" distintos. Dejado asi por ahora; revisar/unificar despues.
 
-    // Corrección lateral (izq/der) para el retroceso en LOOKFORLINEBACKWARDS,
-    // usando qtrRear -- mismo patron P + filtro paso-bajo que
-    // LOOKFORCORNER/BEANS, pero aqui la corrección va en vy (no vx) porque
-    // el desplazamiento principal de este estado es hacia atras (vx), no
-    // lateral (al reves que Corner/BEANS). kRearSetpoint usa el centro
-    // matematico (3000, indice 3 de 7 sensores) en vez de un valor afinado
-    // en campo como kCornerSetpoint -- sin afinar todavia. El signo de la
-    // correccion tampoco esta verificado: a diferencia de qtrFront (C6=
-    // adelante, C0=atras, confirmado en campo), no se sabe que canal de
-    // qtrRear (C8-C14) corresponde a izquierda/derecha. Si el robot se
-    // aleja de la linea en vez de corregir, invertir el signo en
-    // handleLookForLineBackWards.
-    static constexpr float kRearSetpoint  = 3000.0f;
-    static constexpr float kRearKp        = 0.00012f;
-    static constexpr float kRearCorrMax   = 0.20f;
+    // Corrección lateral para qtrRear en BENEFITSSTARTCORNER/BENEFITS:
+    // a peticion expresa, EXACTAMENTE la misma formula/tuning que
+    // handleLookForCornerState/handleBEANS (mismo setpoint/Kp/max,
+    // kCornerSetpoint/kCornerKp/kCornerCorrMax reusados tal cual) -- la
+    // UNICA diferencia es leer qtrRear en vez de qtrFront. Ya no existen
+    // kRearSetpoint/kRearKp/kRearCorrMax por separado para que no se
+    // puedan desincronizar de los valores del front.
+    //
+    // Confirmado en campo: qtrRear entra por C8 (indice local 0) y ESE es
+    // el lado "adelante" del arreglo -- al reves que qtrFront, donde
+    // adelante es el OTRO extremo (C6, indice local 6, ver
+    // hardware_qtr_front_sensor_orientation). O sea qtrRear esta cableado
+    // en orden espejo respecto a qtrFront: en front, indice alto = adelante;
+    // en rear, indice alto = atras. getPosition() (0 en el indice 0, 6000
+    // en el indice 6) por lo tanto corre en sentido contrario entre los
+    // dos arreglos. Si se reusa kCornerSetpoint/getPosition() de qtrRear
+    // tal cual, la correccion sale invertida (no por signo de Kp, sino por
+    // la escala de posicion misma) -- por eso se espeja abajo con
+    // kQtrPosMax antes de calcular error, para que qtrRear se comporte
+    // como si tuviera la misma orientacion que qtrFront y la formula
+    // (setpoint/Kp/max) sea real y completamente compartida.
+    static constexpr int kQtrPosMax = (QTR::N - 1) * 1000; // 6000 (indice 6 * 1000)
     static constexpr float kRearCorrAlpha = 0.15f;
 
     static constexpr uint32_t kInitializedStoppedMs = 9000;
@@ -143,9 +150,9 @@ DriveStateMachineTest::DriveStateMachineTest()
 }
 
 void DriveStateMachineTest::begin()
-{
+{   
 
-    currentState = DriveTestSTATES::LOOKFORLINE; // always in START
+    currentState = DriveTestSTATES::BENEFITSSTARTCORNER; // always in START
     poolState = PoolSubState::FORWARD;
 
     state_start_time = millis();
@@ -263,6 +270,13 @@ void DriveStateMachineTest::update()
     Serial.print(F(" lPos:"));  Serial.print(qtrFront.getPosition());
     Serial.print(F(" vx:")); Serial.print(vx);
 
+    // qtrRear -- mismo par onLine/lPos que qtrFront arriba, para poder
+    // confirmar en campo el signo de la corrección lateral usada en
+    // BENEFITSSTARTCORNER/BENEFITS (ver kCornerSetpoint, ahora compartido
+    // con el front).
+    Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine());
+    Serial.print(F(" lPos:")); Serial.print(qtrRear.getPosition());
+
     // Diagnostico temporal: raw/norm crudos del QTR frontal, sensor por
     // sensor, para confirmar si hay contraste real llegando (calibracion/
     // wiring) o si onLine() nunca dispara porque el sensor no ve la linea.
@@ -272,6 +286,19 @@ void DriveStateMachineTest::update()
     for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRaw[i]); Serial.print(','); }
     Serial.print(F(" norm:"));
     for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrNorm[i]); Serial.print(','); }
+
+    // Mismo raw/norm por canal pero del QTR trasero: onLine() solo mira el
+    // maximo de los 7 canales contra un threshold bajo (200/1000, ver
+    // QTR::onLine()), asi que un solo canal saltando por ruido/crosstalk
+    // del mux compartido ya lo dispara en falso. Viendo canal por canal se
+    // distingue un pico aislado (ruido) de varios canales adyacentes
+    // subiendo juntos (linea real).
+    const uint16_t* qtrRearRaw  = qtrRear.getRaw();
+    const uint16_t* qtrRearNorm = qtrRear.getNorm();
+    Serial.print(F(" | rearRaw:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRearRaw[i]); Serial.print(','); }
+    Serial.print(F(" rearNorm:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRearNorm[i]); Serial.print(','); }
 
     Serial.println();
     }
@@ -959,20 +986,23 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
 
         action_start_time = 0;
 
-        // 2200 en vez de kCornerSetpoint (2900) -- mismo QTR fisico que
-        // LOOKFORCORNER, ver nota junto a kCornerSetpoint sobre unificar
-        // esto despues.
-        float corr = 0.0f;
+        // Misma corrección (setpoint/Kp/max/filtro) que handleLookForCornerState
+        // -- mismo QTR físico -- para no mantener dos tunings distintos.
+        float corrTarget = 0.0f;
         if (onLine)
         {
-            const int error = 2200 - qtrFront.getPosition();
-            corr = constrain(error * 0.0003f, -0.3f, 0.3f);
+            const float error = kCornerSetpoint - qtrFront.getPosition();
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
         }
 
-        // vx = corrección QTR (adelante/atrás), vy = velocidad base hacia
-        // la derecha -- mismo eje y mismo signo que handleLookForCornerState
-        // (C6=sensor mas adelantado, C0=mas trasero, confirmado en campo).
-        LARC.setTranslation(-corr, -kVelocity);
+        static constexpr float kCornerCorrAlpha = 0.15f;
+        cornerCorrFiltered += (corrTarget - cornerCorrFiltered) * kCornerCorrAlpha;
+
+        // vx = corrección QTR (adelante/atrás), igual que en
+        // handleLookForCornerState. vy = -kVelocity (derecha) en vez de
+        // kVelocity (izquierda) -- unico signo que cambia entre los dos
+        // estados, ver nota en handleLookForCornerState.
+        LARC.setTranslation(-cornerCorrFiltered, -kVelocity);
 
         break;
     }
@@ -1146,34 +1176,65 @@ case PoolSubState::AVOID_RIGHT:
 }
 }
 
-void DriveStateMachineTest::handleLookForLineBackWards(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected)
+void DriveStateMachineTest::handleLookForLineBackWards(uint32_t now, 
+                                                    bool backDetected, 
+                                                    bool backLeftDetected, 
+                                                    bool backRightDetected)
 {
-    if (backDetected)
+    // ── case 3: búsqueda normal ───────────────────────────────────────────
+    static constexpr uint32_t kBorderCorrectMs = 150;
+    static constexpr float    kTofBorderCm     = 15.0f;
+
+    const bool realBorderLeft  = backLeftDetected  && tofLeft.isValid()  && tofLeft.getDistanceCm()  > kTofBorderCm;
+    const bool realBorderRight = backRightDetected && tofRight.isValid() && tofRight.getDistanceCm() > kTofBorderCm;
+
+    if (qtrRear.onLine())
     {
+        lfCorrecting        = false;
+        lfCorrectionDir     = 0;
+        lfCorrectionStartMs = 0;
+        lfLeftHoldMs        = 0;
+        lfRightHoldMs       = 0;
+        Serial.println("[LOOKFORLINE] FRONT DETECTED -> LOOKFORCORNER");
+        LARC.stop();
         setState(DriveTestSTATES::BENEFITSSTARTCORNER);
         return;
     }
 
-    // Mismo patron que LOOKFORCORNER: si se pierde la línea, congelar el
-    // target en 0 en vez de arrastrar qtrRear.getPosition() congelada
-    // (ver QTR::update(), sum==0 mantiene la posición anterior).
-    float corrTarget = 0.0f;
-    if (qtrRear.onLine())
+    if (lfCorrecting)
     {
-        const float error = kRearSetpoint - qtrRear.getPosition();
-        corrTarget = constrain(error * kRearKp, -kRearCorrMax, kRearCorrMax);
+        if ((now - lfCorrectionStartMs) < kBorderCorrectMs)
+        {
+            if (lfCorrectionDir < 0)
+                LARC.left(0.30f);
+            else
+                LARC.right(0.30f);
+            return;
+        }
+        lfCorrecting = false;
+        LARC.forward(0.30f);
+        return;
     }
 
-    rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
+    if (realBorderLeft && !backRightDetected)
+    {
+        lfCorrecting        = true;
+        lfCorrectionDir     = +1;
+        lfCorrectionStartMs = now;
+        LARC.right(0.30f);
+        return;
+    }
 
-    // vx = velocidad base hacia atrás (fija), vy = corrección qtrRear
-    // (izq/der) -- al revés que LOOKFORCORNER/BEANS, porque aquí el
-    // desplazamiento principal es hacia atrás, no lateral. Signo de
-    // rearCorrFiltered SIN VERIFICAR en hardware todavía (a diferencia de
-    // qtrFront/C6-C0, no se sabe que canal de qtrRear -C8-C14- es
-    // izquierda/derecha). Si el robot se aleja de la línea en vez de
-    // corregir, invertir el signo aquí.
-    LARC.setTranslation(-kBaseSpeed, rearCorrFiltered);
+    if (realBorderRight && !backLeftDetected)
+    {
+        lfCorrecting        = true;
+        lfCorrectionDir     = -1;
+        lfCorrectionStartMs = now;
+        LARC.left(0.30f);
+        return;
+    }
+
+    LARC.backward(0.30f);
 }
 
 void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerLeftDetected, float vx, bool onLine)
@@ -1196,7 +1257,23 @@ void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerL
             return;
         }
 
-        LARC.setTranslation(vx, 0.30f);
+        // EXACTAMENTE la misma formula que handleLookForCornerState
+        // (kCornerSetpoint/kCornerKp/kCornerCorrMax compartidos con el
+        // front) -- la unica diferencia real es leer qtrRear en vez de
+        // qtrFront (mas el espejo de kQtrPosMax, ver comentario junto a
+        // esa constante: qtrRear esta cableado en orden opuesto). Signo
+        // de vy contrario: derecha en vez de izquierda.
+        float corrTarget = 0.0f;
+        if (qtrRear.onLine())
+        {
+            const float mirroredRearPos = kQtrPosMax - qtrRear.getPosition();
+            const float error = kCornerSetpoint - mirroredRearPos;
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+
+        rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
+
+        LARC.setTranslation(-rearCorrFiltered, -kVelocity);
 
         break;
     }
@@ -1235,7 +1312,22 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
 
     case 1:
     {
-        LARC.setTranslation(vx, -0.30f);
+        // EXACTAMENTE la misma formula que handleBEANS (kCornerSetpoint/
+        // kCornerKp/kCornerCorrMax compartidos con el front) -- la unica
+        // diferencia real es leer qtrRear en vez de qtrFront (mas el
+        // espejo de kQtrPosMax, mismo motivo que en handleBenefitsStartCorner).
+        // Mismo signo de vy que handleBenefitsStartCorner (derecha).
+        float corrTarget = 0.0f;
+        if (qtrRear.onLine())
+        {
+            const float mirroredRearPos = kQtrPosMax - qtrRear.getPosition();
+            const float error = kCornerSetpoint - mirroredRearPos;
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+
+        rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
+
+        LARC.setTranslation(-rearCorrFiltered, -kVelocity);
 
         // Here goes the rutine
         if (cornerRIGHTDetected)

@@ -27,9 +27,9 @@ void setup() {
     qtrFront.begin();
     qtrRear.begin();
 
-    Serial.println("Calibrating FRONT move robot over line for 10s...");
-    qtrFront.calibrate(10000);
-    qtrFront.printCalibration("FRONT");
+    //Serial.println("Calibrating FRONT move robot over line for 10s...");
+    //qtrFront.calibrate(10000);
+    //qtrFront.printCalibration("FRONT");
 
     Serial.println("Calibrating REAR move robot over line for 10s...");
     qtrRear.calibrate(10000);
