@@ -75,7 +75,7 @@ namespace
     static constexpr uint32_t kInitializedStoppedMs = 9000;
     static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
     static constexpr uint32_t kClearDelayMs = 1500;  //6500;          // Tiempo para cambiar nuevamente a Forward
-    static constexpr uint32_t kNoObstacleToCornerMs = 3000; // Time without obstacle to go forward and LOOKFORLINE -> tal vez disminuir
+    static constexpr uint32_t kNoObstacleToCornerMs = 500; // Time without obstacle to go forward and LOOKFORLINE -> tal vez disminuir
     static constexpr uint32_t kCornerDeployWazitMs = 1800;
 
     static constexpr uint32_t kMinAvoidTimeMs = 250;
@@ -152,7 +152,7 @@ DriveStateMachineTest::DriveStateMachineTest()
 void DriveStateMachineTest::begin()
 {   
 
-    currentState = DriveTestSTATES::BENEFITSSTARTCORNER; // always in START
+    currentState = DriveTestSTATES::LOOKFORLINE; // always in START
     poolState = PoolSubState::FORWARD;
 
     state_start_time = millis();
@@ -448,6 +448,8 @@ void DriveStateMachineTest::setState(DriveTestSTATES newState)
     // Reset filtro paso-bajo del corr lateral de LOOKFORCORNER / LOOKFORLINEBACKWARDS
     cornerCorrFiltered = 0.0f;
     rearCorrFiltered = 0.0f;
+    backLineArmed = false;
+    backLineArmedMs = 0;
 
     // Filtro de mediana del QTR: sin esto, las primeras
     // lecturas del nuevo estado quedan mezcladas con las últimas del
@@ -937,7 +939,7 @@ void DriveStateMachineTest::handleLookForCornerState(uint32_t now, bool cornerLE
 
         if ((now - action_start_time) >= kSoftStartMs)
         {
-            setState(DriveTestSTATES::BEANS);
+            setState(DriveTestSTATES::BEANS); 
         }
         break;
     }
@@ -1013,7 +1015,7 @@ void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, 
         if ((now - action_start_time) >= 1000)
         {
             action_start_time = 0;
-            setState(DriveTestSTATES::BEANSGOBACK);
+            setState(DriveTestSTATES::POOLSGOBACK);
         }
         break;
     }
@@ -1066,6 +1068,40 @@ void DriveStateMachineTest::handleBEANSGoBackState(uint32_t now, bool BL, bool B
 
 void DriveStateMachineTest::handlePOOLSGoBackState(uint32_t now, bool rearObstacle, bool leftDetected, bool rightDetected)
 {
+    // Al entrar a POOLSGOBACK: retrocede 1.5s y luego 1.5s a la izquierda
+    // antes de arrancar la rutina normal (FORWARD/AVOID_LEFT/AVOID_RIGHT).
+    // action_stage se resetea a 0 en setState() al entrar al estado.
+    static constexpr uint32_t kInitBackMs = 500;
+    static constexpr uint32_t kInitLeftMs = 500;
+
+    if (action_stage == 0)
+    {
+        if (action_start_time == 0)
+            action_start_time = now;
+
+        LARC.backward(kVelocity);
+
+        if ((now - action_start_time) >= kInitBackMs)
+        {
+            action_stage = 1;
+            action_start_time = now;
+        }
+        return;
+    }
+
+    if (action_stage == 1)
+    {
+        LARC.left(kVelocity);
+
+        if ((now - action_start_time) >= kInitLeftMs)
+        {
+            action_stage = 2;
+            action_start_time = 0;
+        }
+        return;
+    }
+
+
 switch (poolState)
 {
 case PoolSubState::FORWARD:
@@ -1188,7 +1224,26 @@ void DriveStateMachineTest::handleLookForLineBackWards(uint32_t now,
     const bool realBorderLeft  = backLeftDetected  && tofLeft.isValid()  && tofLeft.getDistanceCm()  > kTofBorderCm;
     const bool realBorderRight = backRightDetected && tofRight.isValid() && tofRight.getDistanceCm() > kTofBorderCm;
 
-    if (qtrRear.onLine())
+    // backDetected (L3/L4) y qtrRear.onLine() estan desfasados en el
+    // tiempo -- los IR traseros disparan un poco antes que el QTR llegue
+    // a onLine(), asi que exigir backDetected && qtrRear.onLine() en el
+    // mismo ciclo nunca se cumple. En vez de eso: se arma el latch con el
+    // primer disparo de backDetected y se transiciona cuando qtrRear
+    // confirma onLine() despues, ya armado.
+    static constexpr uint32_t kBackLineArmDelayMs = 600;
+
+    if (backDetected && !backLineArmed)
+    {
+        backLineArmed   = true;
+        backLineArmedMs = now;
+    }
+
+    // qtrRear.onLine() es ruidoso justo al armar (casi siempre indica
+    // onLine) -- se ignora hasta kBackLineArmDelayMs despues de armado
+    // para no transicionar con una lectura sucia.
+    const bool armDelayElapsed = backLineArmed && (now - backLineArmedMs) >= kBackLineArmDelayMs;
+
+    if (armDelayElapsed && qtrRear.onLine())
     {
         lfCorrecting        = false;
         lfCorrectionDir     = 0;

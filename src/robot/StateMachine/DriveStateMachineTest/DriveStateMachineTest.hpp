@@ -83,6 +83,16 @@ private:
     // LOOKFORLINEBACKWARDS. Se resetea en setState() igual que la de arriba.
     float rearCorrFiltered = 0.0f;
 
+    // LOOKFORLINEBACKWARDS: backDetected (L3/L4, IR traseros) y
+    // qtrRear.onLine() estan desfasados -- los IR disparan un poco antes
+    // que el QTR llegue a onLine(), asi que un AND simultaneo nunca se
+    // cumple. Se arma este latch en cuanto backDetected dispara una vez y
+    // la transicion a BENEFITSSTARTCORNER espera a qtrRear.onLine()
+    // despues de armado, en vez de exigir ambos al mismo tiempo. Se
+    // resetea en setState() al (re)entrar al estado.
+    bool     backLineArmed   = false;
+    uint32_t backLineArmedMs = 0;
+
     // Set states
     void setState(DriveTestSTATES newState);
     void setPoolState(PoolSubState newState);
