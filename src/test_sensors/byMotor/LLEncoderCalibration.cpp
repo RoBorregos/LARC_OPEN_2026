@@ -29,7 +29,7 @@ volatile bool          got_pulse   = false;
 const float PPR =  188.0f; // NO COMPROBADO solo de prueba
 const float Ts  = 0.05f;   // 50ms more stable than 10ms
 
-float Kp = 4.0f;//2.1f;
+float Kp = 1.5f;//2.1f;
 float Ki = 1.6f;//1.2f;
 float Kd = 0.0015f;
 

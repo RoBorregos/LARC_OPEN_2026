@@ -152,7 +152,7 @@ DriveStateMachineTest::DriveStateMachineTest()
 void DriveStateMachineTest::begin()
 {   
 
-    currentState = DriveTestSTATES::LOOKFORLINE; // always in START
+    currentState = DriveTestSTATES::POOL; // always in START
     poolState = PoolSubState::FORWARD;
 
     state_start_time = millis();
