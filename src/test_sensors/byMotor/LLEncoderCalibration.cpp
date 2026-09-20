@@ -1,12 +1,18 @@
-// LL calibration :: RPMs: 188 (02 Septiembre 2026)
+/*
+    LL calibration :: RPMs: 188 (02 Septiembre 2026)
 
-// SEPTEMBER ALREADY CALIBRATED   :) mark of already calibrated
+    SEPTEMBER ALREADY CALIBRATED   :) mark of already calibrated
 
-//Use this code to calibrate
+    Use this code to calibrate
 
-// Penultimo code o test para los Encoders
-// Works (4:50 am)
-// FINAL gives velocity to the motor
+    Penultimo code o test para los Encoders
+
+    Works (4:50 am) FINAL gives velocity to the motor
+
+    Calibrado en A7 440: check
+*/
+
+
 #include <Arduino.h>
 
 const uint8_t encUL_B_Pin = 31;
