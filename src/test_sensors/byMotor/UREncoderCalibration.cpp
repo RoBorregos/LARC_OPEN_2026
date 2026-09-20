@@ -1,3 +1,4 @@
+/*
 // UR calibration :: RPMs: 188  (02 Septiembre 2026)
 
 
@@ -8,6 +9,9 @@
 // Almost last code or test for the Encoders
 // Works (4:50 am)
 // FINAL gives velocit to the motor
+
+Calibrated A7 440: check
+*/
 
 #include <Arduino.h>
 
