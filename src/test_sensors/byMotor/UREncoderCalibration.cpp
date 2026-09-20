@@ -17,7 +17,7 @@ const uint8_t motorPWM    = 9;
 const uint8_t motorIN1    = 36;
 const uint8_t motorIN2    = 35;
 
-#define FILTER_SIZE 8
+#define FILTER_SIZE 12
 
 volatile unsigned long period_buf[FILTER_SIZE] = {0};
 volatile uint8_t       period_idx  = 0;
@@ -29,16 +29,27 @@ volatile bool          got_pulse   = false;
 const float PPR = 188.0f;
 const float Ts  = 0.05f;   // 50ms — más estable que 10ms
 
-float Kp = 3.4f;
-float Ki = 1.0f;
-float Kd = 0.001f;
+float Kp = 0.5f;//3.4f;
+float Ki = 0.6f;//1.0f;
+float Kd = 0.0f;//0.001f;
 
 float setpoint   = 45.0f;
+
+// Feedforward UR: recta PWM = offset + pendiente * rpm.
+// Medido EN EL SUELO: 30 rpm ~ 63 PWM, 45 rpm ~ 79 PWM (aire: 45 rpm ~ 56 PWM).
+//   FF_SLOPE = (out45 - out30) / 15 ;  FF_OFFSET = out30 - FF_SLOPE * 30
+// Se deja un poco por debajo de lo medido (el integrador completa lo que falte).
+const float FF_OFFSET = 30.0f;  // PWM
+const float FF_SLOPE  = 1.05f;  // PWM por rpm  -> 30 rpm: 61.5, 45 rpm: 77
+// Rampa del setpoint efectivo para no arrancar con error grande
+const float SP_RAMP = 90.0f;    // rpm/s
+float sp_ramped = 0.0f;
+
 float integral   = 0.0f;
 float last_error = 0.0f;
 
 // Filtro EMA sobre el RPM medido (suaviza el ruido de cuantizacion del encoder)
-const float RPM_ALPHA = 0.3f; // 0=sin cambio, 1=sin filtro
+const float RPM_ALPHA = 0.2f; // 0=sin cambio, 1=sin filtro
 float rpm_filt = 0.0f;
 
 unsigned long last_time = 0;
@@ -132,15 +143,21 @@ void loop()
         float rpm_raw = measureRPM();
         rpm_filt      += RPM_ALPHA * (rpm_raw - rpm_filt);
         float rpm     = rpm_filt;
-        float error   = setpoint - rpm;
+
+        if (sp_ramped < setpoint)      sp_ramped = min(setpoint, sp_ramped + SP_RAMP * Ts);
+        else if (sp_ramped > setpoint) sp_ramped = max(setpoint, sp_ramped - SP_RAMP * Ts);
+
+        float error   = sp_ramped - rpm;
+        float ff      = (sp_ramped > 0.0f) ? FF_OFFSET + FF_SLOPE * sp_ramped : 0.0f;
 
         float derivative       = (error - last_error) / Ts;
-        float output_unclamped = Kp * error + Ki * integral + Kd * derivative;
+        float output_unclamped = ff + Kp * error + Ki * integral + Kd * derivative;
 
         // Solo integra si el output no esta saturado (anti-windup real)
         if (output_unclamped > 0.0f && output_unclamped < 255.0f) {
             integral += error * Ts;
-            integral  = constrain(integral, -100.0f, 100.0f);
+            // Limite = rango completo de PWM (255) / Ki, para que Ki*integral pueda cubrir todo el output
+            integral  = constrain(integral, -255.0f / Ki, 255.0f / Ki);
         }
 
         float output = constrain(output_unclamped, 0.0f, 255.0f);
