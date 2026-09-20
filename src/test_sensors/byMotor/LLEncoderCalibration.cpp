@@ -42,9 +42,10 @@ float Kd = 0.0f;//0.0015f;
 float setpoint   = 45.0f; //45.0f
 
 // Feedforward LL (PROVISIONAL, depende de la bateria): recta PWM = offset + pendiente * rpm
-// Medido: 30 rpm ~ 69 PWM, 45 rpm ~ 80 PWM (bateria baja). Ajustar con mas puntos.
-const float FF_OFFSET = 42.0f;  // PWM (zona muerta), antes 48: con bateria cargada sobraba
-const float FF_SLOPE  = 0.7f;   // PWM por rpm
+// Medido (suelo, bateria cargada): 30 rpm ~ 63 PWM, 45 rpm ~ 93 PWM. Se deja un poco por debajo a
+// proposito (el integrador sube lo que falte; si el ff se pasa, provoca sobreimpulso).
+const float FF_OFFSET = 8.0f;   // PWM
+const float FF_SLOPE  = 1.85f;  // PWM por rpm  -> 30 rpm: 63.5, 45 rpm: 91
 // Rampa del setpoint efectivo para no arrancar con error grande
 const float SP_RAMP = 90.0f;    // rpm/s
 float sp_ramped = 0.0f;
