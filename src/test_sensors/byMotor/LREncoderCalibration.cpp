@@ -38,14 +38,19 @@ volatile bool          got_pulse   = false;
 const float PPR = 189.0f;
 const float Ts  = 0.05f;   // 50ms — more stable than 10ms
 
-float Kp = 1.0f; //3.0f
-float Ki = 0.8f; //0.8
-float Kd = 0.0035f;
+float Kp = 0.5f; //1.0f, antes 3.0f
+float Ki = 0.8f; //0.6f (0.9f ya hace overshoot)
+float Kd = 0.0f; //0.0035f
 
 float setpoint   = 45.0f;
 
-// Feedforward: calibracion LR -> 45 rpm ~ 124 PWM en regimen estable
-const float FF_GAIN = 124.0f / 45.0f;  // PWM por rpm
+// Feedforward LR: recta PWM = offset + pendiente * rpm.
+// Medido (suelo, bateria cargada): 45 rpm ~ 93 PWM. PENDIENTE confirmar a 30 rpm y recalcular:
+//   FF_SLOPE = (out45 - out30) / 15 ;  FF_OFFSET = out30 - FF_SLOPE * 30
+// Se deja un poco por debajo de lo medido (el integrador completa lo que falte).
+// Antes era 124 PWM a 45 rpm (bateria baja).
+const float FF_OFFSET = 32.0f;  // PWM
+const float FF_SLOPE  = 1.3f;   // PWM por rpm  -> 30 rpm: 71, 45 rpm: 90.5
 // Rampa del setpoint efectivo para no arrancar con error grande
 const float SP_RAMP = 90.0f;           // rpm/s
 float sp_ramped = 0.0f;
@@ -161,7 +166,8 @@ void loop()
         float error   = sp_ramped - rpm;
 
         float derivative       = (error - last_error) / Ts;
-        float output_unclamped = FF_GAIN * sp_ramped + Kp * error + Ki * integral + Kd * derivative;
+        float ff               = (sp_ramped > 0.0f) ? FF_OFFSET + FF_SLOPE * sp_ramped : 0.0f;
+        float output_unclamped = ff + Kp * error + Ki * integral + Kd * derivative;
 
         // Solo integra si el output no esta saturado (anti-windup real)
         if (output_unclamped > 0.0f && output_unclamped < 255.0f) {
