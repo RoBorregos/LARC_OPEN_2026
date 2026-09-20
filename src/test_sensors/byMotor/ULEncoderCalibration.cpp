@@ -1,4 +1,4 @@
-// UL calibration :: RPMs: 190  (02 Septiembre 2026)
+/* UL calibration :: RPMs: 190  (02 Septiembre 2026)
 
     // En proceso de calibracion  
 
@@ -10,6 +10,8 @@
 // Works (4:50 am)
 // FINAL gives velocit to the motor
 
+ Calibration A7 440: check
+*/
 #include <Arduino.h>
 
 const uint8_t encUL_B_Pin = 1;
