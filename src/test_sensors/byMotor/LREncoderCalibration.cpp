@@ -1,3 +1,4 @@
+/*
 // REVISADO 2025
 // LR calibration :: RPMs: 188 (02 Septiembre 2026)
 
@@ -10,7 +11,11 @@
 
 // Almost last code or test for the Encoders
 // Works (4:50 am)
-// FINAL gives velocit to the motor
+// FINAL gives velocit to the 
+
+    Calibrated in A7 440: check
+*/
+
 #include <Arduino.h>
 
 const uint8_t encUL_B_Pin = 20;
@@ -33,11 +38,18 @@ volatile bool          got_pulse   = false;
 const float PPR = 189.0f;
 const float Ts  = 0.05f;   // 50ms — more stable than 10ms
 
-float Kp = 3.0f;
+float Kp = 1.0f; //3.0f
 float Ki = 0.8f; //0.8
 float Kd = 0.0035f;
 
 float setpoint   = 45.0f;
+
+// Feedforward: calibracion LR -> 45 rpm ~ 124 PWM en regimen estable
+const float FF_GAIN = 124.0f / 45.0f;  // PWM por rpm
+// Rampa del setpoint efectivo para no arrancar con error grande
+const float SP_RAMP = 90.0f;           // rpm/s
+float sp_ramped = 0.0f;
+
 float integral   = 0.0f;
 float last_error = 0.0f;
 
@@ -142,15 +154,20 @@ void loop()
         float rpm_raw = measureRPM();
         rpm_filt      += RPM_ALPHA * (rpm_raw - rpm_filt);
         float rpm     = rpm_filt;
-        float error   = setpoint - rpm;
+
+        if (sp_ramped < setpoint)      sp_ramped = min(setpoint, sp_ramped + SP_RAMP * Ts);
+        else if (sp_ramped > setpoint) sp_ramped = max(setpoint, sp_ramped - SP_RAMP * Ts);
+
+        float error   = sp_ramped - rpm;
 
         float derivative       = (error - last_error) / Ts;
-        float output_unclamped = Kp * error + Ki * integral + Kd * derivative;
+        float output_unclamped = FF_GAIN * sp_ramped + Kp * error + Ki * integral + Kd * derivative;
 
         // Solo integra si el output no esta saturado (anti-windup real)
         if (output_unclamped > 0.0f && output_unclamped < 255.0f) {
             integral += error * Ts;
-            integral  = constrain(integral, -100.0f, 100.0f);
+            // Limite = rango completo de PWM (255) / Ki, para que Ki*integral pueda cubrir todo el output
+            integral  = constrain(integral, -255.0f / Ki, 255.0f / Ki);
         }
 
         float output = constrain(output_unclamped, 0.0f, 255.0f);
