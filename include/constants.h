@@ -44,7 +44,7 @@ namespace Constants
         static constexpr float kKi = 0.002f; // 0.002f
         static constexpr float kKd = 0.0042f;  // 0.0012f; // 0.06f; 0.0f
         static constexpr float kOmegaMax = 0.25f; //0.25f;
-        static constexpr float kcurrentVelocity = 0.38f; // Velocity according to PID
+        static constexpr float kcurrentVelocity = 0.30f; // Velocity according to PID
 
     } // namespace PID
     namespace UltrasonicConstants
@@ -66,14 +66,13 @@ namespace Constants
             uint16_t max[kNumSensors];
         };
 
-        // PLACEHOLDERS
         constexpr Profile Front = {
-            {811, 805, 846, 841, 856, 855, 869},          // On white
-            {997, 995, 1001, 1001, 1001, 1000, 999}}; // black (up and DOWN)
+            {76, 74, 69, 73, 158, 98, 75},          // On white
+             {901, 892, 868, 870, 904, 908, 916}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-            {120, 130, 115, 140, 150, 135, 128, 122},
-            {3100, 3200, 3050, 3300, 3350, 3250, 3150, 3000}};
+             {68, 64, 66, 71, 73, 74, 304},
+            {860, 843, 850, 939, 873, 874, 936}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -82,7 +81,7 @@ namespace Constants
     namespace LineFollower
 
     {
-        constexpr int kSetpoint = 2700;//2700; // center of 0-6000 range (el ultimo no se esta tomndo otherwise 0-7000)
+        constexpr int kSetpoint = 2900;//2700; // center of 0-6000 range (el ultimo no se esta tomndo otherwise 0-7000)
         // change to 4000, 2000, etc. as needed
     }
 
@@ -113,7 +112,10 @@ namespace Constants
             SERVO_COUNT  = 5
         };
 
-        // PCA9685 timing 
+        // PCA9685 timing
+        // Generic boards often run the oscillator at 26-27 MHz, not 25.
+        // If a 1500 us command measures e.g. 1560 us on a scope, set this
+        // to 25000000 * 1560 / 1500 = 26000000.
         static constexpr uint32_t kPcaOscillatorHz = 25000000;
         static constexpr float    kServoPwmFreqHz  = 50.0f;
         struct ServoCalib
