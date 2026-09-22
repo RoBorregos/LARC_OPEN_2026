@@ -16,7 +16,8 @@
 #define SERVO_SYSTEM_HPP
 
 #include <Arduino.h>
-#include <Adafruit_PWMServoDriver.h>
+#include "PCA9685.hpp"
+#include "TCA9548A/TCA9548A.h"
 
 #include "constants.h"
 #include "pins.h"
@@ -42,10 +43,16 @@ public:
 
     // timedBenefits true closes an open door by itself after
     // kBenefitOpenMs. False holds it until setBenefit(which, false).
-    explicit ServoSystem(bool timedBenefits = false);
+    //
+    // i2cMux: the robot's shared TCA9548A (instances.cpp passes &i2cMux).
+    // Leave it nullptr in standalone test sketches: ServoSystem then uses
+    // its own TCA9548A on Pins::I2cMux. Only matters when
+    // Pins::Servos::kTcaChannel != 255.
+    explicit ServoSystem(bool timedBenefits = false, TCA9548A *i2cMux = nullptr);
 
     // Lifecycle
     void begin();
+    bool driverOk() const { return _pwm.ok(); } // PCA9685 answered in begin()
     void update(); // uses millis()
     void update(uint32_t nowMs); // rollover safe, does nothing untimed
 
@@ -84,7 +91,8 @@ private:
         uint32_t     openedAtMs;
     };
 
-    Adafruit_PWMServoDriver _pwm;
+    TCA9548A _ownMux; // fallback when no shared mux is given
+    PCA9685  _pwm;
 
     bool         _intakeUpper;
     bool         _intakeLower;

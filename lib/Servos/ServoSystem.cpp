@@ -14,13 +14,19 @@ static constexpr uint8_t kBenefitOpen[2]   = { kBenefit1Open,   kBenefit2Open   
 
 // Lifecycle
 
-ServoSystem::ServoSystem(bool timedBenefits)
-    : _pwm(Pins::Servos::kPcaI2cAddress)
+ServoSystem::ServoSystem(bool timedBenefits, TCA9548A *i2cMux)
+    : _ownMux(Pins::I2cMux::kAddress, PCA9685::busFromIndex(Pins::I2cMux::kBus))
+    , _pwm(Pins::Servos::kPcaI2cAddress,
+           PCA9685::busFromIndex(Pins::Servos::kI2cBus),
+           Pins::Servos::kOePin)
     , _intakeUpper(false)
     , _intakeLower(false)
     , _separator(SeparatorPos::NEUTRAL)
     , _timedBenefits(timedBenefits)
 {
+    if (Pins::Servos::kTcaChannel != 255)
+        _pwm.attachMux(i2cMux ? i2cMux : &_ownMux, Pins::Servos::kTcaChannel);
+
     for (uint8_t i = 0; i < SERVO_COUNT; i++)
         _lastAngle[i] = 255; // unknown until begin() writes something
 
@@ -33,10 +39,10 @@ ServoSystem::ServoSystem(bool timedBenefits)
 
 void ServoSystem::begin()
 {
-    _pwm.begin();
-    _pwm.setOscillatorFrequency(kPcaOscillatorHz);
-    _pwm.setPWMFreq(kServoPwmFreqHz);
-    safeState();
+    _pwm.setOscillatorHz(kPcaOscillatorHz);
+    _pwm.begin(kServoPwmFreqHz); // bus clock left alone: shared with the TCA9548A
+    safeState();                 // write safe angles first...
+    _pwm.enableOutputs();        // ...then let the pulses out (if OE is wired)
 }
 
 void ServoSystem::update()
@@ -154,8 +160,8 @@ uint8_t ServoSystem::lastAngle(uint8_t servoIndex) const
 
 void ServoSystem::_writeAngle(uint8_t servoIndex, uint8_t angleDeg)
 {
-    if (servoIndex >= SERVO_COUNT)
-        return;
+    if (servoIndex >= SERVO_COUNT || !_pwm.ok())
+        return; // no board: do not pretend the angle was applied
 
     const ServoCalib &c = kCalib[servoIndex];
 
