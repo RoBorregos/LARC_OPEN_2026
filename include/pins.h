@@ -57,9 +57,12 @@ namespace Pins
         34   // IN2_M1
     };
 
+    // Reasignados (antes 16/17): IN1_M5 = pin 4, IN2_M5 = pin 3 (los pines 3/4
+    // eran SERVO2/SERVO3, ya no se usan como servo). PWM_M5 sigue en
+    // kPwmPin[4] (pin 12).
     constexpr uint8_t kElevator[2] = {
-        16, //IN1_M5
-        17  //IN2_M5
+        4, // IN1_M5
+        3  // IN2_M5
     };
 
     // =========================================================
@@ -89,9 +92,6 @@ namespace Pins
     // ELEVATOR (motor 5: IN1_M5/IN2_M5/PWM_M5 en el esquematico) --
     // confirmado por el equipo. No tiene ENA/ENB propio (usa los limit
     // switches en vez de encoder).
-    // NOTA: Elevator.hpp/.cpp no referencian Pins:: actualmente (parece
-    // hardcodear sus propios pines) -- estos valores no estan conectados
-    // al comportamiento real todavia, eso es aparte de la duda de pines.
     // =========================================================
 
     // =========================================================
@@ -206,8 +206,8 @@ namespace Pins
     // antes de subir cualquier build que llame servos.begin().
     // =========================================================
     constexpr uint8_t kServoPin1 = 13; // SERVO1 -- mismo net que "INT" (BNO), CONFIRMAR
-    constexpr uint8_t kServoPin2 = 3;  // SERVO2
-    constexpr uint8_t kServoPin3 = 4;  // SERVO3
+    constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- OJO: pin 3 ahora es IN2_M5 (elevator), no usar
+    constexpr uint8_t kServoPin3 = 4;  // SERVO3 -- OJO: pin 4 ahora es IN1_M5 (elevator), no usar
     constexpr uint8_t kServoPin4 = 5;  // SERVO4
     constexpr uint8_t kServoPin5 = 2;  // SERVO5 -- mismo net que "RST" (BNO), CONFIRMAR
     // kServoPin6: placeholder, pin no identificado en el esquematico

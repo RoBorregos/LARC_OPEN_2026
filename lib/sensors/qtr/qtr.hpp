@@ -88,6 +88,34 @@ public:
     // Function that performs calibration routine for 10 seconds
     void calibrate(uint32_t durationMs = 10000);
 
+    // ── Autocalibracion ────────────────────────────────────────────────────
+    // Orden de uso (ver src/test_sensors/qtr_autocal_test.cpp):
+    //   1) useDefaultCalibration()  -> forma base por sensor (constants.h)
+    //   2) ambientCalibrate()       -> al arrancar, robot QUIETO sobre fondo sin
+    //                                  linea: corrige por luz ambiente (un solo
+    //                                  corrimiento global de calMin).
+    //   3) beginAutoCal() ... endAutoCal() -> ventana de aprendizaje por sensor
+    //                                  mientras el robot se mueve sobre la linea.
+
+    // Bloqueante (~durationMs). Promedia el fondo y corre calMin de todos los
+    // sensores el mismo delta (limitado a kAmbientMaxDelta). Devuelve false, sin
+    // tocar nada, si algun sensor ya ve linea (no esta sobre fondo).
+    bool ambientCalibrate(uint32_t durationMs = 300);
+
+    // Corrimiento (cuentas ADC) aplicado por el ultimo ambientCalibrate().
+    int16_t getAmbientDelta() const { return ambientDelta; }
+
+    // Abre la ventana: cada update() acumula fondo (-> calMin) y linea
+    // (-> calMax) por sensor, pero NO cambia la calibracion en uso todavia.
+    void beginAutoCal();
+
+    // Cierra la ventana y aplica lo aprendido (limitado a una banda alrededor
+    // del valor previo y con rango minimo kMinSpan). Sensores que no vieron
+    // fondo/linea conservan su valor. Devuelve cuantos sensores cambiaron.
+    uint8_t endAutoCal();
+
+    bool isAutoCalActive() const { return learning; }
+
     //Prints the calibration values for each sensor
     // Useful for copying to constants.h.
     void printCalibration(const char* label) const;
@@ -108,6 +136,8 @@ private:
 
     uint8_t         firstCh;
     bool            initialized;
+    bool            learning;
+    int16_t         ambientDelta;
 
     Mux74HC4067&    mux;
 
@@ -131,6 +161,18 @@ private:
     int lastRawPos;
 
     void ensureCalValid();
+
+    // Estado de la ventana de aprendizaje (beginAutoCal/endAutoCal)
+    uint16_t baseMin[N];     // calMin/calMax al abrir la ventana (centro de la banda de clamp)
+    uint16_t baseMax[N];
+    float    bgEma[N];       // fondo filtrado -> nuevo calMin
+    bool     bgSeeded[N];
+    uint16_t peak[N];        // maximo sostenido visto -> nuevo calMax (0 = nunca visto)
+    uint8_t  highCount[N];   // lecturas altas consecutivas
+    uint16_t prevRaw1[N];    // ultimas 2 lecturas crudas (el candidato a max es el min de 3)
+    uint16_t prevRaw2[N];
+
+    void learnStep();
 };
 
 #endif // QTR_HPP
