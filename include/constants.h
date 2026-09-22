@@ -74,6 +74,20 @@ namespace Constants
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
+        // ── Autocalibracion (ver QTR::ambientCalibrate / beginAutoCal) ──────
+        // Paso 1, ambient (robot quieto sobre fondo sin linea, al arrancar):
+        constexpr uint16_t kAmbientMaxDelta   = 100; // max corrimiento global de calMin (cuentas ADC)
+        constexpr uint16_t kAmbientRejectNorm = 200; // 0-1000: si algun sensor lee mas, NO esta sobre fondo -> se rechaza
+
+        // Paso 2, ventana de aprendizaje por sensor (dentro de los estados):
+        constexpr uint16_t kLearnBgNorm       = 150; // norm < esto -> lectura de fondo (alimenta calMin)
+        constexpr uint16_t kLearnLineNorm     = 400; // norm > esto -> candidato a linea (alimenta calMax)
+        constexpr uint8_t  kLearnHighSamples  = 3;   // lecturas seguidas altas antes de aceptar un maximo (rechaza picos EMI)
+        constexpr float    kLearnBgAlpha      = 0.05f; // filtro exponencial del fondo
+        constexpr uint16_t kLearnMinBand      = 120; // el min aprendido no se aleja mas de esto del valor previo
+        constexpr uint16_t kLearnMaxBand      = 200; // idem para el max
+        constexpr uint16_t kMinSpan           = 300; // rango minimo max-min; si no se cumple, el sensor no se actualiza
+
     } // namespace QTRCalibration
 
     namespace LineFollower

@@ -19,6 +19,8 @@
 **/
 #include "Elevator.hpp"
 
+namespace { constexpr int kSpeed = 150; } // 0-255, el valor probado en hardware
+
 Elevator::Elevator() : state(0), pin1(Pins::kElevator[0]), pin2(Pins::kElevator[1]), pwm(Pins::kPwmPin[4])
 {
 
@@ -29,6 +31,7 @@ void Elevator::begin()
     pinMode(pin1, OUTPUT);
     pinMode(pin2, OUTPUT);
     pinMode(pwm, OUTPUT);
+    moveElevator(0); // arranca detenido
 }
 
 
@@ -44,17 +47,19 @@ void Elevator::moveElevator(int direction)
     if (direction == 1){ //UP
         digitalWrite(pin1, LOW);
         digitalWrite(pin2, HIGH);
-        analogWrite(pwm, 180);
+        analogWrite(pwm, kSpeed);
         //delay(7000); // It can be omitted for now.
     }
     else if(direction == 2){ // DOWN
         digitalWrite(pin1, HIGH);
         digitalWrite(pin2, LOW);
-        analogWrite(pwm, 180);   // Velocity of 0 a 255
+        analogWrite(pwm, kSpeed);
         //delay(7000); 
     }
     else{
         analogWrite(pwm, 0); //elevator stop
+        digitalWrite(pin1, LOW);
+        digitalWrite(pin2, LOW);
     }
 }
 
