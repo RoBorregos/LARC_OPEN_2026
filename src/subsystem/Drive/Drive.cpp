@@ -6,8 +6,8 @@
 Drive::Drive()
     : bno_(),
     // Si no funciona, cambiar false o true, cambiar pines y despues false o true para 
-     m1_ul_(33, 34, 8, true, 1, 0, diameter), //M1
-     m2_ur_(36, 35, 9, true, 2, 13, diameter), //M3
+     m1_ul_(33, 34, 8, true, 0, 1, diameter), //M1 (encA/encB invertidos: TestDriveEncoderSign daba signo al reves)
+     m2_ur_(36, 35, 9, true, 13, 2, diameter), //M3 (encA/encB invertidos: TestDriveEncoderSign daba signo al reves)
      m3_ll_(37, 38, 10, true, 32, 31, diameter), //M2
      m4_lr_(39, 40, 11, false, 21, 20, diameter), //M4
       omni_(m1_ul_, m2_ur_, m3_ll_, m4_lr_),

@@ -49,7 +49,7 @@ void setup()
     // =========================
     // VL53L1X CANAL 3
     // =========================
-    tcaSelect(3);
+    tcaSelect(0);
 
     if (!vlx3.begin(0x29, &Wire1))
     {
@@ -68,7 +68,7 @@ void setup()
     // =========================
     // VL53L1X CANAL 4
     // =========================
-    tcaSelect(4);
+    tcaSelect(2);
 
     if (!vlx4.begin(0x29, &Wire1))
     {
@@ -93,7 +93,7 @@ void loop()
     // =========================
     // CANAL 3
     // =========================
-    tcaSelect(3);
+    tcaSelect(0);
 
     Serial.print("Canal 3: ");
 
@@ -123,7 +123,7 @@ void loop()
     // =========================
     // CANAL 4
     // =========================
-    tcaSelect(4);
+    tcaSelect(2);
 
     Serial.print("Canal 4: ");
 
