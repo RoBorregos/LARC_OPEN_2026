@@ -28,8 +28,8 @@ struct EncPins { const char* name; uint8_t a, b; };
 // PINES DIRECTOS (temporal): los mismos que usa Drive.cpp / FourWheelsPID.
 // Equivalente en Pins::kEncoders entre corchetes.
 constexpr EncPins ENC[NUM_WHEELS] = {
-    { "UL",  1,  0 },   // A=[1], B=[0]
-    { "UR",  2, 13 },   // A=[2], B=[3]
+    { "UL",  0,  1 },   // A/B invertidos como en Drive.cpp (signo al reves)
+    { "UR", 13,  2 },   // A/B invertidos como en Drive.cpp (signo al reves)
     { "LL", 32, 31 },   // A=[4], B=[5]
     { "LR", 21, 20 },   // A=[6], B=[7]
 };

@@ -167,10 +167,10 @@ namespace Pins
     // Teensy -- sin cambios. El bus I2C (SDA=18, SCL=19) es compartido
     // por BNO, PCA9685 y TCA9548A (confirmado en el esquematico).
     // =========================================================
-    static constexpr uint8_t kToFchFR = 3; // Front Right
-    static constexpr uint8_t kToFchFL = 3; // Front Left
+    static constexpr uint8_t kToFchFR = 2;//3; // Front Right
+    static constexpr uint8_t kToFchFL = 0;//4; // Front Left
     static constexpr uint8_t kToFchBL = 3; // Back Left / placeholder
-    static constexpr uint8_t kToFchBR = 0;//3; // Back Right / placeholder
+    static constexpr uint8_t kToFchBR = 4;//3; // Back Right / placeholder
 
     // =========================================================
     // SERVOS -- 6 conectores JST directos (SERVO1-SERVO6) confirmados

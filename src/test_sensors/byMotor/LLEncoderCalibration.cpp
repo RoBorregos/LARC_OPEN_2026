@@ -36,7 +36,9 @@ const float PPR =  188.0f; // NO COMPROBADO solo de prueba
 const float Ts  = 0.05f;   // 50ms more stable than 10ms
 
 float Kp = 0.5f;//1.0f;
-float Ki = 0.6f;//0.8f;
+float Ki = 0.18f;//0.6f, 0.8f -- bajado: el FF ya cubre casi todo el estable,
+                  // Ki alto se infla durante el arranque (rueda quieta por
+                  // friccion estatica) y provoca sobreimpulso al soltar.
 float Kd = 0.0f;//0.0015f;
 
 float setpoint   = 45.0f; //45.0f
@@ -165,8 +167,12 @@ void loop()
         // Solo integra si el output no esta saturado (anti-windup real)
         if (output_unclamped > 0.0f && output_unclamped < 255.0f) {
             integral += error * Ts;
-            // Limite = rango completo de PWM (255) / Ki, para que Ki*integral pueda cubrir todo el output
-            integral  = constrain(integral, -255.0f / Ki, 255.0f / Ki);
+            // Limite: la contribucion Ki*integral no pasa de +-I_MAX_PWM. Antes
+            // era 255/Ki (~1417 con Ki=0.18, casi sin tope) y dejaba que el
+            // integral se inflara de sobra mientras la rueda estaba quieta al
+            // arrancar (friccion estatica), provocando el sobreimpulso.
+            const float I_MAX_PWM = 40.0f;
+            integral  = constrain(integral, -I_MAX_PWM / Ki, I_MAX_PWM / Ki);
         }
 
         float output = constrain(output_unclamped, 0.0f, 255.0f);
