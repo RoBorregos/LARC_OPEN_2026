@@ -61,6 +61,9 @@ public:
 
     void scanDirect();
 
+    /// Bus I2C donde vive el mux (los ToF detras de el deben usar el mismo).
+    TwoWire& wire() const { return wire_; }
+
 private:
     uint8_t address_;
     TwoWire& wire_;

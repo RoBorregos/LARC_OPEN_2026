@@ -51,6 +51,10 @@ private:
     uint32_t clearStartMs = 0;
     uint32_t noObstacleStartMs = 0;
 
+    // true cuando los ToF ya pasaron el warmup y pueden reportar obstaculo.
+    // POOL/POOLSGOBACK no cuentan tiempo "sin obstaculo" hasta entonces.
+    bool tofReady_ = false;
+
     byte visionLeft = 0;
     byte visionRight = 0;
 

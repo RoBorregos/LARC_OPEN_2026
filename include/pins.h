@@ -164,13 +164,14 @@ namespace Pins
     // =========================================================
     // TOF SENSORS ON I2C MUX (TCA9548A)
     // Numeros de canal del TCA9548A (0-7), no pines fisicos del
-    // Teensy -- sin cambios. El bus I2C (SDA=18, SCL=19) es compartido
-    // por BNO, PCA9685 y TCA9548A (confirmado en el esquematico).
+    // Teensy. El TCA esta en Wire1 (SDA1=17, SCL1=16) -- confirmado en
+    // hardware con vlx_single_test.cpp (instances.cpp lo instancia asi).
+    // U = upper (frente), L = lower (atras).
     // =========================================================
-    static constexpr uint8_t kToFchFR = 2;//3; // Front Right
-    static constexpr uint8_t kToFchFL = 0;//4; // Front Left
-    static constexpr uint8_t kToFchBL = 3; // Back Left / placeholder
-    static constexpr uint8_t kToFchBR = 4;//3; // Back Right / placeholder
+    static constexpr uint8_t kToFchFR = 0; // UR -- Front Right
+    static constexpr uint8_t kToFchFL = 2; // UL -- Front Left
+    static constexpr uint8_t kToFchBL = 3; // LL -- Back Left
+    static constexpr uint8_t kToFchBR = 4; // LR -- Back Right
 
     // =========================================================
     // SERVOS -- 6 conectores JST directos (SERVO1-SERVO6) confirmados
