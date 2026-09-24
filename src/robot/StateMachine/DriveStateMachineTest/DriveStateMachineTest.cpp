@@ -75,17 +75,22 @@ namespace
     static constexpr uint32_t kInitializedStoppedMs = 9000;
     static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
     static constexpr uint32_t kClearDelayMs = 1500;  //6500;          // Tiempo para cambiar nuevamente a Forward
-    static constexpr uint32_t kNoObstacleToCornerMs = 500; // Time without obstacle to go forward and LOOKFORLINE -> tal vez disminuir
+    static constexpr uint32_t kNoObstacleToCornerMs = 1000; // Time without obstacle to go forward and LOOKFORLINE -> tal vez disminuir
     static constexpr uint32_t kCornerDeployWazitMs = 1800;
 
     static constexpr uint32_t kMinAvoidTimeMs = 250;
     static constexpr uint32_t kSideDetectHoldMs = 80;
+    // ToF: todo en mm, igual que la clase ToF (getDistanceMm()/setMaxRange()).
     static constexpr uint16_t kTofTargetMm = 120;   // distancia deseada al árbol
     static constexpr uint16_t kTofHardStopMm = 105; // stop de seguridad
+    static constexpr uint16_t kTofMaxRangeMm = 1000; // mas lejos (o nada enfrente) = sin obstaculo
+    // Mientras esquiva: si el obstaculo queda mas cerca que esto, se aleja
+    static constexpr uint16_t kTooCloseAvoidLeftMm  = 120;
+    static constexpr uint16_t kTooCloseAvoidRightMm = 100;
 
     static constexpr float kTofMinSpeed = 0.10f;
     static constexpr float kTofMaxSpeed = 0.35f;
-    static constexpr float kObstacleDistanceCm = 20.0f;
+    static constexpr uint16_t kObstacleDistanceMm = 215;
 
 
     static constexpr float kDistKp = 0.0012f;
@@ -98,31 +103,81 @@ namespace
     // true en cuanto el switch este conectado.
     static constexpr bool kLimitSwitchConnected = false;
 
+    // Latch con histeresis para obstaculos de ToF: se activa tras
+    // kConfirmMs de deteccion continua y se suelta tras kReleaseMs sin
+    // deteccion (evita que el estado parpadee con una lectura suelta).
+    struct ObstacleLatch
+    {
+        static constexpr uint32_t kReleaseMs = 400;
+        static constexpr uint32_t kConfirmMs = 0;
+
+        bool     latched       = false;
+        uint32_t clearStartMs  = 0;
+        uint32_t detectStartMs = 0;
+
+        bool update(uint32_t now, bool seenNow)
+        {
+            if (!latched)
+            {
+                if (!seenNow)
+                {
+                    detectStartMs = 0;
+                    return false;
+                }
+                if (detectStartMs == 0)
+                    detectStartMs = now;
+                if ((now - detectStartMs) >= kConfirmMs)
+                {
+                    latched       = true;
+                    clearStartMs  = 0;
+                    detectStartMs = 0;
+                }
+                return latched;
+            }
+
+            if (seenNow)
+            {
+                clearStartMs = 0;
+            }
+            else
+            {
+                if (clearStartMs == 0)
+                    clearStartMs = now;
+                if ((now - clearStartMs) >= kReleaseMs)
+                {
+                    latched      = false;
+                    clearStartMs = 0;
+                }
+            }
+            return latched;
+        }
+    };
+
     const __FlashStringHelper *mainStateName(DriveTestSTATES state)
     {
         switch (state)
         {
-        case DriveTestSTATES::START:
+        case DriveTestSTATES::START: // ST:0
             return F(""); // F("START ♡ ♡ ♡");
-        case DriveTestSTATES::POOL:
+        case DriveTestSTATES::POOL: // ST:1
             return F(""); // F("POOL");
-        case DriveTestSTATES::LOOKFORLINE:
+        case DriveTestSTATES::LOOKFORLINE: // ST:2
             return F(""); // F("LOOKFORLINE");
-        case DriveTestSTATES::LOOKFORCORNER:
+        case DriveTestSTATES::LOOKFORCORNER: // ST:3
             return F(""); // F("LOOKFORCORNER");
-        case DriveTestSTATES::BEANS:
+        case DriveTestSTATES::BEANS: // ST:4
             return F(""); // F("BEANS");
-        case DriveTestSTATES::BEANSGOBACK:
+        case DriveTestSTATES::BEANSGOBACK: // ST:5
             return F(""); // F("BEANSGOBACK");
-        case DriveTestSTATES::POOLSGOBACK:
+        case DriveTestSTATES::POOLSGOBACK: // ST:6
             return F(""); // F("POOLSGOBACK");
-        case DriveTestSTATES::LOOKFORLINEBACKWARDS:
+        case DriveTestSTATES::LOOKFORLINEBACKWARDS: // ST:7
             return F(""); // F("LOOKFORLINEBACKWARDS");
-        case DriveTestSTATES::BENEFITSSTARTCORNER:
+        case DriveTestSTATES::BENEFITSSTARTCORNER: // ST:8
             return F(""); // F("BENEFITSSTARTCORNER");
-        case DriveTestSTATES::BENEFITS:
+        case DriveTestSTATES::BENEFITS: // ST:9
             return F(""); // F("BENEFITS");
-        case DriveTestSTATES::STOP:
+        case DriveTestSTATES::STOP: // ST:10
             return F(""); // F("STOP ♡ ♡ ♡ ♡ ♡");
         default:
             return F(""); // F("DEFAULT");
@@ -174,23 +229,27 @@ void DriveStateMachineTest::begin()
 
     Wire.begin();
     Wire.setClock(400000);
-    i2cMux.begin();
 
-    bool okL = tofLeft.begin();
-    bool okR = tofRight.begin();
+    // ToF (VL53L1X) detras del TCA9548A en Wire1, 100 kHz como en
+    // vlx_single_test.cpp (confirmado en hardware).
+    Wire1.begin();
+    Wire1.setClock(100000);
+    Serial.print("i2cMux init: "); Serial.println(i2cMux.begin() ? "OK" : "FAIL");
 
-    Serial.print("tofLeft init: ");  Serial.println(okL ? "OK" : "FAIL");
-    Serial.print("tofRight init: "); Serial.println(okR ? "OK" : "FAIL");
+    // UL/UR (frente) para POOL, LL/LR (atras) para POOLSGOBACK
+    ToF* tofs[] = {&tofLeft, &tofRight, &tofBackLeft, &tofBackRight};
+    const char* tofNames[] = {"tofLeft (UL)", "tofRight (UR)", "tofBackLeft (LL)", "tofBackRight (LR)"};
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        const bool ok = tofs[i]->begin();
+        Serial.print(tofNames[i]); Serial.print(" init: "); Serial.println(ok ? "OK" : "FAIL");
+        tofs[i]->setMaxRange(kTofMaxRangeMm);
+        tofs[i]->setUpdateInterval(30);
+    }
 
     //QTR
     qtrFront.begin();
     qtrFront.useDefaultCalibration(0);   // FRONT qtr
-
-    tofLeft.setMaxRange(600);
-    tofRight.setMaxRange(600);
-
-    tofLeft.setUpdateInterval(30);
-    tofRight.setUpdateInterval(30);
 
     ir.begin();
     qtrRear.begin();
@@ -206,6 +265,10 @@ void DriveStateMachineTest::begin()
 void DriveStateMachineTest::update()
 {
     ir.update();
+    tofLeft.update();
+    tofRight.update();
+    tofBackLeft.update();
+    tofBackRight.update();
     qtrFront.update();
     qtrRear.update();
     vision.update();
@@ -245,14 +308,18 @@ void DriveStateMachineTest::update()
     Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
 
     // ToF
-    Serial.print(F(" ❤ Tof❤ |"));  //Serial.print(tofLeft.getDistanceCm(),  1);
-    //Serial.print(F(" TR:"));    Serial.print(tofRight.getDistanceCm(), 1);
-    //Serial.print(F(" vL:"));    Serial.print(tofLeft.isValid());
-    //Serial.print(F(" vR:"));    Serial.print(tofRight.isValid());
-    Serial.print(F(" TL:")); Serial.print(tofLeft.getDistanceCm(), 0);
-    Serial.print(F("cm vL:")); Serial.print(tofLeft.isValid() ? "OK" : "NO");
-    Serial.print(F(" TR:")); Serial.print(tofRight.getDistanceCm(), 0);
-    Serial.print(F("cm vR:")); Serial.print(tofRight.isValid() ? "OK" : "NO");
+    // ToF en mm (-1 = sin lectura valida)
+    auto printTof = [](const __FlashStringHelper* label, const ToF& tof)
+    {
+        Serial.print(label);
+        Serial.print(tof.isValid() ? (int)tof.getDistanceMm() : -1);
+        Serial.print(F("mm"));
+    };
+    Serial.print(F(" ❤ ToF❤ |"));
+    printTof(F(" UR:"), tofRight);
+    printTof(F(" UL:"), tofLeft);
+    printTof(F(" LL:"), tofBackLeft);
+    printTof(F(" LR:"), tofBackRight);
 
     // Obstáculo
     //Serial.print(F(" | OBS:")); Serial.print(obstacle);
@@ -314,66 +381,27 @@ void DriveStateMachineTest::update()
     const bool leftDetectedPool = (FL || BL);
     const bool rightDetectedPool = (FR || BR);
 
-    // DESPUÉS
     static constexpr uint32_t kTofWarmupMs = 500;
     static uint32_t tofReadyTimestamp = 0;
-    if (tofReadyTimestamp == 0 && (tofLeft.isValid() || tofRight.isValid()))
+    if (tofReadyTimestamp == 0 &&
+        (tofLeft.isValid() || tofRight.isValid() || tofBackLeft.isValid() || tofBackRight.isValid()))
         tofReadyTimestamp = now;
     const bool tofReady = tofReadyTimestamp != 0 &&
                         (now - tofReadyTimestamp) > kTofWarmupMs;
+    tofReady_ = tofReady;
 
-    const bool obstacleLeftNow  = false;/*tofReady
-                            && tofLeft.isValid()
-                            && tofLeft.getDistanceCm()  < kObstacleDistanceCm;*/
-
-    const bool obstacleRightNow = false;/*tofReady
-                            && tofRight.isValid()
-                            && tofRight.getDistanceCm() < kObstacleDistanceCm;*/
-
-    static bool obstacleLatched = false;
-    static uint32_t obstacleClearStartMs  = 0;
-    static uint32_t obstacleDetectStartMs = 0;          // ← nuevo
-    static constexpr uint32_t kObstacleReleaseMs  = 400; // ← subido de 200 a 400
-    static constexpr uint32_t kObstacleConfirmMs  = 0; //50;  // ← nuevo: ms consecutivos para activar
-
-    if (!obstacleLatched)
+    auto seesObstacle = [&](const ToF& tof)
     {
-    if (obstacleLeftNow || obstacleRightNow)
-    {
-    if (obstacleDetectStartMs == 0)
-        obstacleDetectStartMs = now;
+        return tofReady && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
+    };
 
-    if ((now - obstacleDetectStartMs) >= kObstacleConfirmMs)
-    {
-        obstacleLatched       = true;
-        obstacleClearStartMs  = 0;
-        obstacleDetectStartMs = 0;
-    }
-    }
-    else
-    {
-    obstacleDetectStartMs = 0; // reset si deja de verse
-    }
-    }
-    else
-    {
-        if (obstacleLeftNow || obstacleRightNow)
-        {
-            obstacleClearStartMs = 0;
-        }
-        else
-        {
-            if (obstacleClearStartMs == 0)
-                obstacleClearStartMs = now;
+    // UL/UR (frente) -> POOL
+    static ObstacleLatch frontLatch;
+    const bool obstacle = frontLatch.update(now, seesObstacle(tofLeft) || seesObstacle(tofRight));
 
-            if ((now - obstacleClearStartMs) >= kObstacleReleaseMs)
-            {
-                obstacleLatched = false;
-                obstacleClearStartMs = 0;
-            }
-        }
-    }
-    const bool obstacle = obstacleLatched;
+    // LL/LR (atras) -> POOLSGOBACK (va en reversa)
+    static ObstacleLatch rearLatch;
+    const bool rearObstacle = rearLatch.update(now, seesObstacle(tofBackLeft) || seesObstacle(tofBackRight));
 
     switch (currentState)
     {
@@ -402,7 +430,7 @@ void DriveStateMachineTest::update()
         break;
 
     case DriveTestSTATES::POOLSGOBACK:
-        handlePOOLSGoBackState(now, obstacle, leftDetectedPool, rightDetectedPool);
+        handlePOOLSGoBackState(now, rearObstacle, leftDetectedPool, rightDetectedPool);
         break;
 
     case DriveTestSTATES::LOOKFORLINEBACKWARDS:
@@ -624,6 +652,16 @@ void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool le
             lineCorrectionDir     = 0;
         }
 
+        // Sin esto el timer de kNoObstacleToCornerMs se acaba durante el
+        // warmup de los ToF (obstacle siempre false) y POOL pasa directo a
+        // LOOKFORLINE sin haber podido ver ninguna alberca.
+        if (!tofReady_)
+        {
+            noObstacleStartMs = 0;
+            LARC.stop();
+            break;
+        }
+
         if (obstacle)
         {
             noObstacleStartMs = 0;
@@ -664,10 +702,10 @@ void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool le
     case PoolSubState::AVOID_LEFT:
     {
         // Si el obstáculo se acerca demasiado, retroceder
-        const float distL = tofLeft.getDistanceCm();
-        const float distR = tofRight.getDistanceCm();
-        const bool tooClose = (tofLeft.isValid()  && distL < 12.0f) ||
-                              (tofRight.isValid() && distR < 12.0f);
+        const uint16_t distL = tofLeft.getDistanceMm();
+        const uint16_t distR = tofRight.getDistanceMm();
+        const bool tooClose = (tofLeft.isValid()  && distL < kTooCloseAvoidLeftMm) ||
+                              (tofRight.isValid() && distR < kTooCloseAvoidLeftMm);
 
         if (tooClose)
         {
@@ -711,10 +749,10 @@ void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool le
     case PoolSubState::AVOID_RIGHT:
     {
         // Si el obstáculo se acerca demasiado, retroceder
-        const float distL = tofLeft.getDistanceCm();
-        const float distR = tofRight.getDistanceCm();
-        const bool tooClose = (tofLeft.isValid()  && distL < 10.0f) ||
-                              (tofRight.isValid() && distR < 10.0f);
+        const uint16_t distL = tofLeft.getDistanceMm();
+        const uint16_t distR = tofRight.getDistanceMm();
+        const bool tooClose = (tofLeft.isValid()  && distL < kTooCloseAvoidRightMm) ||
+                              (tofRight.isValid() && distR < kTooCloseAvoidRightMm);
 
         if (tooClose)
         {
@@ -807,10 +845,10 @@ void DriveStateMachineTest::handleLookForLineState(uint32_t now,
 
     // ── case 3: búsqueda normal ───────────────────────────────────────────
     static constexpr uint32_t kBorderCorrectMs = 150;
-    static constexpr float    kTofBorderCm     = 15.0f;
+    static constexpr uint16_t kTofBorderMm      = 150;
 
-    const bool realBorderLeft  = leftDetected  && tofLeft.isValid()  && tofLeft.getDistanceCm()  > kTofBorderCm;
-    const bool realBorderRight = rightDetected && tofRight.isValid() && tofRight.getDistanceCm() > kTofBorderCm;
+    const bool realBorderLeft  = leftDetected  && tofLeft.isValid()  && tofLeft.getDistanceMm()  > kTofBorderMm;
+    const bool realBorderRight = rightDetected && tofRight.isValid() && tofRight.getDistanceMm() > kTofBorderMm;
 
     if (frontDetected && onLine)
     {
@@ -1106,6 +1144,14 @@ switch (poolState)
 {
 case PoolSubState::FORWARD:
 {
+    // Igual que en POOL: no contar tiempo sin obstaculo hasta que los ToF esten listos
+    if (!tofReady_)
+    {
+        noObstacleStartMs = 0;
+        LARC.stop();
+        break;
+    }
+
     if (rearObstacle)
     {
         noObstacleStartMs = 0;
@@ -1128,6 +1174,16 @@ case PoolSubState::FORWARD:
 
 case PoolSubState::AVOID_LEFT:
 {
+    // Igual que en POOL pero con los ToF de atras: si el obstaculo se
+    // acerca demasiado, avanzar (el robot va en reversa)
+    const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidLeftMm) ||
+                              (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidLeftMm);
+    if (tooCloseRear)
+    {
+        LARC.forward(0.30f);
+        break;
+    }
+
     LARC.left(0.30f);
 
     const bool canChangeSide = (now - poolStateStartMs) >= kMinAvoidTimeMs;
@@ -1170,6 +1226,14 @@ case PoolSubState::AVOID_LEFT:
 
 case PoolSubState::AVOID_RIGHT:
 {
+    const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidRightMm) ||
+                              (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidRightMm);
+    if (tooCloseRear)
+    {
+        LARC.forward(0.30f);
+        break;
+    }
+
     LARC.right(0.30f);
 
     const bool canChangeSide = (now - poolStateStartMs) >= kMinAvoidTimeMs;
@@ -1219,10 +1283,10 @@ void DriveStateMachineTest::handleLookForLineBackWards(uint32_t now,
 {
     // ── case 3: búsqueda normal ───────────────────────────────────────────
     static constexpr uint32_t kBorderCorrectMs = 150;
-    static constexpr float    kTofBorderCm     = 15.0f;
+    static constexpr uint16_t kTofBorderMm      = 150;
 
-    const bool realBorderLeft  = backLeftDetected  && tofLeft.isValid()  && tofLeft.getDistanceCm()  > kTofBorderCm;
-    const bool realBorderRight = backRightDetected && tofRight.isValid() && tofRight.getDistanceCm() > kTofBorderCm;
+    const bool realBorderLeft  = backLeftDetected  && tofLeft.isValid()  && tofLeft.getDistanceMm()  > kTofBorderMm;
+    const bool realBorderRight = backRightDetected && tofRight.isValid() && tofRight.getDistanceMm() > kTofBorderMm;
 
     // backDetected (L3/L4) y qtrRear.onLine() estan desfasados en el
     // tiempo -- los IR traseros disparan un poco antes que el QTR llegue

@@ -32,6 +32,10 @@ ToF::ToF(uint8_t muxChannel, TCA9548A& mux, ToFType type)
 
 bool ToF::begin()
 {
+    // Detras del mux el sensor esta en el mismo bus que el TCA (Wire1 en
+    // el robot actual). Pololu (L0X) usa &Wire por default.
+    sensorL0X.setBus(bus());
+
     selectIfMux();
     
     // Non blocking settle: just record time; first update() will
@@ -49,13 +53,9 @@ bool ToF::begin()
             sensorL0X.startContinuous(Constants::ToFConfig::kContinuousPeriodMs);
         }
     } else {
-        sensorL1X.setTimeout(Constants::ToFConfig::kTimeoutMs);
-        ok = sensorL1X.init();
-        if (ok) {
-            sensorL1X.setDistanceMode(VL53L1X::Long);
-            sensorL1X.setMeasurementTimingBudget(Constants::ToFConfig::kTimingBudgetUs);
-            sensorL1X.startContinuous(Constants::ToFConfig::kContinuousPeriodMs);
-        }
+        // Igual que vlx_single_test.cpp: begin(0x29, bus) + startRanging()
+        // con la configuracion default de la libreria.
+        ok = sensorL1X.begin(0x29, bus()) && sensorL1X.startRanging();
     }
 
     if (!ok) {
@@ -104,12 +104,34 @@ void ToF::update()
             // No new measurement yet = keep last value
             return;
         }
-        uint16_t raw = sensorL1X.read(false);  // non blocking, clears interrupt internally
 
-        if (sensorL1X.timeoutOccurred()) {
-            return;
+        // Igual que vlx_single_test.cpp: se lee status + distancia directo
+        // (Adafruit distance() regresa -1 para cualquier status != 0).
+        uint8_t  status = 0;
+        uint16_t raw    = 0;
+        const bool i2cOk = sensorL1X.VL53L1X_GetRangeStatus(&status) == 0 &&
+                           sensorL1X.VL53L1X_GetDistance(&raw) == 0;
+        sensorL1X.clearInterrupt();
+
+        if (!i2cOk) return; // keep last value
+
+        // Con status invalido el raw es basura (ej. wraparound reporta
+        // ~300 mm cuando no hay nada en ~4 m), asi que no se usa como
+        // distancia. Codigos del ULD de ST: 0 OK, 1 sigma, 2 signal,
+        // 4 fuera de rango, 5 hardware, 7 wraparound.
+        switch (status) {
+            case 0:
+                break;
+            case 2:
+            case 4:
+            case 7:
+                distanceMm = maxRangeMm_; // nada cerca
+                return;
+            default:
+                return; // lectura dudosa = keep last value
         }
-        if (raw == 0) return; 
+
+        if (raw == 0) return;
         if (raw > maxRangeMm_) {
             distanceMm = maxRangeMm_; // valor alto = sin obstáculo
             return;
@@ -138,7 +160,7 @@ void ToF::setTimingBudgetMs(uint16_t ms)
     if (type_ == ToFType::L0X)
         sensorL0X.setMeasurementTimingBudget(budgetUs);
     else
-        sensorL1X.setMeasurementTimingBudget(budgetUs);
+        sensorL1X.setTimingBudget(ms);
 }
 
 void ToF::setInterMeasurementMs(uint16_t ms)
@@ -150,7 +172,7 @@ void ToF::setInterMeasurementMs(uint16_t ms)
     if (type_ == ToFType::L0X)
         sensorL0X.startContinuous(ms);
     else
-        sensorL1X.startContinuous(ms);
+        sensorL1X.VL53L1X_SetInterMeasurementInMs(ms);
 
     // Keep the software rate limit in sync
     updateIntervalMs_ = ms;
@@ -163,8 +185,10 @@ void ToF::startContinuous(uint16_t periodMs)
 
     if (type_ == ToFType::L0X)
         sensorL0X.startContinuous(periodMs);
-    else
-        sensorL1X.startContinuous(periodMs);
+    else {
+        sensorL1X.VL53L1X_SetInterMeasurementInMs(periodMs);
+        sensorL1X.startRanging();
+    }
 
     continuous       = true;
     updateIntervalMs_ = periodMs;
@@ -178,7 +202,7 @@ void ToF::stopContinuous()
     if (type_ == ToFType::L0X)
         sensorL0X.stopContinuous();
     else
-        sensorL1X.stopContinuous();
+        sensorL1X.stopRanging();
 
     continuous = false;
 }

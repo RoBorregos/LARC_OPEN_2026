@@ -42,6 +42,8 @@ extern Vision vision;
 
 extern ToF tofLeft;
 extern ToF tofRight;
+extern ToF tofBackLeft;
+extern ToF tofBackRight;
 
 extern TCA9548A i2cMux;
 

@@ -36,6 +36,63 @@ void tcaSelect(uint8_t channel)
     delay(5);
 }
 
+// rangeStatus del VL53L1X (ULD de ST). Adafruit distance() regresa -1 para
+// cualquier status != 0, asi que lo leemos directo para saber la causa.
+const char* rangeStatusText(uint8_t status)
+{
+    switch (status)
+    {
+        case 0:  return "OK";
+        case 1:  return "sigma fail (ruido)";
+        case 2:  return "signal fail (poca luz / nada enfrente)";
+        case 4:  return "fuera de rango";
+        case 5:  return "hardware fail";
+        case 7:  return "wraparound (muy lejos)";
+        default: return "desconocido";
+    }
+}
+
+void printReading(Adafruit_VL53L1X& vlx, bool ok)
+{
+    if (!ok)
+    {
+        Serial.print("sensor no inicializado");
+        return;
+    }
+    if (!vlx.dataReady())
+    {
+        Serial.print("esperando...");
+        return;
+    }
+
+    uint8_t status = 0;
+    uint16_t distancia = 0;
+    bool i2cOk = vlx.VL53L1X_GetRangeStatus(&status) == 0 &&
+                 vlx.VL53L1X_GetDistance(&distancia) == 0;
+
+    if (!i2cOk)
+    {
+        Serial.print("ERROR I2C");
+    }
+    else if (status == 0)
+    {
+        Serial.print(distancia);
+        Serial.print(" mm");
+    }
+    else
+    {
+        Serial.print("INVALIDO st=");
+        Serial.print(status);
+        Serial.print(" ");
+        Serial.print(rangeStatusText(status));
+        Serial.print(" (raw ");
+        Serial.print(distancia);
+        Serial.print(" mm)");
+    }
+
+    vlx.clearInterrupt();
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -47,9 +104,15 @@ void setup()
     Serial.println("=== TCA9548A + Adafruit VL53L1X (canales 3 y 4) ===");
 
     // =========================
-    // VL53L1X CANAL 3
+    // VL53L1X CANALES
     // =========================
-    tcaSelect(0);
+    // Que VLX corresponde a que canal y ubicacion en el chassis:
+    // Canal 0 es para el de UR
+    // Canal 2 es para UL
+    // Canal 3 es para LL
+    // Canal 4 es para LR
+
+    tcaSelect(0); // 3 VL53 
 
     if (!vlx3.begin(0x29, &Wire1))
     {
@@ -95,28 +158,8 @@ void loop()
     // =========================
     tcaSelect(0);
 
-    Serial.print("Canal 3: ");
-
-    if (sensor3Ok && vlx3.dataReady())
-    {
-        int16_t distancia3 = vlx3.distance();
-
-        if (distancia3 == -1)
-        {
-            Serial.print("ERROR");
-        }
-        else
-        {
-            Serial.print(distancia3);
-            Serial.print(" mm");
-        }
-
-        vlx3.clearInterrupt();
-    }
-    else
-    {
-        Serial.print(sensor3Ok ? "esperando..." : "sensor no inicializado");
-    }
+    Serial.print("Canal 3 (TCA 0): ");
+    printReading(vlx3, sensor3Ok);
 
     Serial.print("   |   ");
 
@@ -125,28 +168,8 @@ void loop()
     // =========================
     tcaSelect(2);
 
-    Serial.print("Canal 4: ");
-
-    if (sensor4Ok && vlx4.dataReady())
-    {
-        int16_t distancia4 = vlx4.distance();
-
-        if (distancia4 == -1)
-        {
-            Serial.print("ERROR");
-        }
-        else
-        {
-            Serial.print(distancia4);
-            Serial.print(" mm");
-        }
-
-        vlx4.clearInterrupt();
-    }
-    else
-    {
-        Serial.print(sensor4Ok ? "esperando..." : "sensor no inicializado");
-    }
+    Serial.print("Canal 4 (TCA 2): ");
+    printReading(vlx4, sensor4Ok);
 
     Serial.println();
 
