@@ -322,6 +322,13 @@ def open_bench(role: Optional[str] = None, device=None,
             f"{platform.system()}), so role '{role}' cannot be resolved.\n"
             f"    Pass --device 0 (or 1, 2, ...) to pick a camera by index.")
 
+    # Explicit macOS camera indices still need the role's calibrated size.
+    if role:
+        settings = load_config(config_path).get(role, {})
+        for key in ("width", "height", "fourcc", "fps"):
+            if key in settings and key not in kwargs:
+                kwargs[key] = settings[key]
+
     # Accept "0" as an index and "/dev/video0" or a name as a path.
     try:
         target = int(device)
@@ -343,6 +350,8 @@ def open_bench(role: Optional[str] = None, device=None,
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, kwargs["width"])
     if kwargs.get("height"):
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, kwargs["height"])
+    if kwargs.get("fps"):
+        cap.set(cv2.CAP_PROP_FPS, kwargs["fps"])
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     for _ in range(15):
