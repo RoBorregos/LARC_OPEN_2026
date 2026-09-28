@@ -61,6 +61,11 @@ public:
 
     void scanDirect();
 
+    // The bus this mux (and everything behind it) lives on.
+    TwoWire& bus() const { return wire_; }
+    TwoWire& wire() const { return wire_; }
+    uint8_t  address() const { return address_; }
+
 private:
     uint8_t address_;
     TwoWire& wire_;
