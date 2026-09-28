@@ -17,7 +17,7 @@ PIDController::PIDController(float kp, float ki, float kd, float outputMin, floa
     : lastMeasurement_(0.0), lastSetpoint_(0.0), output_(0.0), enabled_(true), angleWrapping_(false)
 {
     // Initialize the PID controller with "pointers" to our variables
-    pid_ = new PID(&lastMeasurement_, &output_, &lastSetpoint_, (double)kp, (double)ki, (double)kd, REVERSE); //DIRECT
+    pid_ = new PID(&lastMeasurement_, &output_, &lastSetpoint_, (double)kp, (double)ki, (double)kd, DIRECT); //DIRECT
 
     //Set the mode and output limits
     pid_->SetMode(AUTOMATIC);
@@ -102,6 +102,11 @@ void PIDController::setGains(float kp, float ki, float kd)
 void PIDController::setOutputLimits(float min, float max)
 {
     pid_->SetOutputLimits((double)min, (double)max);
+}
+
+void PIDController::setSampleTime(int ms)
+{
+    pid_->SetSampleTime(ms);
 }
 
 void PIDController::setEnabled(bool enabled)
