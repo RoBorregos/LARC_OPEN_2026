@@ -17,9 +17,11 @@
 #include "subsystem/Drive/Drive.hpp"
 #include "PIDController.hpp"
 // Vision
-#include "Vision.hpp"
+#include "VisionLink.hpp"
 // VLX
 #include "TCA9548A/TCA9548A.h"
+// Odometry
+#include "testOdometry.hpp"
 
 
 extern Drive LARC;
@@ -36,11 +38,15 @@ extern QTR qtrRear;
 
 extern PIDController linePID;
 
-extern Vision vision;
+extern VisionLink vision;
 
 extern ToF tofLeft;
 extern ToF tofRight;
+extern ToF tofBackLeft;
+extern ToF tofBackRight;
 
 extern TCA9548A i2cMux;
+
+extern OdomMovement odomMove_;
 
 #endif
