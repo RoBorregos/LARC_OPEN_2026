@@ -23,6 +23,8 @@ class PIDController {
 
         void setOutputLimits(float min, float max);
 
+        void setSampleTime(int ms);
+
         void setEnabled(bool enabled);
 
         bool isEnabled() const;
