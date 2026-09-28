@@ -1,0 +1,1573 @@
+
+/*
+    Comando  para testDriveStateMachineTest.cpp
+    @concept: Se recrea la maquina de estados original ahora resguadada en "AntiqueStateMachine"
+        pero se esta usando con las siguientes modificaciones:
+        - Se esta usando Drive (just yaw hold:true) para control.
+        - Se omiten por el momento lecturas de VLX estan guardadas ObstacleDetected: false.
+        - Se omite la lectura de uno de los 
+
+    pio run -e drive_statemachine_test -t upload -t monitor
+*/
+#include <Arduino.h>
+#include "DriveStateMachineTest.hpp"
+#include "robot/instances/instances.hpp"
+#include "constants.h"
+#include "VisionLink.hpp"
+
+#ifndef DRIVE_TEST_START_STATE
+#define DRIVE_TEST_START_STATE POOL
+#endif
+
+// Telemetry shares the USB port with the Orin link: off unless -D SM_DEBUG=1
+#ifndef SM_DEBUG
+#define SM_DEBUG 0
+#endif
+
+namespace
+{
+    static constexpr float kVelocity = 0.30f;
+
+    // Corrección lateral para el retroceso en LOOKFORCORNER / BEANSGOBACK.
+    // Se probo con PIDController (PID_v1) pero el Ki metia un ciclo limite
+    // lento (se pasa de largo, tarda en corregir al otro lado). Ya no hace
+    // falta: el ruido original que motivo el PID venia de lecturas sucias
+    // del QTR (arreglado con el filtro de mediana en QTR::update()), asi
+    // que un P puro manual -- calculado cada loop, sin el SampleTime de la
+    // libreria -- alcanza. kCornerKp se afina empiricamente en campo.
+    static constexpr float kCornerSetpoint = 2900.0f;
+    static constexpr float kCornerKp = 0.00012f;
+    // El swing violento que forzo bajar esto a 0.12 probablemente venia
+    // del signo invertido en LOOKFORCORNER (ya corregido): corregia hacia
+    // el lado equivocado, lo cual generaria justo ese tipo de oscilacion.
+    // Con el signo ya bien, 0.12 resulto insuficiente para recuperar de
+    // un error grande (lPos se quedaba clavado sin volver al setpoint) ->
+    // se sube.
+    //
+    // OJO: kCornerKp/kCornerCorrMax se afinaron en campo cuando la
+    // correccion iba en vy (strafe, ver setTranslation(-0.20f,
+    // -cornerCorrFiltered) mas abajo). Ahora que vx/vy se intercambiaron
+    // para que vx=correccion/vy=velocidad base (ver handleLookForCornerState),
+    // la respuesta mecanica del chasis puede ser distinta en ese eje ->
+    // revisar si siguen siendo apropiadas o hay que volver a afinarlas.
+    static constexpr float kCornerCorrMax = 0.20f;
+
+    // handleBEANS usa 2200 (literal, ver mas abajo) como setpoint en vez de
+    // este mismo valor -- son el mismo QTR fisico, no deberia haber dos
+    // "centros" distintos. Dejado asi por ahora; revisar/unificar despues.
+
+    // Corrección lateral para qtrRear en BENEFITSSTARTCORNER/BENEFITS:
+    // a peticion expresa, EXACTAMENTE la misma formula/tuning que
+    // handleLookForCornerState/handleBEANS (mismo setpoint/Kp/max,
+    // kCornerSetpoint/kCornerKp/kCornerCorrMax reusados tal cual) -- la
+    // UNICA diferencia es leer qtrRear en vez de qtrFront. Ya no existen
+    // kRearSetpoint/kRearKp/kRearCorrMax por separado para que no se
+    // puedan desincronizar de los valores del front.
+    //
+    // Confirmado en campo: qtrRear entra por C8 (indice local 0) y ESE es
+    // el lado "adelante" del arreglo -- al reves que qtrFront, donde
+    // adelante es el OTRO extremo (C6, indice local 6, ver
+    // hardware_qtr_front_sensor_orientation). O sea qtrRear esta cableado
+    // en orden espejo respecto a qtrFront: en front, indice alto = adelante;
+    // en rear, indice alto = atras. getPosition() (0 en el indice 0, 6000
+    // en el indice 6) por lo tanto corre en sentido contrario entre los
+    // dos arreglos. Si se reusa kCornerSetpoint/getPosition() de qtrRear
+    // tal cual, la correccion sale invertida (no por signo de Kp, sino por
+    // la escala de posicion misma) -- por eso se espeja abajo con
+    // kQtrPosMax antes de calcular error, para que qtrRear se comporte
+    // como si tuviera la misma orientacion que qtrFront y la formula
+    // (setpoint/Kp/max) sea real y completamente compartida.
+    static constexpr int kQtrPosMax = (QTR::N - 1) * 1000; // 6000 (indice 6 * 1000)
+    static constexpr float kRearCorrAlpha = 0.15f;
+
+    static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
+    static constexpr uint32_t kClearDelayMs = 1500;  //6500;          // Tiempo para cambiar nuevamente a Forward
+    static constexpr uint32_t kNoObstacleToCornerMs = 1000; // Time without obstacle to go forward and LOOKFORLINE -> tal vez disminuir
+
+    static constexpr uint32_t kSideDetectHoldMs = 80;
+    // ToF: todo en mm, igual que la clase ToF (getDistanceMm()/setMaxRange()).
+    static constexpr uint16_t kTofMaxRangeMm = 1000; // mas lejos (o nada enfrente) = sin obstaculo
+    // Mientras esquiva: si el obstaculo queda mas cerca que esto, se aleja
+    static constexpr uint16_t kTooCloseAvoidLeftMm  = 120;
+    static constexpr uint16_t kTooCloseAvoidRightMm = 100;
+
+    static constexpr uint16_t kObstacleDistanceMm = 215;
+
+
+
+    // Limit switch aun no cableado en el hardware actual: sin esto, INPUT_PULLUP
+    // deja el pin flotando en HIGH y el codigo lo lee como "presionado" siempre,
+    // trabando handleStartState en el loop de emergencia (case 1). Poner en
+    // true en cuanto el switch este conectado.
+    static constexpr bool kLimitSwitchConnected = false;
+
+    // Latch con histeresis para obstaculos de ToF: se activa tras
+    // kConfirmMs de deteccion continua y se suelta tras kReleaseMs sin
+    // deteccion (evita que el estado parpadee con una lectura suelta).
+    struct ObstacleLatch
+    {
+        static constexpr uint32_t kReleaseMs = 400;
+        static constexpr uint32_t kConfirmMs = 0;
+
+        bool     latched       = false;
+        uint32_t clearStartMs  = 0;
+        uint32_t detectStartMs = 0;
+
+        bool update(uint32_t now, bool seenNow)
+        {
+            if (!latched)
+            {
+                if (!seenNow)
+                {
+                    detectStartMs = 0;
+                    return false;
+                }
+                if (detectStartMs == 0)
+                    detectStartMs = now;
+                if ((now - detectStartMs) >= kConfirmMs)
+                {
+                    latched       = true;
+                    clearStartMs  = 0;
+                    detectStartMs = 0;
+                }
+                return latched;
+            }
+
+            if (seenNow)
+            {
+                clearStartMs = 0;
+            }
+            else
+            {
+                if (clearStartMs == 0)
+                    clearStartMs = now;
+                if ((now - clearStartMs) >= kReleaseMs)
+                {
+                    latched      = false;
+                    clearStartMs = 0;
+                }
+            }
+            return latched;
+        }
+    };
+
+#if SM_DEBUG
+    const __FlashStringHelper *mainStateName(DriveTestSTATES state)
+    {
+        switch (state)
+        {
+        case DriveTestSTATES::START: // ST:0
+            return F(""); // F("START ♡ ♡ ♡");
+        case DriveTestSTATES::POOL: // ST:1
+            return F(""); // F("POOL");
+        case DriveTestSTATES::LOOKFORLINE: // ST:2
+            return F(""); // F("LOOKFORLINE");
+        case DriveTestSTATES::LOOKFORCORNER: // ST:3
+            return F(""); // F("LOOKFORCORNER");
+        case DriveTestSTATES::BEANS: // ST:4
+            return F(""); // F("BEANS");
+        case DriveTestSTATES::BEANSGOBACK: // ST:5
+            return F(""); // F("BEANSGOBACK");
+        case DriveTestSTATES::POOLSGOBACK: // ST:6
+            return F(""); // F("POOLSGOBACK");
+        case DriveTestSTATES::LOOKFORLINEBACKWARDS: // ST:7
+            return F(""); // F("LOOKFORLINEBACKWARDS");
+        case DriveTestSTATES::BENEFITSSTARTCORNER: // ST:8
+            return F(""); // F("BENEFITSSTARTCORNER");
+        case DriveTestSTATES::BENEFITS: // ST:9
+            return F(""); // F("BENEFITS");
+        case DriveTestSTATES::STOP: // ST:10
+            return F(""); // F("STOP ♡ ♡ ♡ ♡ ♡");
+        default:
+            return F(""); // F("DEFAULT");
+        }
+    }
+
+    const __FlashStringHelper *poolStateName(PoolSubState state)
+    {
+        switch (state)
+        {
+        case PoolSubState::FORWARD:
+            return F(""); // F("FORWARD");
+        case PoolSubState::AVOID_LEFT:
+            return F(""); // F("AVOID_LEFT");
+        case PoolSubState::AVOID_RIGHT:
+            return F(""); // F("AVOID_RIGHT");
+        default:
+            return F(""); // F("DEFAULT");
+        }
+    }
+#endif // SM_DEBUG
+}
+
+DriveStateMachineTest::DriveStateMachineTest()
+{
+}
+
+void DriveStateMachineTest::begin()
+{   
+
+    currentState = DriveTestSTATES::DRIVE_TEST_START_STATE; // always in START
+    poolState = PoolSubState::FORWARD;
+
+    state_start_time = millis();
+    action_start_time = millis();
+    action_stage = 0;
+
+    clearStartMs = 0;
+    noObstacleStartMs = 0;
+
+    //Elevator
+
+    pinMode(limitSwitch, INPUT_PULLUP);
+
+    servos.begin();
+    vision.begin();
+    vision.requestStatus();
+
+    Wire.begin();
+    Wire.setClock(400000);
+
+    // ToF (VL53L1X) detras del TCA9548A en Wire1, 100 kHz como en
+    // vlx_single_test.cpp (confirmado en hardware).
+    Wire1.begin();
+    Wire1.setClock(100000);
+    Serial.print("i2cMux init: "); Serial.println(i2cMux.begin() ? "OK" : "FAIL");
+
+    // UL/UR (frente) para POOL, LL/LR (atras) para POOLSGOBACK
+    ToF* tofs[] = {&tofLeft, &tofRight, &tofBackLeft, &tofBackRight};
+    const char* tofNames[] = {"tofLeft (UL)", "tofRight (UR)", "tofBackLeft (LL)", "tofBackRight (LR)"};
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        const bool ok = tofs[i]->begin();
+        Serial.print(tofNames[i]); Serial.print(" init: "); Serial.println(ok ? "OK" : "FAIL");
+        tofs[i]->setMaxRange(kTofMaxRangeMm);
+        tofs[i]->setUpdateInterval(30);
+    }
+
+    //QTR
+    qtrFront.begin();
+    qtrFront.useDefaultCalibration(0);   // FRONT qtr
+
+    ir.begin();
+    qtrRear.begin();
+    qtrRear.useDefaultCalibration(1);
+
+    // Reemplaza a odomMove_.begin()/setCommandTimeout/resetPose/captureCurrentYawTarget:
+    // LARC (Drive) ya arranca el BNO085 (Wire2), engancha el PID de yaw-hold
+    // y resetea su propia odometría EKF internamente.
+    LARC.begin();
+    LARC.holdYaw(true);
+}
+
+void DriveStateMachineTest::update()
+{
+    ir.update();
+    tofLeft.update();
+    tofRight.update();
+    tofBackLeft.update();
+    tofBackRight.update();
+    qtrFront.update();
+    qtrRear.update();
+    vision.update();
+    const uint32_t now = millis();
+    startStateTime();
+
+    const int linePos = qtrFront.getPosition(); // Para el PID → más suave
+    const bool onLine = qtrFront.onLine();
+    const float lineCorr = linePID.update(linePos, Constants::LineFollower::kSetpoint);
+    const float vx = -lineCorr;
+
+    const bool FL = ir.getState(IRLine::FL);
+    const bool FR = ir.getState(IRLine::FR);
+    const bool BL = ir.getState(IRLine::BL);
+    const bool BR = ir.getState(IRLine::BR);
+
+// =========== Print to debug =============
+    //ir.debugPrint();
+    //qtrFront.debugPrint();
+    //Serial.print("linePos: ");
+    //Serial.println(linePos); // To know the value for the center of the qtr
+
+
+#if SM_DEBUG
+    static uint32_t debugPrintMs = 0;
+    if ((now - debugPrintMs) >= 100)
+    {
+    debugPrintMs = now;
+
+    // Yaw (LARC/BNO085) -- sin odometría de posición, solo el heading que usa el yaw-hold
+    Serial.print(F("DriveStateMachineTest"));
+    Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
+
+    // Estado actual
+    Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState); Serial.print(")");
+    Serial.print(F(" PS:")); Serial.print((int)poolState);
+    Serial.print(F(" AS:")); Serial.print(action_stage);
+    Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
+
+    // ToF
+    // ToF en mm (-1 = sin lectura valida)
+    auto printTof = [](const __FlashStringHelper* label, const ToF& tof)
+    {
+        Serial.print(label);
+        Serial.print(tof.isValid() ? (int)tof.getDistanceMm() : -1);
+        Serial.print(F("mm"));
+    };
+    Serial.print(F(" ❤ ToF❤ |"));
+    printTof(F(" UR:"), tofRight);
+    printTof(F(" UL:"), tofLeft);
+    printTof(F(" LL:"), tofBackLeft);
+    printTof(F(" LR:"), tofBackRight);
+
+    // Obstáculo
+    //Serial.print(F(" | OBS:")); Serial.print(obstacle);
+    //Serial.print(F(" OL:"));    Serial.print(obstacleLeftNow);
+    //Serial.print(F(" OR:"));    Serial.print(obstacleRightNow);
+
+    // IR
+    Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(FL);
+    Serial.print(F(" FR:"));   Serial.print(FR);
+    Serial.print(F(" BL:"));   Serial.print(BL);
+    Serial.print(F(" BR:"));   Serial.print(BR);
+
+    // Línea
+    Serial.print(F(" ❤ qtr| onLine:")); Serial.print(onLine);
+    Serial.print(F(" lPos:"));  Serial.print(qtrFront.getPosition());
+    Serial.print(F(" vx:")); Serial.print(vx);
+
+    // qtrRear -- mismo par onLine/lPos que qtrFront arriba, para poder
+    // confirmar en campo el signo de la corrección lateral usada en
+    // BENEFITSSTARTCORNER/BENEFITS (ver kCornerSetpoint, ahora compartido
+    // con el front).
+    Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine());
+    Serial.print(F(" lPos:")); Serial.print(qtrRear.getPosition());
+
+    // Diagnostico temporal: raw/norm crudos del QTR frontal, sensor por
+    // sensor, para confirmar si hay contraste real llegando (calibracion/
+    // wiring) o si onLine() nunca dispara porque el sensor no ve la linea.
+    const uint16_t* qtrRaw  = qtrFront.getRaw();
+    const uint16_t* qtrNorm = qtrFront.getNorm();
+    Serial.print(F(" | raw:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRaw[i]); Serial.print(','); }
+    Serial.print(F(" norm:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrNorm[i]); Serial.print(','); }
+
+    // Mismo raw/norm por canal pero del QTR trasero: onLine() solo mira el
+    // maximo de los 7 canales contra un threshold bajo (200/1000, ver
+    // QTR::onLine()), asi que un solo canal saltando por ruido/crosstalk
+    // del mux compartido ya lo dispara en falso. Viendo canal por canal se
+    // distingue un pico aislado (ruido) de varios canales adyacentes
+    // subiendo juntos (linea real).
+    const uint16_t* qtrRearRaw  = qtrRear.getRaw();
+    const uint16_t* qtrRearNorm = qtrRear.getNorm();
+    Serial.print(F(" | rearRaw:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRearRaw[i]); Serial.print(','); }
+    Serial.print(F(" rearNorm:"));
+    for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(qtrRearNorm[i]); Serial.print(','); }
+
+    Serial.println();
+    }
+#endif // SM_DEBUG
+
+
+
+    const bool frontLeftDetectedLine = FL; // Also used for corner
+    const bool frontRightDetectedLine = FR;
+    const bool backLeftDetectedLine = BR;
+    const bool backRightDetectedLine = BL;
+    const bool frontDetectedLine = (FL || FR); // Hacer que con el qtr tambien detecte linea
+    const bool backDetected = (BL || BR);
+    const bool leftDetectedPool = (FL || BL);
+    const bool rightDetectedPool = (FR || BR);
+
+    static constexpr uint32_t kTofWarmupMs = 500;
+    static uint32_t tofReadyTimestamp = 0;
+    if (tofReadyTimestamp == 0 &&
+        (tofLeft.isValid() || tofRight.isValid() || tofBackLeft.isValid() || tofBackRight.isValid()))
+        tofReadyTimestamp = now;
+    const bool tofReady = tofReadyTimestamp != 0 &&
+                        (now - tofReadyTimestamp) > kTofWarmupMs;
+    tofReady_ = tofReady;
+
+    auto seesObstacle = [&](const ToF& tof)
+    {
+        return tofReady && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
+    };
+
+    // UL/UR (frente) -> POOL
+    static ObstacleLatch frontLatch;
+    const bool obstacle = frontLatch.update(now, seesObstacle(tofLeft) || seesObstacle(tofRight));
+
+    // LL/LR (atras) -> POOLSGOBACK (va en reversa)
+    static ObstacleLatch rearLatch;
+    const bool rearObstacle = rearLatch.update(now, seesObstacle(tofBackLeft) || seesObstacle(tofBackRight));
+
+    switch (currentState)
+    {
+    case DriveTestSTATES::START:
+        handleStartState(now, backDetected);
+        break;
+
+    case DriveTestSTATES::POOL:
+        handlePoolState(now, obstacle, leftDetectedPool, rightDetectedPool);
+        break;
+
+    case DriveTestSTATES::LOOKFORLINE:
+        handleLookForLineState(now, frontDetectedLine, frontLeftDetectedLine, frontRightDetectedLine, onLine);
+        break;
+
+    case DriveTestSTATES::LOOKFORCORNER:
+        handleLookForCornerState(now, backLeftDetectedLine, vx, onLine);
+        break;
+
+    case DriveTestSTATES::BEANS:
+        handleBEANS(now, backRightDetectedLine, onLine, vx);
+        break;
+
+    case DriveTestSTATES::BEANSGOBACK: //(17-09-2026) We are skipping this step by the moment
+        handleBEANSGoBackState(now, BL, BR, FL);
+        break;
+
+    case DriveTestSTATES::POOLSGOBACK:
+        handlePOOLSGoBackState(now, rearObstacle, leftDetectedPool, rightDetectedPool);
+        break;
+
+    case DriveTestSTATES::LOOKFORLINEBACKWARDS:
+        handleLookForLineBackWards(now, backDetected, backLeftDetectedLine, backRightDetectedLine);
+        break;
+
+    case DriveTestSTATES::BENEFITSSTARTCORNER:
+        handleBenefitsStartCorner(now, frontLeftDetectedLine, vx, onLine);
+        break;
+
+    case DriveTestSTATES::BENEFITS:
+        handleBenefits(now, frontRightDetectedLine, vx, onLine);
+        break;
+
+    case DriveTestSTATES::STOP:
+        handleStopState();
+        break;
+
+    default:
+        handleStopState();
+        break;
+    }
+
+    vision.handleFaults();
+}
+
+void DriveStateMachineTest::setState(DriveTestSTATES newState)
+{
+    if (currentState == newState)
+        return;
+
+    // Stop sorting as soon as we leave the beans route.
+    if ((currentState == DriveTestSTATES::BEANS || currentState == DriveTestSTATES::BEANSGOBACK)
+        && newState != DriveTestSTATES::BEANS && newState != DriveTestSTATES::BEANSGOBACK) {
+        vision.resetGuards();
+        vision.stop();
+    }
+    currentState = newState;
+    Serial.print(F("[SM] state="));
+    Serial.println(static_cast<unsigned>(currentState));
+    benefitRequestMs = 0;
+    benefitCentredMs = 0;
+    benefitColour = VisionLink::kNoBenefit;
+    benefitArmed = true;
+    benefitOpened = false;
+    state_start_time = millis();
+    action_start_time = 0;
+    action_stage = 0;
+
+    clearStartMs = 0;
+    noObstacleStartMs = 0;
+
+    // Reset corrección lateral LOOKFORLINE
+    lfCorrecting        = false;
+    lfCorrectionDir     = 0;
+    lfCorrectionStartMs = 0;
+
+    // Reset filtro paso-bajo del corr lateral de LOOKFORCORNER / LOOKFORLINEBACKWARDS
+    cornerCorrFiltered = 0.0f;
+    rearCorrFiltered = 0.0f;
+    backLineArmed = false;
+    backLineArmedMs = 0;
+
+    // Filtro de mediana del QTR: sin esto, las primeras
+    // lecturas del nuevo estado quedan mezcladas con las últimas del
+    // estado anterior (que pudo estar viendo una parte de la línea muy
+    // distinta), retrasando la corrección real justo al entrar.
+    qtrFront.resetFilter();
+    qtrRear.resetFilter();
+
+    vision.resetGuards();
+
+#if SM_DEBUG
+    Serial.println(mainStateName(currentState));
+#endif
+}
+
+void DriveStateMachineTest::startStateTime()
+{
+    if (state_start_time == 0)
+    {
+        state_start_time = millis();
+    }
+}
+
+void DriveStateMachineTest::setPoolState(PoolSubState newState)
+{
+    if (poolState == newState)
+        return;
+
+    poolState = newState;
+    clearStartMs = 0;
+    sideDetectStartMs = 0;
+    noObstacleStartMs = 0;
+    poolStateStartMs = millis();
+
+#if SM_DEBUG
+    Serial.print(F("Pool substate -> "));
+    Serial.println(poolStateName(poolState));
+#endif
+}
+
+void DriveStateMachineTest::handleStartState(uint32_t now, bool backDetected)
+{
+    vision.stop();
+
+    const bool limitPressed = kLimitSwitchConnected && (digitalRead(limitSwitch) == HIGH); // ==HIGH
+
+    if (limitPressed != lastLimitPressed)
+    {
+#if SM_DEBUG
+        if (limitPressed)
+            Serial.println("LIMIT SWITCH PRESIONADO");
+        else
+            Serial.println("LIMIT SWITCH LIBERADO");
+#endif
+
+        lastLimitPressed = limitPressed;
+    }
+
+    switch (action_stage)
+    {
+    // ── Subir por 9000 ms ────────────────────────────────────────────────
+    case 0:
+        if (limitPressed)
+        {
+            // Limit presionado durante la subida → interrumpir y bajar
+            elevator.ElevatorPosition(0);
+            LARC.stop();
+            action_start_time = now;
+            action_stage = 1;
+        }
+        else
+        {
+            elevator.ElevatorPosition(2);
+            LARC.stop();
+
+            if ((now - action_start_time) >= 12000)
+            {
+                // Subida completa → pasar al elevador stop
+                action_start_time = now;
+                action_stage = 4;
+            }
+        }
+        break;
+
+    // ── Bajar mientras limit esté presionado ─────────────────────────────
+    case 1:
+        elevator.ElevatorPosition(1);
+        LARC.stop();
+
+        if (!limitPressed)
+        {
+            // Limit suelto → esperar 2000 ms antes de reintentar subida
+            action_start_time = now;
+            action_stage = 2;
+        }
+        break;
+
+    // ── Esperar 2000 ms con elevador parado ──────────────────────────────
+    case 2:
+        elevator.ElevatorPosition(0);
+        LARC.stop();
+
+        if ((now - action_start_time) >= 2000)
+        {
+            // Reintentar subida desde cero
+            action_start_time = now;
+            action_stage = 0;
+        }
+        break;
+
+    // ── Subida completa: elevador stop 3000 ms ───────────────────────────
+    case 4:
+        elevator.ElevatorPosition(0);
+        LARC.stop();
+        if ((now - action_start_time) >= 1500)
+        {
+            action_start_time = now;
+            action_stage = 5;
+        }
+        break;
+
+    // ── Avanzar y transicionar a POOL ────────────────────────────────────
+    case 5:
+        elevator.ElevatorPosition(0);
+        LARC.forward(0.30f);
+
+        if ((now - action_start_time) >= kStartIgnoreTimeMs)
+        {
+            setPoolState(PoolSubState::FORWARD);
+            setState(DriveTestSTATES::POOL);
+        }
+        break;
+    }
+}
+
+void DriveStateMachineTest::handlePoolState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected)
+{
+    vision.stop();
+    vision.clearErrors();
+
+    switch (poolState)
+    {
+
+    case PoolSubState::FORWARD:
+    {
+        static bool     lineCorrectionActive   = false;
+        static uint32_t lineCorrectionStartMs  = 0;
+        static int8_t   lineCorrectionDir      = 0;
+
+        static constexpr uint32_t kLineCorrectionMs    = 120;
+        static constexpr float    kNormalSpeed = 0.30f;
+
+        if (lineCorrectionActive)
+        {
+            if ((now - lineCorrectionStartMs) < kLineCorrectionMs)
+            {
+                if (lineCorrectionDir < 0)
+                    LARC.left(kNormalSpeed);
+                else
+                    LARC.right(kNormalSpeed);
+                break;
+            }
+            lineCorrectionActive  = false;
+            lineCorrectionStartMs = 0;
+            lineCorrectionDir     = 0;
+        }
+
+        // Sin esto el timer de kNoObstacleToCornerMs se acaba durante el
+        // warmup de los ToF (obstacle siempre false) y POOL pasa directo a
+        // LOOKFORLINE sin haber podido ver ninguna alberca.
+        if (!tofReady_)
+        {
+            noObstacleStartMs = 0;
+            LARC.stop();
+            break;
+        }
+
+        if (obstacle)
+        {
+            noObstacleStartMs = 0;
+            setPoolState(PoolSubState::AVOID_LEFT);
+        }
+        else
+        {
+            if (noObstacleStartMs == 0)
+                noObstacleStartMs = now;
+
+            if (rightDetected)
+            {
+                lineCorrectionActive  = true;
+                lineCorrectionStartMs = now;
+                lineCorrectionDir     = -1;
+                LARC.left(kNormalSpeed);
+                break;
+            }
+            else if (leftDetected)
+            {
+                lineCorrectionActive  = true;
+                lineCorrectionStartMs = now;
+                lineCorrectionDir     = +1;
+                LARC.right(kNormalSpeed);
+                break;
+            }
+
+            LARC.forward(kNormalSpeed);
+
+            if ((now - noObstacleStartMs) >= kNoObstacleToCornerMs)
+            {
+                setState(DriveTestSTATES::LOOKFORLINE);
+            }
+        }
+        break;
+    }
+
+    case PoolSubState::AVOID_LEFT:
+    {
+        // Si el obstáculo se acerca demasiado, retroceder
+        const uint16_t distL = tofLeft.getDistanceMm();
+        const uint16_t distR = tofRight.getDistanceMm();
+        const bool tooClose = (tofLeft.isValid()  && distL < kTooCloseAvoidLeftMm) ||
+                              (tofRight.isValid() && distR < kTooCloseAvoidLeftMm);
+
+        if (tooClose)
+        {
+            LARC.backward(0.30f);
+            break;
+        }
+
+        LARC.left(0.30f);
+
+        const bool justEntered = (now - poolStateStartMs) < 150;
+
+        if (leftDetected && !justEntered)
+        {
+            clearStartMs = 0;
+            sideDetectStartMs = 0;
+            setPoolState(PoolSubState::AVOID_RIGHT);
+        }
+        else
+        {
+            sideDetectStartMs = 0;
+
+            if (!obstacle)
+            {
+                if (clearStartMs == 0)
+                    clearStartMs = now;
+
+                if ((now - clearStartMs) >= kClearDelayMs)
+                {
+                    noObstacleStartMs = 0;
+                    setPoolState(PoolSubState::FORWARD);
+                }
+            }
+            else
+            {
+                clearStartMs = 0;
+            }
+        }
+        break;
+    }
+
+    case PoolSubState::AVOID_RIGHT:
+    {
+        // Si el obstáculo se acerca demasiado, retroceder
+        const uint16_t distL = tofLeft.getDistanceMm();
+        const uint16_t distR = tofRight.getDistanceMm();
+        const bool tooClose = (tofLeft.isValid()  && distL < kTooCloseAvoidRightMm) ||
+                              (tofRight.isValid() && distR < kTooCloseAvoidRightMm);
+
+        if (tooClose)
+        {
+            LARC.backward(0.30f);
+            break;
+        }
+
+        LARC.right(0.30f);
+
+        const bool justEntered = (now - poolStateStartMs) < 150;
+
+        if (rightDetected && !justEntered)
+        {
+            clearStartMs = 0;
+            sideDetectStartMs = 0;
+            setPoolState(PoolSubState::AVOID_LEFT);
+        }
+        else
+        {
+            sideDetectStartMs = 0;
+
+            if (!obstacle)
+            {
+                if (clearStartMs == 0)
+                    clearStartMs = now;
+
+                if ((now - clearStartMs) >= kClearDelayMs)
+                {
+                    noObstacleStartMs = 0;
+                    setPoolState(PoolSubState::FORWARD);
+                }
+            }
+            else
+            {
+                clearStartMs = 0;
+            }
+        }
+        break;
+    }
+    }
+}
+
+void DriveStateMachineTest::handleLookForLineState(uint32_t now,
+                                              bool frontDetected,
+                                              bool leftDetected,
+                                              bool rightDetected,
+                                              bool onLine)
+{
+    // ── case 0: retroceder 400 ms ─────────────────────────────────────────
+    if (action_stage == 0)
+    {
+        if (action_start_time == 0)
+            action_start_time = now;
+
+        LARC.backward(0.30f);
+
+        if ((now - action_start_time) >= 200)
+        {
+            action_stage = 1;
+            action_start_time = now;
+        }
+        return;
+    }
+
+    // ── case 1: avanzar 400 ms ────────────────────────────────────────────
+    if (action_stage == 1)
+    {
+        LARC.backward(0.30f);
+
+        if ((now - action_start_time) >= 200)
+        {
+            action_stage = 2;
+            action_start_time = now;
+        }
+        return;
+    }
+
+    // ── case 2: stop 400 ms ───────────────────────────────────────────────
+    if (action_stage == 2)
+    {
+        LARC.forward(0.30f);
+
+        if ((now - action_start_time) >= 300)
+        {
+            action_stage = 3;
+            action_start_time = now;
+        }
+        return;
+    }
+
+    // ── case 3: búsqueda normal ───────────────────────────────────────────
+    static constexpr uint32_t kBorderCorrectMs = 150;
+    static constexpr uint16_t kTofBorderMm      = 150;
+
+    const bool realBorderLeft  = leftDetected  && tofLeft.isValid()  && tofLeft.getDistanceMm()  > kTofBorderMm;
+    const bool realBorderRight = rightDetected && tofRight.isValid() && tofRight.getDistanceMm() > kTofBorderMm;
+
+    if (frontDetected && onLine)
+    {
+        lfCorrecting        = false;
+        lfCorrectionDir     = 0;
+        lfCorrectionStartMs = 0;
+#if SM_DEBUG
+        Serial.println("[LOOKFORLINE] FRONT DETECTED -> LOOKFORCORNER");
+#endif
+        LARC.stop();
+        setState(DriveTestSTATES::LOOKFORCORNER);
+        return;
+    }
+
+    if (lfCorrecting)
+    {
+        if ((now - lfCorrectionStartMs) < kBorderCorrectMs)
+        {
+            if (lfCorrectionDir < 0)
+                LARC.left(0.30f);
+            else
+                LARC.right(0.30f);
+            return;
+        }
+        lfCorrecting = false;
+        LARC.forward(0.30f);
+        return;
+    }
+
+    if (realBorderLeft && !rightDetected)
+    {
+        lfCorrecting        = true;
+        lfCorrectionDir     = +1;
+        lfCorrectionStartMs = now;
+        LARC.right(0.30f);
+        return;
+    }
+
+    if (realBorderRight && !leftDetected)
+    {
+        lfCorrecting        = true;
+        lfCorrectionDir     = -1;
+        lfCorrectionStartMs = now;
+        LARC.left(0.30f);
+        return;
+    }
+
+    LARC.forward(0.30f);
+}
+
+void DriveStateMachineTest::handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx, bool onLine)
+{
+
+    static constexpr uint32_t kCornerStopMs = 8200;//1200; //Para que vision empiece
+    static constexpr uint32_t kSoftStartMs  = 500;
+
+    // A startup fault must end the run, not alternate STOP and START_BEANS.
+    if (action_stage >= 1 && vision.hasError()) {
+        LARC.stop();
+        Serial.println(F("[SM] BEANS vision failed; stopping run"));
+        setState(DriveTestSTATES::STOP);
+        vision.resetGuards();
+        vision.stop();
+        return;
+    }
+
+    if (action_stage >= 1 && (!vision.inBeansPhase() || !vision.isBeansRunning())) {
+        LARC.stop();
+        if (benefitRequestMs == 0 || now - benefitRequestMs >= 1000) {
+            benefitRequestMs = now;
+            vision.resetGuards();
+            vision.startBeans();
+            Serial.println(F("[SM] waiting for fresh BEANS vision"));
+        }
+        return;
+    }
+
+    switch (action_stage)
+    {
+    case 0:
+    {
+        if (cornerLEFTDetected)
+        {
+            LARC.stop();
+            vision.startBeans();
+            action_stage = 1;
+            action_start_time = now;
+            return;
+        }
+
+        // Sin esto, en cuanto se pierde la línea qtrFront.getPosition() se
+        // queda congelada en la última lectura (ver QTR::update(), sum==0
+        // mantiene position anterior) y el P sigue empujando con ese error
+        // viejo -- normalmente hacia el borde por donde se perdió -- sin
+        // ninguna lectura fresca que lo traiga de vuelta. Resultado: sigue
+        // derivando para ese lado en vez de corregir. Al no ver línea,
+        // se congela el target en 0 hasta reencontrarla.
+        float corrTarget = 0.0f;
+        if (onLine)
+        {
+            const float error = kCornerSetpoint - qtrFront.getPosition();
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+
+        // Filtro paso-bajo: lPos trae ruido (EMI de los motores nuevos, ver
+        // debug con raw/norm) que hace saltar corrTarget entre +max y -max
+        // en menos de 1ms. Sin suavizar, ese ruido pasa directo al comando
+        // y el robot vibra en vez de corregir suave hacia el centro. alpha
+        // bajo = mas lento pero rechaza mejor el ruido.
+        static constexpr float kCornerCorrAlpha = 0.15f;
+        cornerCorrFiltered += (corrTarget - cornerCorrFiltered) * kCornerCorrAlpha;
+
+        //Serial.print(F("[LOOKFORCORNER] onLine:")); Serial.print(onLine);
+        //Serial.print(F(" lPos:")); Serial.print(qtrFront.getPosition());
+        //Serial.print(F(" corrTarget:")); Serial.print(corrTarget, 4);
+        //Serial.print(F(" corrFilt:")); Serial.println(cornerCorrFiltered, 4);
+
+        // vx = corrección QTR (adelante/atrás), vy = velocidad base hacia
+        // la izquierda -- ver Drive::forward()/left() en Drive.cpp
+        // (vx=adelante/atras, vy=izq/der). Signo confirmado en campo: C6
+        // (indice 6, position alto/cerca de 6000) es el sensor mas
+        // adelantado del arreglo, C0 (position bajo) el mas trasero. Si
+        // la linea esta hacia C6, position > setpoint -> error negativo
+        // -> corrFiltered negativo -> con el "-" de abajo, vx>0 (corrige
+        // hacia adelante, alcanzando la linea). Sin el "-", corregiria al
+        // reves.
+        LARC.setTranslation(-cornerCorrFiltered, kVelocity);
+        break;
+    }
+
+    case 1:
+    {
+
+        LARC.stop();
+
+        if ((now - action_start_time) >= kCornerStopMs)
+        {
+            action_stage = 2;
+            action_start_time = now;
+        }
+        break;
+    }
+
+    case 2:
+    {
+        LARC.stop();
+
+        if ((now - action_start_time) >= kSoftStartMs)
+        {
+            setState(DriveTestSTATES::BEANS); 
+        }
+        break;
+    }
+    }
+}
+
+void DriveStateMachineTest::handleBEANS(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx)
+{
+    static constexpr uint32_t kLostLineTimeoutMs = 1200;
+
+    if (vision.hasCriticalError())
+    {
+        vision.stop();
+        setState(DriveTestSTATES::STOP);
+        return;
+    }
+
+    if (!vision.inBeansPhase() || !vision.isBeansRunning()) {
+        LARC.stop();
+        return;
+    }
+
+    switch (action_stage)
+    {
+    case 0:
+    {
+        if (cornerRIGHTDetected)
+        {
+            LARC.stop();
+            action_start_time = now;
+            action_stage = 1;
+            return;
+        }
+
+        /*
+        if (!onLine)
+        {
+            if (action_start_time == 0)
+                action_start_time = now;
+
+            LARC.backward(0.30f);
+
+            if ((now - action_start_time) >= kLostLineTimeoutMs)
+            {
+                vision.stop();
+                setState(DriveTestSTATES::POOLSGOBACK);
+            }
+
+            return;
+        }*/
+
+        action_start_time = 0;
+
+        // Misma corrección (setpoint/Kp/max/filtro) que handleLookForCornerState
+        // -- mismo QTR físico -- para no mantener dos tunings distintos.
+        float corrTarget = 0.0f;
+        if (onLine)
+        {
+            const float error = kCornerSetpoint - qtrFront.getPosition();
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+
+        static constexpr float kCornerCorrAlpha = 0.15f;
+        cornerCorrFiltered += (corrTarget - cornerCorrFiltered) * kCornerCorrAlpha;
+
+        // vx = corrección QTR (adelante/atrás), igual que en
+        // handleLookForCornerState. vy = -kVelocity (derecha) en vez de
+        // kVelocity (izquierda) -- unico signo que cambia entre los dos
+        // estados, ver nota en handleLookForCornerState.
+        LARC.setTranslation(-cornerCorrFiltered, -kVelocity);
+
+        break;
+    }
+
+    case 1:
+    {
+        LARC.stop();
+        if ((now - action_start_time) >= 1000)
+        {
+            action_start_time = 0;
+            setState(DriveTestSTATES::POOLSGOBACK);
+        }
+        break;
+    }
+    }
+}
+
+void DriveStateMachineTest::handleBEANSGoBackState(uint32_t now, bool BL, bool BR, bool FL)
+{
+    // No bajar el elevador :: 
+
+    switch (action_stage)
+    {
+    // ── case 0: retroceder hasta encontrar BR o BL ──────────────────────
+    case 0:
+        vision.stop();
+        vision.clearErrors();
+        elevator.ElevatorPosition(0); //zero for stop
+
+        if (BR || BL)
+        {
+            LARC.stop();
+            action_stage = 1;
+            return;
+        }
+
+        LARC.backward(0.30f);
+        return;
+
+    // ── case 1: LARC.left hasta encontrar FL ────────────────────────────
+    case 1:
+        elevator.ElevatorPosition(0);
+
+        if (FL)
+        {
+            LARC.stop();
+            action_stage = 2;
+            return;
+        }
+
+        LARC.left(0.30f);
+        return;
+
+    // ── case 2: detenido ─────────────────────────────────────────────────
+    case 2:
+        elevator.ElevatorPosition(0);
+        LARC.stop();
+        return;
+    }
+}
+
+void DriveStateMachineTest::handlePOOLSGoBackState(uint32_t now, bool rearObstacle, bool leftDetected, bool rightDetected)
+{
+    // Al entrar a POOLSGOBACK: retrocede 1.5s y luego 1.5s a la izquierda
+    // antes de arrancar la rutina normal (FORWARD/AVOID_LEFT/AVOID_RIGHT).
+    // action_stage se resetea a 0 en setState() al entrar al estado.
+    static constexpr uint32_t kInitBackMs = 500;
+    static constexpr uint32_t kInitLeftMs = 500;
+
+    if (action_stage == 0)
+    {
+        if (action_start_time == 0)
+            action_start_time = now;
+
+        LARC.backward(kVelocity);
+
+        if ((now - action_start_time) >= kInitBackMs)
+        {
+            action_stage = 1;
+            action_start_time = now;
+        }
+        return;
+    }
+
+    if (action_stage == 1)
+    {
+        LARC.left(kVelocity);
+
+        if ((now - action_start_time) >= kInitLeftMs)
+        {
+            action_stage = 2;
+            action_start_time = 0;
+        }
+        return;
+    }
+
+
+switch (poolState)
+{
+case PoolSubState::FORWARD:
+{
+    // Igual que en POOL: no contar tiempo sin obstaculo hasta que los ToF esten listos
+    if (!tofReady_)
+    {
+        noObstacleStartMs = 0;
+        LARC.stop();
+        break;
+    }
+
+    if (rearObstacle)
+    {
+        noObstacleStartMs = 0;
+        setPoolState(PoolSubState::AVOID_LEFT);
+    }
+    else
+    {
+        LARC.backward(kVelocity);
+
+        if (noObstacleStartMs == 0)
+            noObstacleStartMs = now;
+
+        if ((now - noObstacleStartMs) >= kNoObstacleToCornerMs)
+        {
+            setState(DriveTestSTATES::LOOKFORLINEBACKWARDS);
+        }
+    }
+    break;
+}
+
+case PoolSubState::AVOID_LEFT:
+{
+    // Igual que en POOL pero con los ToF de atras: si el obstaculo se
+    // acerca demasiado, avanzar (el robot va en reversa)
+    const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidLeftMm) ||
+                              (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidLeftMm);
+    if (tooCloseRear)
+    {
+        LARC.forward(0.30f);
+        break;
+    }
+
+    LARC.left(0.30f);
+
+    if (leftDetected )
+    {
+        if (sideDetectStartMs == 0)
+            sideDetectStartMs = now;
+
+        if ((now - sideDetectStartMs) >= kSideDetectHoldMs)
+        {
+            clearStartMs = 0;
+            sideDetectStartMs = 0;
+            setPoolState(PoolSubState::AVOID_RIGHT);
+        }
+    }
+    else
+    {
+        sideDetectStartMs = 0;
+
+        if (!rearObstacle)
+        {
+            if (clearStartMs == 0)
+                clearStartMs = now;
+
+            if ((now - clearStartMs) >= kClearDelayMs)
+            {
+                noObstacleStartMs = 0;
+                setPoolState(PoolSubState::FORWARD);
+            }
+        }
+        else
+        {
+            clearStartMs = 0;
+        }
+    }
+
+    break;
+}
+
+case PoolSubState::AVOID_RIGHT:
+{
+    const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidRightMm) ||
+                              (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidRightMm);
+    if (tooCloseRear)
+    {
+        LARC.forward(0.30f);
+        break;
+    }
+
+    LARC.right(0.30f);
+
+    if (rightDetected)
+    {
+        if (sideDetectStartMs == 0)
+            sideDetectStartMs = now;
+
+        if ((now - sideDetectStartMs) >= kSideDetectHoldMs)
+        {
+            clearStartMs = 0;
+            sideDetectStartMs = 0;
+            setPoolState(PoolSubState::AVOID_LEFT);
+        }
+    }
+    else
+    {
+        sideDetectStartMs = 0;
+
+        if (!rearObstacle)
+        {
+            if (clearStartMs == 0)
+                clearStartMs = now;
+
+            if ((now - clearStartMs) >= kClearDelayMs)
+            {
+                noObstacleStartMs = 0;
+                setPoolState(PoolSubState::FORWARD);
+            }
+        }
+        else
+        {
+            clearStartMs = 0;
+        }
+    }
+
+    break;
+}
+}
+}
+
+void DriveStateMachineTest::handleLookForLineBackWards(uint32_t now, 
+                                                    bool backDetected, 
+                                                    bool backLeftDetected, 
+                                                    bool backRightDetected)
+{
+    // ── case 3: búsqueda normal ───────────────────────────────────────────
+    static constexpr uint32_t kBorderCorrectMs = 150;
+    static constexpr uint16_t kTofBorderMm      = 150;
+
+    const bool realBorderLeft  = backLeftDetected  && tofLeft.isValid()  && tofLeft.getDistanceMm()  > kTofBorderMm;
+    const bool realBorderRight = backRightDetected && tofRight.isValid() && tofRight.getDistanceMm() > kTofBorderMm;
+
+    // backDetected (L3/L4) y qtrRear.onLine() estan desfasados en el
+    // tiempo -- los IR traseros disparan un poco antes que el QTR llegue
+    // a onLine(), asi que exigir backDetected && qtrRear.onLine() en el
+    // mismo ciclo nunca se cumple. En vez de eso: se arma el latch con el
+    // primer disparo de backDetected y se transiciona cuando qtrRear
+    // confirma onLine() despues, ya armado.
+    static constexpr uint32_t kBackLineArmDelayMs = 600;
+
+    if (backDetected && !backLineArmed)
+    {
+        backLineArmed   = true;
+        backLineArmedMs = now;
+    }
+
+    // qtrRear.onLine() es ruidoso justo al armar (casi siempre indica
+    // onLine) -- se ignora hasta kBackLineArmDelayMs despues de armado
+    // para no transicionar con una lectura sucia.
+    const bool armDelayElapsed = backLineArmed && (now - backLineArmedMs) >= kBackLineArmDelayMs;
+
+    if (armDelayElapsed && qtrRear.onLine())
+    {
+        lfCorrecting        = false;
+        lfCorrectionDir     = 0;
+        lfCorrectionStartMs = 0;
+#if SM_DEBUG
+        Serial.println("[LOOKFORLINE] FRONT DETECTED -> LOOKFORCORNER");
+#endif
+        LARC.stop();
+        setState(DriveTestSTATES::BENEFITSSTARTCORNER);
+        return;
+    }
+
+    if (lfCorrecting)
+    {
+        if ((now - lfCorrectionStartMs) < kBorderCorrectMs)
+        {
+            if (lfCorrectionDir < 0)
+                LARC.left(0.30f);
+            else
+                LARC.right(0.30f);
+            return;
+        }
+        lfCorrecting = false;
+        LARC.forward(0.30f);
+        return;
+    }
+
+    if (realBorderLeft && !backRightDetected)
+    {
+        lfCorrecting        = true;
+        lfCorrectionDir     = +1;
+        lfCorrectionStartMs = now;
+        LARC.right(0.30f);
+        return;
+    }
+
+    if (realBorderRight && !backLeftDetected)
+    {
+        lfCorrecting        = true;
+        lfCorrectionDir     = -1;
+        lfCorrectionStartMs = now;
+        LARC.left(0.30f);
+        return;
+    }
+
+    LARC.backward(0.30f);
+}
+
+void DriveStateMachineTest::handleBenefitsStartCorner(uint32_t now, bool cornerLeftDetected, float vx, bool onLine)
+{
+    switch (action_stage)
+    {
+    case 0:
+    {
+        if (cornerLeftDetected)
+        {
+            LARC.brake();
+            action_start_time = now;
+            action_stage = 1;
+            return;
+        }
+
+        // EXACTAMENTE la misma formula que handleLookForCornerState
+        // (kCornerSetpoint/kCornerKp/kCornerCorrMax compartidos con el
+        // front) -- la unica diferencia real es leer qtrRear en vez de
+        // qtrFront (mas el espejo de kQtrPosMax, ver comentario junto a
+        // esa constante: qtrRear esta cableado en orden opuesto). Signo
+        // de vy contrario: derecha en vez de izquierda.
+        float corrTarget = 0.0f;
+        if (qtrRear.onLine())
+        {
+            const float mirroredRearPos = kQtrPosMax - qtrRear.getPosition();
+            const float error = kCornerSetpoint - mirroredRearPos;
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+
+        rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
+
+        LARC.setTranslation(rearCorrFiltered, kVelocity);
+
+        break;
+    }
+
+    case 1:
+    {
+        LARC.stop();
+        if ((now - action_start_time) >= 1000)
+        {
+            setState(DriveTestSTATES::BENEFITS);
+        }
+        break;
+    }
+    }
+}
+
+void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetected, float vx, bool online)
+{
+    using namespace Constants::ServoConfig;
+
+    // Doors open only through openBenefit(); the stream just reports the box.
+    vision.setBenefitsOnRequest(true);
+    if (vision.hasError()) {
+        LARC.stop();
+        vision.closeBenefit();
+        Serial.println(F("[SM] BENEFITS vision failed; stopping run"));
+        setState(DriveTestSTATES::STOP);
+        vision.resetGuards();
+        vision.stop();
+        return;
+    }
+    if (!vision.inBenefitsPhase() || !vision.isBenefitsRunning()) {
+        LARC.stop();
+        benefitCentredMs = now;
+        if (benefitRequestMs == 0 || (now - benefitRequestMs) >= 1000) {
+            vision.resetGuards();
+            vision.startBenefits();
+            benefitRequestMs = now;
+            Serial.println(F("[SM] waiting for fresh BENEFITS vision"));
+        }
+        return;
+    }
+
+    if (!vision.benefitSeen())
+        benefitArmed = true;
+
+    switch (action_stage)
+    {
+    case 0:
+    {
+        if (!cornerRIGHTDetected)
+        {
+            action_stage = 1;
+        }
+        else
+        {
+            LARC.stop();
+            action_start_time = now;
+            action_stage = 2;
+        }
+        break;
+    }
+
+    case 1:
+    {
+        // EXACTAMENTE la misma formula que handleBEANS (kCornerSetpoint/
+        // kCornerKp/kCornerCorrMax compartidos con el front) -- la unica
+        // diferencia real es leer qtrRear en vez de qtrFront (mas el
+        // espejo de kQtrPosMax, mismo motivo que en handleBenefitsStartCorner).
+        // Mismo signo de vy que handleBenefitsStartCorner (derecha).
+        float corrTarget = 0.0f;
+        if (qtrRear.onLine())
+        {
+            const float mirroredRearPos = kQtrPosMax - qtrRear.getPosition();
+            const float error = kCornerSetpoint - mirroredRearPos;
+            corrTarget = constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        }
+
+        rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
+
+        LARC.setTranslation(rearCorrFiltered, -kVelocity);
+
+        if (cornerRIGHTDetected)
+        {
+            LARC.stop();
+            action_start_time = now;
+            action_stage = 2;
+        }
+        // The 3 benefits ROIs see the same colour: stop, then open
+        else if (benefitArmed && vision.benefitSeen())
+        {
+            LARC.stop();
+            benefitArmed = false;
+            benefitOpened = false;
+            benefitCentredMs = now;
+            benefitColour = vision.seenBenefit();
+            action_start_time = now;
+            action_stage = 3;
+        }
+        break;
+    }
+
+    case 2:
+    {
+        LARC.stop();
+
+        if ((now - action_start_time) >= 1000)
+        {
+            setState(DriveTestSTATES::STOP);
+        }
+        break;
+    }
+
+    case 3:
+    {
+        LARC.stop();
+
+        // Require the same centred colour for 300 ms while stopped.
+        if (!benefitOpened && (!vision.benefitSeen() || vision.seenBenefit() != benefitColour)) {
+            benefitCentredMs = now;
+            benefitColour = vision.seenBenefit();
+        }
+        if (!benefitOpened && vision.benefitSeen() && (now - benefitCentredMs) >= 300)
+        {
+            vision.openBenefit();
+            benefitOpened = vision.benefitHeld();
+            benefitOpenedMs = now;
+        }
+
+        if (benefitOpened && vision.benefitHeld() && (now - benefitOpenedMs) >= kBenefitOpenMs)
+            vision.closeBenefit();
+
+        if ((benefitOpened && (now - benefitOpenedMs) >= kBenefitStopMs) ||
+            (!benefitOpened && (now - action_start_time) >= kBenefitStopMs))
+        {
+            vision.closeBenefit();
+            action_stage = 1;
+        }
+        break;
+    }
+    }
+}
+
+void DriveStateMachineTest::handleStopState()
+{
+    LARC.stop();
+    vision.closeBenefit();
+    vision.stop();
+}
+
+void DriveStateMachineTest::updateControl()
+{
+    LARC.update();
+}
