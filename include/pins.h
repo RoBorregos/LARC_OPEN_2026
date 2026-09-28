@@ -34,12 +34,10 @@ namespace Pins
     // ELEVATOR
     // =========================================================
 
-    // !! CONFLICT: 16/17 are also SCL1/SDA1, the PCA9685 servo bus
-    // (Pins::Servos). Elevator::begin() sets them as OUTPUT and will kill
-    // the servo I2C bus. Move M5 IN1/IN2 to free pins before running both.
+    // Moved off 16/17 (SCL1/SDA1, the TCA9548A / PCA9685 bus) in dev-RTOS.
     constexpr uint8_t kElevator[2] = {
-        16, //IN1_M5
-        17  //IN2_M5
+        4, // IN1_M5
+        3  // IN2_M5
     };
 
     // =========================================================
@@ -61,7 +59,7 @@ namespace Pins
     // LIMIT SWITCH
     // =========================================================
     constexpr uint8_t kLimitSwitch  = 7; // Limit1
-    constexpr uint8_t kLimitSwitch2 = 6; // Limit2 // placeholder: no usado aun en el codigo, confirmar su rol (elevator top/bottom, sorter, etc.)
+    constexpr uint8_t kLimitSwitch2 = 6; // Limit2 // placeholder: unused for now, to confirm role
 
     // =========================================================
     // 74HC4067 MULTIPLEXERS
@@ -79,18 +77,18 @@ namespace Pins
     // QTR ARRAYS ON MUX1
     // =========================================================
     static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C6 (C7 no se usa, QTR::N=7)
-    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C14 (C15 no se usa, mismo patron que front: QTR::N=7)
+    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C14 (C15 unused, same pattern as front: QTR::N=7)
 
     // =========================================================
     // IR SENSORS ON MUX2
     // =========================================================
     static constexpr uint8_t kIrChFL = 15; // L1
     static constexpr uint8_t kIrChFR = 14; // L2
-    static constexpr uint8_t kIrChBL = 15;//23; // ya no usado para L3 (ver kIrChBLMux)
-    static constexpr uint8_t kIrChBR = 14;//41; // ya no usado para L4 (ver kIrChBRMux)
+    static constexpr uint8_t kIrChBL = 15;//23; // unused for  L3 (see kIrChBLMux)
+    static constexpr uint8_t kIrChBR = 14;//41; // not used for L4 anymore (see kIrChBRMux)
 
-    static constexpr uint8_t kIrChBLMux = 15; // L3 -- canal libre del bloque rear (C8..C15)
-    static constexpr uint8_t kIrChBRMux = 7;  // L4 -- canal libre del bloque front (C0..C7)
+    static constexpr uint8_t kIrChBLMux = 15; // L3 -- free channel of rear block (C8..C15)
+    static constexpr uint8_t kIrChBRMux = 7;  // L4 -- free channel of front block  (C0..C7)
 
     // =========================================================
     // I2C MULTIPLEXER (TCA9548A) — shared by the ToFs and the PCA9685
@@ -104,22 +102,20 @@ namespace Pins
     // =========================================================
     // TOF SENSORS ON I2C MUX (TCA9548A)
     // =========================================================
-    static constexpr uint8_t kToFchFR = 3; // Front Right
-    static constexpr uint8_t kToFchFL = 3; // Front Left
-    static constexpr uint8_t kToFchBL = 3; // Back Left / placeholder
-    static constexpr uint8_t kToFchBR = 0;//3; // Back Right / placeholder
+    static constexpr uint8_t kToFchFR = 0; // UR -- Front Right
+    static constexpr uint8_t kToFchFL = 2; // UL -- Front Left
+    static constexpr uint8_t kToFchBL = 3; // LL -- Back Left
+    static constexpr uint8_t kToFchBR = 4; // LR -- Back Right
 
     // =========================================================
     // SERVOS — PCA9685 16-channel PWM driver (generic board)
-    //   Everything about WHERE the driver and the servos are wired
-    //   lives here. Angles / pulse limits live in constants.h.
     // =========================================================
     namespace Servos
     {
-        // --- The PCA9685 board ---------------------------------
+        // The PCA9685 board  
         constexpr uint8_t kPcaI2cAddress = 0x40; // A0-A5 jumpers open
-        constexpr uint8_t kI2cBus        = 1;    // 0 = Wire, 1 = Wire1, 2 = Wire2
-        constexpr uint8_t kI2cSda        = 17;   // SDA1
+        constexpr uint8_t kI2cBus        = 1;   // 0 = Wire, 1 = Wire1, 2 = Wire2
+        constexpr uint8_t kI2cSda        = 17;  // SDA1
         constexpr uint8_t kI2cScl        = 16;   // SCL1
         constexpr uint8_t kOePin         = 255;  // OE (active LOW); 255 = not wired
 
@@ -132,14 +128,12 @@ namespace Pins
         static_assert(kTcaChannel == 255 || kI2cBus == I2cMux::kBus,
                       "Pins::Servos: PCA9685 is behind the TCA9548A, so kI2cBus must equal I2cMux::kBus");
 
-        // Teensy 4.1 fixes which pins each bus uses: keep the three in sync.
         static_assert((kI2cBus == 0 && kI2cSda == 18 && kI2cScl == 19) ||
                       (kI2cBus == 1 && kI2cSda == 17 && kI2cScl == 16) ||
                       (kI2cBus == 2 && kI2cSda == 25 && kI2cScl == 24),
                       "Pins::Servos: kI2cBus does not match kI2cSda/kI2cScl");
 
-        // --- Which PCA9685 output (0-15) each servo is plugged into
-        // (PROVISIONAL — verify with test/servos/00_pca9685_bringup.cpp)
+        // (PROVISIONAL (missing full test of all servos)
         constexpr uint8_t kIntakeUpperCh = 12;
         constexpr uint8_t kIntakeLowerCh = 8;
         constexpr uint8_t kSeparatorCh   = 4;
@@ -164,15 +158,9 @@ namespace Pins
 
     // =========================================================
     // BNO055 -- RST/INT
-    // Ver advertencia arriba (seccion SERVOS): estos mismos numeros de
-    // pin coinciden con las señales de SERVO5/SERVO1 en el esquematico.
-    // El equipo dijo antes que estos pines "no estan conectados" para
-    // el BNO -- probablemente fueron reutilizados para los servos en
-    // vez de quedar libres. PENDIENTE CONFIRMAR cual uso es el real
-    // antes de que el firmware los use para cualquiera de los dos fines.
     // =========================================================
-    static constexpr uint8_t kBnoRstReserved = 2;  // posible conflicto con SERVO5 -- confirmar
-    static constexpr uint8_t kBnoIntReserved = 13; // posible conflicto con SERVO1 -- confirmar
+    static constexpr uint8_t kBnoRstReserved = 2;  // possible conflict with SERVO5 -- confirm
+    static constexpr uint8_t kBnoIntReserved = 13; // possible conflict withSERVO1 -- confirm
 
 
 
