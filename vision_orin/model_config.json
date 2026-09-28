@@ -1,0 +1,36 @@
+{
+  "weights": "models/model_v3.pt",
+  "device": "0",
+  "imgsz": 640,
+  "confidence": 0.5,
+  "max_frame_age_ms": 400,
+  "required_classes": [
+    "ball_black",
+    "ball_blue",
+    "ball_green",
+    "ball_red",
+    "ball_yellow"
+  ],
+  "allowed_classes": [
+    "ball_black",
+    "ball_blue",
+    "ball_green",
+    "ball_red",
+    "ball_yellow"
+  ],
+  "intake_pick_classes": [
+    "ball_black",
+    "ball_blue",
+    "ball_red",
+    "ball_yellow"
+  ],
+  "separator_mature_classes": [
+    "ball_red",
+    "ball_yellow",
+    "ball_green"
+  ],
+  "separator_overmature_classes": [
+    "ball_blue",
+    "ball_black"
+  ]
+}
