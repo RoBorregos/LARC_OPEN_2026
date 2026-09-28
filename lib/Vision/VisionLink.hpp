@@ -66,17 +66,26 @@ public:
     void leave();
 
     // Benefit doors
-    // openBenefit() only arms the request. The next confirmed BENEFITS
-    // frame decides which door, and that door stays open until
-    // closeBenefit(). While one is held the Orin cannot pick another.
+    // openBenefit() opens the door of the box being seen right now, or arms
+    // the request so the next confirmed BENEFITS frame decides. The door
+    // stays open until closeBenefit(). While one is held the Orin cannot
+    // pick another.
     void openBenefit();
     void closeBenefit();
+
+    // true: the stream only reports the box (benefitSeen()), a door opens
+    // only through openBenefit(). false: the doors follow the stream.
+    void setBenefitsOnRequest(bool on) { _benefitsOnRequest = on; }
 
     static constexpr uint8_t kNoBenefit = 255;
 
     bool    benefitHeld()    const { return _heldBenefit != kNoBenefit; }
     bool    benefitPending() const { return _openRequest; }
     uint8_t heldBenefit()    const { return _heldBenefit; } // 0 or 1, else kNoBenefit
+
+    // The door the Orin is asking for right now (box centred in the camera).
+    bool    benefitSeen()    const { return _seenBenefit != kNoBenefit; }
+    uint8_t seenBenefit()    const { return _seenBenefit; } // 0 or 1, else kNoBenefit
 
     // Which box a door belongs to. Mirrors BOX_DOOR in dispatcher.py.
     static const char *benefitName(uint8_t which);
@@ -158,6 +167,8 @@ private:
 
     bool    _openRequest;
     uint8_t _heldBenefit;
+    uint8_t _seenBenefit;
+    bool    _benefitsOnRequest;
 
     void _applySafetyImmediate(const VisionProto::Command &cmd);
 

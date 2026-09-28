@@ -45,6 +45,8 @@ VisionLink::VisionLink(Stream &port, ServoSystem &servos, uint32_t timeoutMs)
     , _stopSent(false)
     , _openRequest(false)
     , _heldBenefit(kNoBenefit)
+    , _seenBenefit(kNoBenefit)
+    , _benefitsOnRequest(false)
 {
     _confirm.reset((uint8_t)Phase::IDLE, 0);
 }
@@ -152,8 +154,18 @@ void VisionLink::leave()
 
 void VisionLink::openBenefit()
 {
-    if (_heldBenefit == kNoBenefit)
-        _openRequest = true;
+    if (_heldBenefit != kNoBenefit)
+        return;
+
+    if (_appliedPhase == Phase::BENEFITS && _seenBenefit != kNoBenefit)
+    {
+        _heldBenefit = _seenBenefit;
+        _openRequest = false;
+        _servos.setBenefit(_heldBenefit, true);
+        return;
+    }
+
+    _openRequest = true;
 }
 
 void VisionLink::closeBenefit()
@@ -260,6 +272,7 @@ void VisionLink::_applySafetyImmediate(const VisionProto::Command &cmd)
         {
             _servos.safeState();
             _dropHold();
+            _seenBenefit = kNoBenefit;
             _appliedPhase = cmd.phase;
             // The payload of these phases is always 0 (validated upstream).
             _confirm.reset((uint8_t)cmd.phase, 0);
@@ -271,6 +284,7 @@ void VisionLink::_applySafetyImmediate(const VisionProto::Command &cmd)
     {
         _servos.closeBenefits();
         _dropHold();
+        _seenBenefit = kNoBenefit;
     }
 
     // A held door ignores the stream; only closeBenefit() shuts it.
@@ -310,12 +324,19 @@ void VisionLink::_applyCommand(const VisionProto::Command &cmd)
 
 void VisionLink::_applyBenefits(const VisionProto::Command &cmd)
 {
+    if (cmd.benefit1Open)      _seenBenefit = 0;
+    else if (cmd.benefit2Open) _seenBenefit = 1;
+    else                       _seenBenefit = kNoBenefit;
+
     if (_heldBenefit != kNoBenefit)
         return;
 
     // Nobody asked for a door: the frame drives them as it always did.
     if (!_openRequest)
     {
+        if (_benefitsOnRequest)
+            return;
+
         _servos.setBenefit(0, cmd.benefit1Open);
         _servos.setBenefit(1, cmd.benefit2Open);
         return;
@@ -339,6 +360,7 @@ void VisionLink::_goSafe()
 {
     _servos.safeState();
     _dropHold();
+    _seenBenefit = kNoBenefit;
     _appliedPhase = Phase::IDLE;
     _confirm.reset((uint8_t)Phase::IDLE, 0);
 }
