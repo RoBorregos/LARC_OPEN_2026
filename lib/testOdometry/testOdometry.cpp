@@ -29,13 +29,10 @@ OdomMovement::OdomMovement()
       inLR1_(Pins::kLowerMotors[2]),
       inLR2_(Pins::kLowerMotors[3]),
 
-      UL_{pwmUL_, inUL1_, inUL2_, {}, 0, 0, false, 482.0f, kKp, kKi, kKd, 0.0f, 0.0f, 0.0f, false},
-      UR_{pwmUR_, inUR1_, inUR2_, {}, 0, 0, false, 475.0f, kKp, kKi, kKd, 0.0f, 0.0f, 0.0f, true},
-      LL_{pwmLL_, inLL1_, inLL2_, {}, 0, 0, false, 495.0f, kKp, kKi, kKd, 0.0f, 0.0f, 0.0f, false},
-      LR_{pwmLR_, inLR1_, inLR2_, {}, 0, 0, false, 486.0f, kKp, kKi, kKd, 0.0f, 0.0f, 0.0f, true},
-
-      ticksLL_count_(0),
-      prevTicksLL_(0),
+      UL_{pwmUL_, inUL1_, inUL2_, {}, 0, 0, false, 190.0f, kKpUL, kKiUL, kKdUL, 0.0f, 0.0f, 0.0f, false},
+      UR_{pwmUR_, inUR1_, inUR2_, {}, 0, 0, false, 188.0f, kKpUR, kKiUR, kKdUR, 0.0f, 0.0f, 0.0f, true},
+      LL_{pwmLL_, inLL1_, inLL2_, {}, 0, 0, false, 188.0f, kKpLL, kKiLL, kKdLL, 0.0f, 0.0f, 0.0f, false},
+      LR_{pwmLR_, inLR1_, inLR2_, {}, 0, 0, false, 189.0f, kKpLR, kKiLR, kKdLR, 0.0f, 0.0f, 0.0f, true},
 
       yawTarget_(0.0f),
       yawIntegral_(0.0f),
@@ -140,26 +137,22 @@ void OdomMovement::isrLR_B()
     if (p > 200) pushPeriod(instance_->LR_, p);
 }
 
-void OdomMovement::isrLL()
+void OdomMovement::isrLL_A()
 {
     if (!instance_) return;
-    if (digitalRead(instance_->encLL_B_) == HIGH)
-        instance_->ticksLL_count_++;
-    else
-        instance_->ticksLL_count_--;
+    unsigned long n = micros();
+    unsigned long p = n - instance_->LL_.last_pulse_us;
+    instance_->LL_.last_pulse_us = n;
+    if (p > 200) pushPeriod(instance_->LL_, p);
 }
 
-float OdomMovement::measureRPM_LL(float dtSec)
+void OdomMovement::isrLL_B()
 {
-    noInterrupts();
-    long cur = ticksLL_count_;
-    interrupts();
-
-    long dTicks = cur - prevTicksLL_;
-    prevTicksLL_ = cur;
-
-    float mag = ((float)abs(dTicks) / 495.0f) / dtSec * 60.0f;
-    return (LL_.setpoint >= 0.0f) ? mag : -mag;
+    if (!instance_) return;
+    unsigned long n = micros();
+    unsigned long p = n - instance_->LL_.last_pulse_us;
+    instance_->LL_.last_pulse_us = n;
+    if (p > 200) pushPeriod(instance_->LL_, p);
 }
 
 float OdomMovement::measureRPM(Motor& m)
@@ -311,14 +304,24 @@ void OdomMovement::ekfStep(float dt, float rpmUL, float rpmUR, float rpmLL, floa
 
 void OdomMovement::setRPMs(float ul, float ur, float ll, float lr)
 {
+    const bool ulChanged = fabsf(UL_.setpoint - ul) > 0.01f;
+    const bool urChanged = fabsf(UR_.setpoint - ur) > 0.01f;
+    const bool llChanged = fabsf(LL_.setpoint - ll) > 0.01f;
+    const bool lrChanged = fabsf(LR_.setpoint - lr) > 0.01f;
+
     UL_.setpoint = ul;
     UR_.setpoint = ur;
     LL_.setpoint = ll;
     LR_.setpoint = lr;
 
-    UL_.integral = UR_.integral = LL_.integral = LR_.integral = 0.0f;
-    UL_.last_error = UR_.last_error = LL_.last_error = LR_.last_error = 0.0f;
-    UL_.got_pulse = UR_.got_pulse = LL_.got_pulse = LR_.got_pulse = false;
+    // Preserve controller history while the same command is refreshed by the
+    // strategy loop. Reset only the wheel whose setpoint actually changed.
+    if (ulChanged) { UL_.integral = 0.0f; UL_.last_error = 0.0f; }
+    if (urChanged) { UR_.integral = 0.0f; UR_.last_error = 0.0f; }
+    if (llChanged) { LL_.integral = 0.0f; LL_.last_error = 0.0f; }
+    if (lrChanged) { LR_.integral = 0.0f; LR_.last_error = 0.0f; }
+
+    markCommandReceived();
 }
 
 void OdomMovement::begin()
@@ -345,7 +348,8 @@ void OdomMovement::begin()
     attachInterrupt(digitalPinToInterrupt(encUL_B_), isrUL_B, CHANGE);
     attachInterrupt(digitalPinToInterrupt(encUR_A_), isrUR_A, CHANGE);
     attachInterrupt(digitalPinToInterrupt(encUR_B_), isrUR_B, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(encLL_A_), isrLL,   RISING);
+    attachInterrupt(digitalPinToInterrupt(encLL_A_), isrLL_A, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(encLL_B_), isrLL_B, CHANGE);
     attachInterrupt(digitalPinToInterrupt(encLR_A_), isrLR_A, CHANGE);
     attachInterrupt(digitalPinToInterrupt(encLR_B_), isrLR_B, CHANGE);
 
@@ -355,6 +359,19 @@ void OdomMovement::begin()
     yawNow_ = ekf_th_;
 
     lastCycleMs_ = millis();
+    lastCommandMs_ = lastCycleMs_;
+    commandEnabled_ = false;
+}
+
+void OdomMovement::setCommandTimeout(uint32_t timeoutMs)
+{
+    commandTimeoutMs_ = timeoutMs;
+}
+
+void OdomMovement::markCommandReceived()
+{
+    lastCommandMs_ = millis();
+    commandEnabled_ = true;
 }
 
 void OdomMovement::captureCurrentYawTarget()
@@ -387,6 +404,7 @@ void OdomMovement::left(float rpm)
 
 void OdomMovement::stop()
 {
+    commandEnabled_ = false;
     stopAll();
 }
 
@@ -399,6 +417,14 @@ void OdomMovement::resetPose()
 void OdomMovement::update()
 {
     uint32_t now = millis();
+
+    // A future DriveControlTask must fail safe if RobotTask stops publishing.
+    if (commandEnabled_ && (now - lastCommandMs_) > commandTimeoutMs_)
+    {
+        commandEnabled_ = false;
+        stopAll();
+    }
+
     if (now - lastCycleMs_ < (uint32_t)(kTs * 1000)) return;
 
     float dt = (now - lastCycleMs_) / 1000.0f;
@@ -406,7 +432,7 @@ void OdomMovement::update()
 
     float rpmUL = measureRPM(UL_);
     float rpmUR = measureRPM(UR_);
-    float rpmLL = measureRPM_LL(dt);
+    float rpmLL = measureRPM(LL_);
     float rpmLR = measureRPM(LR_);
 
     // ← AGREGAR ESTAS 4 LÍNEAS
