@@ -15,6 +15,7 @@
 #include <Wire.h>
 #include <Adafruit_BNO08x.h>
 #include <tuple>
+#include "pins.h"
 
 class BNO085
 {
@@ -27,6 +28,7 @@ public:
     float getYaw() const;
     float getRoll() const;
     float getPitch() const;
+    bool  hasValidYaw() const { return initialized && !firstYawSample_; }
 
     std::tuple<float, float, float> getLinealAcceleration();
 
@@ -51,8 +53,16 @@ private:
     float filteredYawDeg_ = 0.0f;
     bool firstYawSample_  = true;
 
+    uint32_t lastValidMs_ = 0;
+
     void quaternionToEuler(float qw, float qx, float qy, float qz,
                            float &yaw, float &pitch, float &roll) const;
+
+    void manualReset();
+    bool waitForAddress(uint8_t address);
+    bool tryAddress(uint8_t address);
+    bool enableReports();
+    void recover();
 };
 
 #endif
