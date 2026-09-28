@@ -76,7 +76,7 @@ class TeensyLink:
                 "no Teensy found — looked for: " + ", ".join(DEVICE_CANDIDATES)
             )
 
-        self._ser = pyserial.Serial(self.device, baud, timeout=0)
+        self._ser = pyserial.Serial(self.device, baud, timeout=0, write_timeout=1)
         self._period = 1.0 / max(1, stream_hz)
         self._lock = threading.Lock()
         self._stop = threading.Event()
