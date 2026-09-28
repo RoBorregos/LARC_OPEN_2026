@@ -1,17 +1,35 @@
 #include "Drive.hpp"
 
+// Actualized for Erick's new circuit board
 //  Constructor
 
 Drive::Drive()
     : bno_(),
-      m1_ul_(Pins::kUpperMotors[0], Pins::kUpperMotors[1], Pins::kPwmPin[0], true, UL_ENC_A, UL_ENC_B, diameter),
-      m2_ur_(Pins::kUpperMotors[2], Pins::kUpperMotors[3], Pins::kPwmPin[1], true, UR_ENC_A, UR_ENC_B, diameter),
-      m3_ll_(Pins::kLowerMotors[0], Pins::kLowerMotors[1], Pins::kPwmPin[2], true, LL_ENC_A, LL_ENC_B, diameter),
-      m4_lr_(Pins::kLowerMotors[2], Pins::kLowerMotors[3], Pins::kPwmPin[3], true, LR_ENC_A, LR_ENC_B, diameter),
+    // Si no funciona, cambiar false o true, cambiar pines y despues false o true para 
+     m1_ul_(33, 34, 8, true, 0, 1, diameter), //M1 (encA/encB invertidos: TestDriveEncoderSign daba signo al reves)
+     m2_ur_(36, 35, 9, true, 13, 2, diameter), //M3 (encA/encB invertidos: TestDriveEncoderSign daba signo al reves)
+     m3_ll_(37, 38, 10, true, 32, 31, diameter), //M2
+     m4_lr_(39, 40, 11, false, 21, 20, diameter), //M4
       omni_(m1_ul_, m2_ur_, m3_ll_, m4_lr_),
       yawPid_(P, I, D, -kOmegaMax, +kOmegaMax),
       linePid_(0.00008f, 0.000005f, 0.0f, -kLinePidMax, +kLinePidMax)
 {}
+
+// ---------------------------------------------------------------------------
+// SM_DEBUG -- the debug printf in update() and the demo prints below.
+//
+// Drive::update() runs every loop from main.cpp, and its 10 Hz
+// "x:.. y:.. dist:.. yaw:.. omega:.. err:.." line goes out on the SAME USB
+// port the Orin vision link uses (instances.cpp: VisionLink vision(Serial,
+// servos)). That is what shows up tagged [teensy] in the dispatcher log.
+//
+// OFF by default; turn it on with the Orin unplugged via platformio.ini:
+//     build_flags = ${env:teensy41.build_flags} -D SM_DEBUG=1
+// Same switch as StateMachine.cpp and DriveStateMachineTest.cpp.
+// ---------------------------------------------------------------------------
+#ifndef SM_DEBUG
+#define SM_DEBUG 0
+#endif
 
 //  begin
 void Drive::begin() {
@@ -23,7 +41,17 @@ void Drive::begin() {
 
     Wire.begin();
     bno_.begin();
-    bno_.update(); delay(50); bno_.update();
+
+    // Wait for the first real orientation sample before trusting getYaw() --
+    // otherwise targetYaw_ below latches onto the default 0.0f instead of
+    // the robot's actual starting heading, and the yaw-hold PID then fights
+    // a permanent phantom error it can never close. Bounded so a dead/absent
+    // BNO can't hang the whole robot.
+    uint32_t yawWaitStart = millis();
+    while (!bno_.hasValidYaw() && millis() - yawWaitStart < 1000) {
+        bno_.update();
+        delay(10);
+    }
 
     yawPid_.setAngleWrapping(true);
     yawPid_.reset();
@@ -97,11 +125,14 @@ void Drive::update() {
     }
 
     // 4) Debug 10 Hz
+#if SM_DEBUG
     if (now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
-        // Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f\n",
-        //     ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw));
+        Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f omega:%.4f err:%.4f\n",
+            ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw),
+            omega, yawPid_.getError());
     }
+#endif
 }
 
 //  updateOdometry — deltas from encoder → EKF
@@ -288,6 +319,7 @@ float Drive::wrapAngle(float a) {
 //  testKinematics
 void Drive::testKinematics(float v, uint32_t T) {
     holdYaw(false);
+#if SM_DEBUG
     Serial.println("Forward");  omni_.MoveXYW(+v,  0,  0); delay(T);
     Serial.println("Backward"); omni_.MoveXYW(-v,  0,  0); delay(T);
     Serial.println("Right");    omni_.MoveXYW( 0, +v,  0); delay(T);
@@ -295,6 +327,7 @@ void Drive::testKinematics(float v, uint32_t T) {
     Serial.println("Diag++");   omni_.MoveXYW(+v, +v,  0); delay(T);
     Serial.println("Diag--");   omni_.MoveXYW(-v, -v,  0); delay(T);
     Serial.println("Stop");     omni_.Stop();                delay(1200);
+#endif
 }
 
 //  beginNoBNO / updateNoBNO
@@ -343,8 +376,10 @@ void Drive::updateNoBNO() {
 
     if (now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
+#if SM_DEBUG
         Serial.print("odoX: "); Serial.print(odoX, 4);
         Serial.print("  odoY: "); Serial.println(odoY, 4);
+#endif
     }
 }
 

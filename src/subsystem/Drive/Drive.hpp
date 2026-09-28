@@ -1,10 +1,11 @@
+// Third layer for control of CONTROL (3)
 #pragma once
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
 #include "constants.h"
 #include "pins.h"
-#include "BNO/bno.hpp"
+#include "BNO085/BNO085.hpp"
 #include "motors.hpp"
 #include "kinematics.hpp"
 #include "PIDController.hpp"
@@ -15,8 +16,10 @@ static constexpr float diameter = Constants::DriveConstants::kWheelDiameter;
 
 static constexpr uint8_t UL_ENC_A = Pins::kEncoders[1];
 static constexpr uint8_t UL_ENC_B = Pins::kEncoders[0];
-static constexpr uint8_t UR_ENC_A = Pins::kEncoders[2];
-static constexpr uint8_t UR_ENC_B = Pins::kEncoders[3];
+
+static constexpr uint8_t UR_ENC_A = Pins::kLimitSwitch;
+static constexpr uint8_t UR_ENC_B = Pins::kLimitSwitch2;
+
 static constexpr uint8_t LL_ENC_A = Pins::kEncoders[4];
 static constexpr uint8_t LL_ENC_B = Pins::kEncoders[5];
 static constexpr uint8_t LR_ENC_A = Pins::kEncoders[6];
@@ -95,8 +98,8 @@ private:
     void updateOdometry();
     void updateBusy(uint32_t now);
 
-    // Hardware 
-    BNO        bno_;
+    // Hardware
+    BNO085     bno_;
     DCMotor    m1_ul_, m2_ur_, m3_ll_, m4_lr_;
     OmniMotors omni_;
 
