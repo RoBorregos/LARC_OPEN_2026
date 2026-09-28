@@ -67,12 +67,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-            {76, 74, 69, 73, 158, 98, 75},          // On white
-             {901, 892, 868, 870, 904, 908, 916}}; // black (up and DOWN)
+            {201, 166, 177, 184, 268, 171, 81}, // On white
+             {947, 916, 873, 869, 907, 912, 930}}; // black 
 
         constexpr Profile Rear = {
-             {68, 64, 66, 71, 73, 74, 304},
-            {860, 843, 850, 939, 873, 874, 936}};
+             {81, 74, 68, 73, 111, 74, 69}, // On white
+             {456, 366, 353, 328, 512, 391, 476}}; // black 
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -81,14 +81,13 @@ namespace Constants
     namespace LineFollower
 
     {
-        constexpr int kSetpoint = 2900;//2700; // center of 0-6000 range (el ultimo no se esta tomndo otherwise 0-7000)
-        // change to 4000, 2000, etc. as needed
+        constexpr int kSetpoint = 2900;//2700; // center of 0-6000 range (last is not taken into account? otherwise 0-7000)
     }
 
     namespace IRCalibration
     {
-        // Umbrales analógicos por sensor (0..1023).
-        // Si raw >= umbral = línea detectada (antes de aplicar inversión).
+        // analog thresholds of sensors (0..1023).
+        // if raw >= umbral = line detected (before aplying inversion).
 
         // PLACEHOLDERS
         static constexpr uint16_t kThreshFL = 50; // Front-Left
@@ -96,7 +95,7 @@ namespace Constants
         static constexpr uint16_t kThreshBL = 50;  // Back-Left
         static constexpr uint16_t kThreshBR = 112; // Back-Right
 
-        static constexpr uint16_t kHysteresis = 5;    // Hysteresis margin (same for all sensors)
+        static constexpr uint16_t kHysteresis = 5; // Hysteresis margin (same for all sensors)
         static constexpr uint16_t kDebounceCount = 3; // Number of consecutive readings to confirm state change
     } // namespace IRCalibration
 
@@ -114,8 +113,6 @@ namespace Constants
 
         // PCA9685 timing
         // Generic boards often run the oscillator at 26-27 MHz, not 25.
-        // If a 1500 us command measures e.g. 1560 us on a scope, set this
-        // to 25000000 * 1560 / 1500 = 26000000.
         static constexpr uint32_t kPcaOscillatorHz = 25000000;
         static constexpr float    kServoPwmFreqHz  = 50.0f;
         struct ServoCalib
@@ -127,26 +124,26 @@ namespace Constants
             uint8_t  maxAngleDeg;
         };
 
-        // PROVISIONAL pulse limits verify each servo with
+        // PROVISIONAL (missing mechanical tests)
         // test/servos/02_pca9685_channel_test.cpp before trusting them.
         static constexpr ServoCalib kCalib[SERVO_COUNT] = {
-            { Pins::Servos::kIntakeUpperCh, 500, 2500, 40, 100 }, // INTAKE_UPPER
-            { Pins::Servos::kIntakeLowerCh, 500, 2500, 40, 100 }, // INTAKE_LOWER
+            { Pins::Servos::kIntakeUpperCh, 500, 2500, 85, 130 }, // INTAKE_UPPER
+            { Pins::Servos::kIntakeLowerCh, 500, 2500, 40, 90 }, // INTAKE_LOWER
             { Pins::Servos::kSeparatorCh,   500, 2500, 61, 149 }, // SEPARATOR
             { Pins::Servos::kBenefit1Ch,    500, 2500, 20, 160 }, // BENEFIT_1
             { Pins::Servos::kBenefit2Ch,    500, 2500, 20, 160 }  // BENEFIT_2
         };
 
         // Positions (deg) 
-        static constexpr uint8_t kIntakeUpperHome   = 50;
-        static constexpr uint8_t kIntakeUpperDeploy = 85;
+        static constexpr uint8_t kIntakeUpperHome   = 97;
+        static constexpr uint8_t kIntakeUpperDeploy = 127;
 
-        static constexpr uint8_t kIntakeLowerHome   = 50;
-        static constexpr uint8_t kIntakeLowerDeploy = 80;
+        static constexpr uint8_t kIntakeLowerHome   = 52;
+        static constexpr uint8_t kIntakeLowerDeploy = 86;
 
         static constexpr uint8_t kSeparatorNeutral  = 101;
         static constexpr uint8_t kSeparatorLeft     = 66; // mature
-        static constexpr uint8_t kSeparatorRight    = 142; // immature
+        static constexpr uint8_t kSeparatorRight    = 142; // overmature
 
         static constexpr uint8_t kBenefit1Closed    = 90;
         static constexpr uint8_t kBenefit1Open      = 152;
@@ -155,6 +152,11 @@ namespace Constants
 
         // Time for benefit doors to stay open before closing automatically (ms)
         static constexpr uint32_t kBenefitOpenMs = 600;
+
+        // BENEFITS routine: how long the robot stays stopped at a box (ms).
+        // The door opens kBenefitOpenMs of it.
+        static constexpr uint32_t kBenefitStopMs = 1500;
+        static_assert(kBenefitStopMs > kBenefitOpenMs, "kBenefitStopMs must be longer than kBenefitOpenMs");
     } // namespace ServoConfig
 
     namespace VisionConfig
@@ -162,9 +164,9 @@ namespace Constants
         // How many consecutive, fully valid, non-duplicate
         // frames must carry the SAME (phase, payload) before the Teensy
         // acts on it. 
-        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 1;
+        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 1; // (unchanged, good readings but not fully tested)
 
-        // No valid new frame for this long, then every actuator goes safe and
+        // No valid new frame for this long, then every actuator goes safe 
         static constexpr uint32_t kLinkTimeoutMs = 500;
         static constexpr uint32_t kSerialBaud = 115200;
     } // namespace VisionConfig
