@@ -1,7 +1,7 @@
 /*
  * 02_pca9685_channel_test — stage 2: one servo through the PCA9685
  *
- *   Drives ONE PCA9685 channel directly with Adafruit_PWMServoDriver,
+ *   Drives ONE PCA9685 channel directly with lib/PCA9685,
  *   deliberately bypassing ServoSystem. 
  * 
  * calibration procedure  
@@ -31,12 +31,15 @@
  */
 
 #include <Arduino.h>
-#include <Adafruit_PWMServoDriver.h>
+#include "PCA9685.hpp"
+#include "TCA9548A/TCA9548A.h"
+#include "pins.h"
+#include "constants.h"
 
 // ── Test configuration (edit here only) ─────────────────────────────────
-constexpr uint8_t  kPcaAddress   = 0x40;      // single board, no jumpers
+constexpr uint8_t  kPcaAddress   = Pins::Servos::kPcaI2cAddress; // board + bus from pins.h
 constexpr uint8_t  kStartChannel = 12;        // channel selected at boot
-constexpr uint32_t kOscHz        = 25000000;  // nominal internal oscillator
+constexpr uint32_t kOscHz        = Constants::ServoConfig::kPcaOscillatorHz;
 constexpr float    kServoFreqHz  = 50.0f;     // hobby-servo frame rate
 
 // The pulse <-> angle map. MUST match kCalib[i].minPulseUs / maxPulseUs
@@ -57,18 +60,20 @@ constexpr uint16_t kMinUs = 500;      // hard guard rails, never exceeded
 constexpr uint16_t kMaxUs = 2500;
 // ────────────────────────────────────────────────────────────────────────
 
-Adafruit_PWMServoDriver pwm(kPcaAddress);
+// static + own name: instances.cpp (always linked) already defines i2cMux
+static TCA9548A benchMux(Pins::I2cMux::kAddress, PCA9685::busFromIndex(Pins::I2cMux::kBus));
+static PCA9685  pwm(kPcaAddress, PCA9685::busFromIndex(Pins::Servos::kI2cBus), Pins::Servos::kOePin);
 
-uint8_t  channel   = kStartChannel;
-uint16_t currentUs = 1500;
-bool     attached  = true;
+static uint8_t  channel   = kStartChannel;
+static uint16_t currentUs = 1500;
+static bool     attached  = true;
 
 // Marked mechanical stops, in degrees. -1 = not marked yet.
-int16_t markMinDeg = -1;
-int16_t markMaxDeg = -1;
+static int16_t markMinDeg = -1;
+static int16_t markMaxDeg = -1;
 
-char lineBuf[16];
-uint8_t lineLen = 0;
+static char lineBuf[16];
+static uint8_t lineLen = 0;
 
 // ── Pulse <-> angle ─────────────────────────────────────────────────────
 float usToDeg(uint16_t us)
@@ -144,7 +149,7 @@ void moveToDeg(const char *tag, float deg)
 
 void detach()
 {
-    pwm.setPWM(channel, 0, 0); // no pulses at all — servo goes limp
+    pwm.off(channel); // no pulses at all — servo goes limp
     attached = false;
     showPosition("detached");
 }
@@ -157,7 +162,7 @@ void selectChannel(int ch)
         return;
     }
     // Stop pulsing the channel we are leaving, so it does not keep holding.
-    pwm.setPWM(channel, 0, 0);
+    pwm.off(channel);
     channel  = (uint8_t)ch;
     attached = false;
     Serial.printf("  channel -> %u  (previous channel released, this one is\n"
@@ -276,9 +281,15 @@ void setup()
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {}
 
-    pwm.begin();
-    pwm.setOscillatorFrequency(kOscHz);
-    pwm.setPWMFreq(kServoFreqHz);
+    if (Pins::Servos::kTcaChannel != 255)
+        pwm.attachMux(&benchMux, Pins::Servos::kTcaChannel);
+
+    pwm.setOscillatorHz(kOscHz);
+    if (!pwm.begin(kServoFreqHz))
+        Serial.printf("  ! no PCA9685 at 0x%02X on Wire%u (SDA %u / SCL %u), TCA ch %u -- check wiring\n",
+                      kPcaAddress, Pins::Servos::kI2cBus,
+                      Pins::Servos::kI2cSda, Pins::Servos::kI2cScl, Pins::Servos::kTcaChannel);
+    pwm.enableOutputs();
 
     printHelp();
     moveToDeg("safe", kSafeDeg);
