@@ -14,7 +14,7 @@ Stop    : Ctrl+C or systemctl stop — both park the robot in IDLE first
 Script contract
     intake     VISION:XX        bit 0 = intake upper, bit 1 = intake lower
     separator  VISION:FD:WW:CC  WW = warm hit, CC = cool hit (00 or 01)
-    benefits   VISION:FE:XX     00 none, 01 red, 02 blue
+    benefits   VISION:FE:XX     00 none, 01 red, 02 blue (only when centred)
 """
 
 from __future__ import annotations
@@ -32,15 +32,17 @@ from pathlib import Path
 # vision_orin/link is a sibling of this directory.
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "link"))
+sys.path.insert(0, str(REPO))
+from model_runtime.shared import SharedModelWorker
 
 import vision_protocol as vp
 from teensy_link import TeensyLink, find_teensy
 
 SCRIPTS = {
     "intake":    Path(os.environ.get("LARC_INTAKE_PY",
-                                     REPO / "main_vision" / "orin_vision.py")),
+                                     REPO / "main_vision" / "orin_vision_model.py")),
     "separator": Path(os.environ.get("LARC_SEPARATOR_PY",
-                                     REPO / "separator" / "separator_vision.py")),
+                                     REPO / "separator" / "separator_model.py")),
     "benefits":  Path(os.environ.get("LARC_BENEFITS_PY",
                                      REPO / "benefits" / "benefits.py")),
 }
@@ -56,7 +58,10 @@ AUTOSTART_PHASE = os.environ.get("LARC_AUTOSTART_PHASE", "").strip().lower() or 
 
 # Tuning
 LOOP_HZ = 100 # how often we recompute the command
-STARTUP_GRACE_SEC = 5.0 # how long a script gets to prove it survived
+# Only affects the wait for the first report; normal stale limits stay unchanged.
+STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "120"))
+if not 0 < STARTUP_GRACE_SEC <= 180:
+    raise ValueError("LARC_STARTUP_GRACE_SEC must be greater than 0 and at most 180")
 HEALTH_CHECK_SEC = 2.0
 LINK_RETRY_SEC = 2.0
 
@@ -65,11 +70,6 @@ STALE_MS = {"intake": 500, "separator": 500, "benefits": 800}
 
 # How long the separator holds a side after the last hit for that side.
 SEPARATOR_HOLD_MS = 250
-
-# How long we assert "open" on a benefit door. The Teensy runs its own
-# open window (kBenefitOpenMs); this only has to be long enough for
-# REQUIRED_CONFIRMATION_FRAMES frames to carry the bit.
-BENEFIT_PULSE_MS = 120
 
 # Semantic mapping — the only place these meanings are written down
 INTAKE_UPPER_BIT = 0x01
@@ -116,9 +116,8 @@ class VisionState:
 
         self.box = BOX_NONE
         self.box_ms = 0
-        self.door_pulse_until = [0, 0]
-        self.door_armed = [True, True] # mirrors the Teensy's rearm rule
 
+        self.reports = {} # actual reports only; startup grace is not readiness
         self.stale = set() # sources that have gone quiet
 
     def feed(self, source: str, payload: str) -> bool:
@@ -135,6 +134,7 @@ class VisionState:
                 self.intake_upper = bool(fields[0] & INTAKE_UPPER_BIT)
                 self.intake_lower = bool(fields[0] & INTAKE_LOWER_BIT)
                 self.intake_ms = stamp
+                self.reports[source] = stamp
                 return True
 
             if source == "separator" and len(fields) == 3 and fields[0] == 0xFD:
@@ -143,23 +143,33 @@ class VisionState:
                     self.sep_side = WARM_IS if warm else COOL_IS
                     self.sep_until_ms = stamp + SEPARATOR_HOLD_MS
                 self.separator_ms = stamp
+                self.reports[source] = stamp
                 return True
 
             if source == "benefits" and len(fields) == 2 and fields[0] == 0xFE:
-                box = fields[1]
+                self.box = fields[1]
                 self.box_ms = stamp
-                if box != self.box:
-                    self.box = box
-                    if box == BOX_NONE:
-                        self.door_armed = [True, True]
-                    else:
-                        door = BOX_DOOR.get(box)
-                        if door is not None and self.door_armed[door]:
-                            self.door_pulse_until[door] = stamp + BENEFIT_PULSE_MS
-                            self.door_armed[door] = False
+                self.reports[source] = stamp
                 return True
 
         return False
+
+    def invalidate(self, source):
+        with self._lock:
+            had_report = source in self.reports
+            self.reports.pop(source, None)
+            # Before the first valid report, keep the launch deadline intact.
+            # Errors neither grant readiness nor extend that deadline. Once a
+            # source has reported, invalidate it immediately with no new grace.
+            if source == 'intake':
+                self.intake_upper = self.intake_lower = False
+                if had_report:
+                    self.intake_ms = 0
+            elif source == 'separator':
+                self.sep_side = vp.SEP_NEUTRAL
+                self.sep_until_ms = 0
+                if had_report:
+                    self.separator_ms = 0
 
     def note_launched(self, sources) -> None:
         stamp = now_ms()
@@ -180,9 +190,15 @@ class VisionState:
             self.sep_side = vp.SEP_NEUTRAL
             self.sep_until_ms = 0
             self.box = BOX_NONE
-            self.door_pulse_until = [0, 0]
-            self.door_armed = [True, True]
             self.stale.clear()
+            self.reports.clear()
+
+    def ready(self, sources):
+        stamp = now_ms()
+        with self._lock:
+            return all(source in self.reports and
+                       stamp - self.reports[source] <= STALE_MS[source]
+                       for source in sources)
 
     # called from the main loop
     def beans_command(self):
@@ -215,10 +231,11 @@ class VisionState:
                 self.stale = stale
                 return False, False, stale
 
-            doors = [stamp < self.door_pulse_until[0],
-                     stamp < self.door_pulse_until[1]]
+            # Held while benefits.py sees the box centred. The Teensy decides
+            # when to open (openBenefit()); timed doors re-arm on their own.
+            door = BOX_DOOR.get(self.box)
             self.stale = stale
-            return doors[0], doors[1], stale
+            return door == 0, door == 1, stale
 
 
 # Child processes
@@ -230,6 +247,20 @@ class ScriptRunner:
         self.tails = {}
         self.phase = None
         self._lock = threading.Lock()
+        self.model_roles = [name for name in ('intake', 'separator')
+                            if SCRIPTS[name].name in ('orin_vision_model.py', 'separator_model.py')]
+        self.model = (SharedModelWorker(self.model_roles, state.feed, state.invalidate, log)
+                      if self.model_roles else None)
+        self._model_death_reported = False
+
+    def prepare(self):
+        if self.model:
+            self.model.start()
+
+    def close(self):
+        self.stop(quiet=True)
+        if self.model:
+            self.model.close()
 
     def _reader(self, proc, name: str) -> None:
         for raw in proc.stdout:
@@ -259,14 +290,17 @@ class ScriptRunner:
             log(f"[ERROR] unknown phase '{phase}'")
             return False
 
-        missing = [n for n in names if not SCRIPTS[n].exists()]
+        missing = [n for n in names if n not in self.model_roles and not SCRIPTS[n].exists()]
         if missing:
             for name in missing:
                 log(f"[ERROR] script missing: {name} -> {SCRIPTS[name]}")
             return False
 
-        log(f"launching phase '{phase}': {names}")
+        self.state.note_launched(names)
+        log(f"launching phase '{phase}': {names} (first-report grace {STARTUP_GRACE_SEC:g}s)")
         for name in names:
+            if name in self.model_roles:
+                continue
             path = SCRIPTS[name]
             try:
                 proc = subprocess.Popen(
@@ -288,11 +322,19 @@ class ScriptRunner:
                              name=f"read-{name}", daemon=True).start()
             log(f"  {name} pid={proc.pid}  ({path})")
 
-        self.state.note_launched(names)
         self.phase = phase
+        if phase == 'beans' and self.model:
+            self.prepare()
+            if not self.model.alive():
+                log(f'[ERROR] shared model worker unavailable: {self.model.error or "worker exited without an error message"}')
+                self.stop(quiet=True)
+                return False
+            self.model.activate()
         return True
 
     def stop(self, quiet: bool = False) -> None:
+        if self.model:
+            self.model.deactivate()
         for name, proc in list(self.procs.items()):
             if proc and proc.poll() is None:
                 if not quiet:
@@ -308,10 +350,20 @@ class ScriptRunner:
         self.state.reset()
 
     def alive(self):
-        return [n for n, p in self.procs.items() if p and p.poll() is None]
+        names = [n for n, p in self.procs.items() if p and p.poll() is None]
+        if self.phase == 'beans' and self.model and self.model.alive():
+            names.extend(self.model_roles)
+        return names
 
     def reap(self):
         dead = []
+        if (self.phase == 'beans' and self.model and not self.model.alive()
+                and not self._model_death_reported):
+            self._model_death_reported = True
+            dead.extend(self.model_roles)
+            for role in self.model_roles:
+                self.state.invalidate(role)
+            log(f'[HEALTH] shared model worker exited: {self.model.error or "no error message"}')
         for name, proc in list(self.procs.items()):
             if proc and proc.poll() is not None:
                 log(f"[HEALTH] {name} exited (rc={proc.returncode})")
@@ -333,6 +385,8 @@ class Dispatcher:
         self._last_reported = None
         self._stale_reported = set()
         self._warned_missing = False
+        self._ready_reported = None
+        self._last_wait_log = 0.0
 
     def stop(self, *_signal) -> None:
         self.running = False
@@ -392,6 +446,13 @@ class Dispatcher:
         self.link.set_beans_running(False)
         self.link.set_benefits_running(False)
 
+        self._stale_reported.clear()
+        self._last_reported = None
+        self._ready_reported = None
+        self._last_wait_log = 0.0
+        for mask in FAULT_BIT.values():
+            self.link.set_fault(mask, False)
+
         if phase is None:
             self.runner.stop()
             log("phase -> IDLE")
@@ -403,10 +464,10 @@ class Dispatcher:
 
         if phase == "beans":
             self.link.set_phase_beans()
-            self.link.set_beans_running(True)
+            # RUNNING is asserted only after fresh reports from both workers.
         else:
             self.link.set_phase_benefits()
-            self.link.set_benefits_running(True)
+            # RUNNING is asserted only after the first benefits report.
         log(f"phase -> {phase.upper()}")
 
     # pushing the command
@@ -423,6 +484,18 @@ class Dispatcher:
             summary = f"BENEFITS door1={int(door1)} door2={int(door2)}"
         else:
             return
+
+        ready = (self.state.ready(PHASES[phase]) and
+                 all(name in self.runner.alive() for name in PHASES[phase]))
+        self.link.set_beans_running(phase == "beans" and ready)
+        self.link.set_benefits_running(phase == "benefits" and ready)
+        if ready != self._ready_reported:
+            log(f"[VISION READY] {phase.upper()}={int(ready)} (fresh reports required)")
+            self._ready_reported = ready
+        if not ready and time.monotonic() - self._last_wait_log >= 2:
+            waiting = [n for n in PHASES[phase] if not self.state.ready([n])]
+            log(f"[WAITING] {phase}: no fresh report from {waiting}")
+            self._last_wait_log = time.monotonic()
 
         for source in stale - self._stale_reported:
             log(f"[STALE] {source} stopped reporting — its outputs are now safe")
@@ -454,12 +527,14 @@ class Dispatcher:
         log(f"  phase        {self.runner.phase or 'IDLE'}")
         log(f"  serial       {self.link.device}")
         log(f"  status byte  0x{self.link.status:02X}")
+        if self.runner.model:
+            log(f"  model error  {self.runner.model.error or 'none'}")
         if self.runner.phase:
             for name in PHASES[self.runner.phase]:
                 proc = self.runner.procs.get(name)
-                alive = proc and proc.poll() is None
+                alive = name in self.runner.alive()
                 log(f"  {name:<10}  {'RUNNING' if alive else 'DEAD'}"
-                    f"  pid={proc.pid if proc else '-'}")
+                    f"  worker={'shared-model' if name in self.runner.model_roles else (proc.pid if proc else '-')}")
                 for line in self.runner.tail(name, 3):
                     log(f"      | {line}")
         else:
@@ -472,7 +547,10 @@ class Dispatcher:
         log("LARC vision dispatcher (protocol v2) starting")
         log(f"  repo         {REPO}")
         for name, path in SCRIPTS.items():
-            log(f"  {name:<10}  {path}  [{'OK' if path.exists() else 'MISSING'}]")
+            if name in self.runner.model_roles:
+                log(f"  {name:<10}  shared persistent model (no camera subprocess)")
+            else:
+                log(f"  {name:<10}  {path}  [{'OK' if path.exists() else 'MISSING'}]")
         log(f"  teensy       {SERIAL_DEVICE or find_teensy() or 'not found yet'}")
 
         signal.signal(signal.SIGTERM, self.stop)
@@ -482,6 +560,7 @@ class Dispatcher:
         last_health = time.monotonic()
 
         try:
+            self.runner.prepare()
             while self.running:
                 if self.link is None:
                     self.connect()
@@ -523,6 +602,7 @@ class Dispatcher:
                     self.link.close() # sends IDLE frames, then closes
                 except Exception:
                     pass
+            self.runner.close()
             log("dispatcher exited")
         return 0
 
