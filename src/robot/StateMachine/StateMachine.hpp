@@ -8,6 +8,7 @@
 #include "robot/instances/instances.hpp"
 #include "robot/Perception/Perception.hpp"
 
+// State machine (states) files...
 #include "States/TierOne/StartState.hpp"
 #include "States/TierOne/PoolState.hpp"
 #include "States/TierOne/LookForLineState.hpp"
@@ -24,15 +25,15 @@ enum class STATES
 {
     START,
     POOL,
-    LOOKFORLINE,
+    LOOKFORLINE,          //Try if this works well, in case there aren't pools (add qtr for front line detection)
     LOOKFORCORNER,
-    BEANS,
-    BEANSGOBACK,
-    POOLSGOBACK,
-    LOOKFORLINEBACKWARDS,
-    BENEFITSSTARTCORNER,
-    BENEFITS,
-    STOP
+    BEANS,                // BEANS(left to right) :: Recoje las pelotas y inicializa vision + Sorter (vision)
+    BEANSGOBACK,          // BEANS(right to left) :: Elevator goes down :: Recoje las pelotas y inicializa vision (stop when corner detected) + Sorter (vision) +
+    POOLSGOBACK,          // Avoid Pools but using the back US
+    LOOKFORLINEBACKWARDS, // Look for the backwards line
+    BENEFITSSTARTCORNER,  // Look for left corner
+    BENEFITS,             // Rear Vision + liberating cacaos
+    STOP                  // FINISH ALL TASKS      :D          !!! Ends in right corner
 };
 
 class LARCStateMachine
@@ -52,10 +53,13 @@ private:
     byte visionLeft = 0;
     byte visionRight = 0;
 
+    // ELEVATOR
     const int limitSwitch = Pins::kLimitSwitch;
 
+    // Shared sensor fusion (ToF/IR/QTR, encoders soon), computed once per tick
     Perception perception_;
 
+    // One instance per state class (see States/Tier*)
     StartState startState_;
     PoolState poolState_;
     LookForLineState lookForLineState_;

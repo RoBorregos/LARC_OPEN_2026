@@ -1,3 +1,9 @@
+/*
+*@author:  Ximena Patricia García Magdaleno
+* StartState.hpp
+* State Machine Tier One.2- Start State 
+*/
+
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
@@ -16,13 +22,17 @@ public:
 
         static constexpr uint32_t kLostLineTimeoutMs = 1200;
 
+        // Check critical error from vision
         if (vision.hasCriticalError()) {
             vision.stop();
+            // transitionToBeansGoBack = true;
+            // transitionToBeansGoBack = true;
             transitionToStop = true;
             return;
         }
 
         switch (action_stage) {
+            // ── Stage 0: Búsqueda y recolección de beans ────────────────────
             case 0: {
                 if (cornerRIGHTDetected) {
                     odomMove_.stop();
@@ -52,6 +62,7 @@ public:
                 break;
             }
 
+            // ── Stage 1: Stop por 1000 ms después de detectar RIGHT ────────
             case 1: {
                 odomMove_.stop();
                 if ((now - action_start_time) >= 1000) {

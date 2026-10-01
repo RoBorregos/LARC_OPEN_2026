@@ -1,3 +1,4 @@
+
 #include <Arduino.h>
 #include "StateMachine.hpp"
 #include "robot/instances/instances.hpp"
@@ -11,19 +12,20 @@ namespace
     static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
 
     static constexpr uint32_t kInitializedStoppedMs = 9000;
-    static constexpr uint32_t kStartIgnoreTimeMs = 4500;
-    static constexpr uint32_t kClearDelayMs = 1500;
-    static constexpr uint32_t kNoObstacleToCornerMs = 3000;
+    static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
+    static constexpr uint32_t kClearDelayMs = 1500;  //6500;          // Tiempo para cambiar nuevamente a Forward
+    static constexpr uint32_t kNoObstacleToCornerMs = 3000; // Time without obstacle to go forward and LOOKFORLINE -> tal vez disminuir
     static constexpr uint32_t kCornerDeployWazitMs = 1800;
 
     static constexpr uint32_t kMinAvoidTimeMs = 250;
     static constexpr uint32_t kSideDetectHoldMs = 80;
-    static constexpr uint16_t kTofTargetMm = 120;
-    static constexpr uint16_t kTofHardStopMm = 105;
+    static constexpr uint16_t kTofTargetMm = 120;   // distancia deseada al árbol
+    static constexpr uint16_t kTofHardStopMm = 105; // stop de seguridad
 
     static constexpr float kTofMinSpeed = 0.10f;
     static constexpr float kTofMaxSpeed = 0.35f;
     static constexpr float kObstacleDistanceCm = 20.0f;
+
 
     static constexpr float kDistKp = 0.0012f;
     static constexpr float kDistKi = 0.0f;
@@ -34,29 +36,29 @@ namespace
         switch (state)
         {
         case STATES::START:
-            return F("");
+            return F(""); // F("START ♡ ♡ ♡");
         case STATES::POOL:
-            return F("");
+            return F(""); // F("POOL");
         case STATES::LOOKFORLINE:
-            return F("");
+            return F(""); // F("LOOKFORLINE");
         case STATES::LOOKFORCORNER:
-            return F("");
+            return F(""); // F("LOOKFORCORNER");
         case STATES::BEANS:
-            return F("");
+            return F(""); // F("BEANS");
         case STATES::BEANSGOBACK:
-            return F("");
+            return F(""); // F("BEANSGOBACK");
         case STATES::POOLSGOBACK:
-            return F("");
+            return F(""); // F("POOLSGOBACK");
         case STATES::LOOKFORLINEBACKWARDS:
-            return F("");
+            return F(""); // F("LOOKFORLINEBACKWARDS");
         case STATES::BENEFITSSTARTCORNER:
-            return F("");
+            return F(""); // F("BENEFITSSTARTCORNER");
         case STATES::BENEFITS:
-            return F("");
+            return F(""); // F("BENEFITS");
         case STATES::STOP:
-            return F("");
+            return F(""); // F("STOP ♡ ♡ ♡ ♡ ♡");
         default:
-            return F("");
+            return F(""); // F("DEFAULT");
         }
     }
 
@@ -65,13 +67,13 @@ namespace
         switch (state)
         {
         case PoolSubState::FORWARD:
-            return F("");
+            return F(""); // F("FORWARD");
         case PoolSubState::AVOID_LEFT:
-            return F("");
+            return F(""); // F("AVOID_LEFT");
         case PoolSubState::AVOID_RIGHT:
-            return F("");
+            return F(""); // F("AVOID_RIGHT");
         default:
-            return F("");
+            return F(""); // F("DEFAULT");
         }
     }
 }
@@ -82,7 +84,8 @@ LARCStateMachine::LARCStateMachine()
 
 void LARCStateMachine::begin()
 {
-    currentState = STATES::START;
+    
+    currentState = STATES::START; // always in START
     poolState = PoolSubState::FORWARD;
 
     state_start_time = millis();
@@ -95,8 +98,10 @@ void LARCStateMachine::begin()
     visionLeft = 0;
     visionRight = 0;
 
-    pinMode(limitSwitch, INPUT_PULLUP);
+    //Elevator
 
+    pinMode(limitSwitch, INPUT_PULLUP);
+    
     vision.begin();
     vision.requestStatus();
 
@@ -110,8 +115,9 @@ void LARCStateMachine::begin()
     Serial.print("tofLeft init: ");  Serial.println(okL ? "OK" : "FAIL");
     Serial.print("tofRight init: "); Serial.println(okR ? "OK" : "FAIL");
 
+    //QTR
     qtrFront.begin();
-    qtrFront.useDefaultCalibration(0);
+    qtrFront.useDefaultCalibration(0);   // FRONT qtr
 
     tofLeft.setMaxRange(600);
     tofRight.setMaxRange(600);
@@ -127,17 +133,19 @@ void LARCStateMachine::begin()
     odomMove_.setCommandTimeout(100);
     odomMove_.resetPose();
     odomMove_.captureCurrentYawTarget();
+    //resetOdomAverages();
 }
 
 void LARCStateMachine::update()
 {
+    //LARC.update();
     ir.update();
     qtrFront.update();
     vision.update();
     const uint32_t now = millis();
     startStateTime();
 
-    const int linePos = qtrFront.getPosition();
+    const int linePos = qtrFront.getPosition(); // Para el PID → más suave
     const bool onLine = qtrFront.onLine();
     const float lineCorr = linePID.update(linePos, Constants::LineFollower::kSetpoint);
     const float vx = -lineCorr;
@@ -147,11 +155,19 @@ void LARCStateMachine::update()
     const bool BL = ir.getState(IRLine::BL);
     const bool BR = ir.getState(IRLine::BR);
 
+// =========== Print to debug ============= 
+    //ir.debugPrint();
+    //qtrFront.debugPrint();
+    //Serial.print("linePos: ");
+    //Serial.println(linePos); // To know the value for the center of the qtr
+    
+    
     static uint32_t debugPrintMs = 0;
     if ((now - debugPrintMs) >= 100)
     {
     debugPrintMs = now;
-
+    
+    // Odometría
     Serial.print(F(" ❤ Odometria❤ | X:"));    Serial.print(odomMove_.getX(),   3);
     Serial.print(F(" Y:"));      Serial.print(odomMove_.getY(),   3);
     Serial.print(F(" Yaw:"));    Serial.print(odomMove_.getThetaDeg(), 1);
@@ -159,36 +175,51 @@ void LARCStateMachine::update()
     Serial.print(F(" UR:"));     Serial.print(odomMove_.getRpmUR(), 0);
     Serial.print(F(" LL:"));     Serial.print(odomMove_.getRpmLL(), 0);
     Serial.print(F(" LR:"));     Serial.print(odomMove_.getRpmLR(), 0);
-
+    
+    // Estado actual
     Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState); Serial.print(")");
     Serial.print(F(" PS:")); Serial.print((int)poolState);
 
-    Serial.print(F(" ❤ Tof❤ |"));
+    // ToF
+    Serial.print(F(" ❤ Tof❤ |"));  //Serial.print(tofLeft.getDistanceCm(),  1);
+    //Serial.print(F(" TR:"));    Serial.print(tofRight.getDistanceCm(), 1);
+    //Serial.print(F(" vL:"));    Serial.print(tofLeft.isValid());
+    //Serial.print(F(" vR:"));    Serial.print(tofRight.isValid());
     Serial.print(F(" TL:")); Serial.print(tofLeft.getDistanceCm(), 0);
     Serial.print(F("cm vL:")); Serial.print(tofLeft.isValid() ? "OK" : "NO");
     Serial.print(F(" TR:")); Serial.print(tofRight.getDistanceCm(), 0);
     Serial.print(F("cm vR:")); Serial.print(tofRight.isValid() ? "OK" : "NO");
 
+    // Obstáculo
+    //Serial.print(F(" | OBS:")); Serial.print(obstacle);
+    //Serial.print(F(" OL:"));    Serial.print(obstacleLeftNow);
+    //Serial.print(F(" OR:"));    Serial.print(obstacleRightNow);
+
+    // IR
     Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(FL);
     Serial.print(F(" FR:"));   Serial.print(FR);
     Serial.print(F(" BL:"));   Serial.print(BL);
     Serial.print(F(" BR:"));   Serial.print(BR);
 
+    // Línea
     Serial.print(F(" ❤ qtr| onLine:")); Serial.print(onLine);
     Serial.print(F(" lPos:"));  Serial.print(qtrFront.getPosition());
     Serial.print(F(" vx:")); Serial.print(vx);
     Serial.println();
     }
-
-    const bool frontLeftDetectedLine = FL;
+    
+    
+    
+    const bool frontLeftDetectedLine = FL; // Also used for corner
     const bool frontRightDetectedLine = FR;
     const bool backLeftDetectedLine = BL;
     const bool backRightDetectedLine = BR;
-    const bool frontDetectedLine = (FL || FR);
+    const bool frontDetectedLine = (FL || FR); // Hacer que con el qtr tambien detecte linea
     const bool backDetected = (BL || BR);
     const bool leftDetectedPool = (FL || BL);
     const bool rightDetectedPool = (FR || BR);
 
+    // DESPUÉS
     static constexpr uint32_t kTofWarmupMs = 500;
     static uint32_t tofReadyTimestamp = 0;
     if (tofReadyTimestamp == 0 && (tofLeft.isValid() || tofRight.isValid()))
@@ -203,12 +234,12 @@ void LARCStateMachine::update()
     const bool obstacleRightNow = tofReady
                             && tofRight.isValid()
                             && tofRight.getDistanceCm() < kObstacleDistanceCm;
-
+                            
     static bool obstacleLatched = false;
     static uint32_t obstacleClearStartMs  = 0;
-    static uint32_t obstacleDetectStartMs = 0;
-    static constexpr uint32_t kObstacleReleaseMs  = 400;
-    static constexpr uint32_t kObstacleConfirmMs  = 0;
+    static uint32_t obstacleDetectStartMs = 0;          // ← nuevo
+    static constexpr uint32_t kObstacleReleaseMs  = 400; // ← subido de 200 a 400
+    static constexpr uint32_t kObstacleConfirmMs  = 0; //50;  // ← nuevo: ms consecutivos para activar
 
     if (!obstacleLatched)
     {
@@ -226,7 +257,7 @@ void LARCStateMachine::update()
     }
     else
     {
-    obstacleDetectStartMs = 0;
+    obstacleDetectStartMs = 0; // reset si deja de verse
     }
     }
     else
@@ -248,6 +279,19 @@ void LARCStateMachine::update()
         }
     }
     const bool obstacle = obstacleLatched;
+    /*
+    // VLX debug print
+    Serial.print(" tofReady: "); Serial.print(tofReady);
+    Serial.print(" | Lvalid: "); Serial.print(tofLeft.isValid());
+    Serial.print(" | Rvalid: "); Serial.print(tofRight.isValid());
+    Serial.print(" | Lcm: "); Serial.print(tofLeft.getDistanceCm());
+    Serial.print(" | Rcm: "); Serial.print(tofRight.getDistanceCm());
+    Serial.print(" | obstacleLeftNow: "); Serial.print(obstacleLeftNow);
+    Serial.print(" | obstacleRightNow: "); Serial.print(obstacleRightNow);
+    Serial.print(" | obstacleLatched: "); Serial.print(obstacleLatched);
+    Serial.print(" | obstacleUsed: "); Serial.print(obstacle);
+    Serial.print(" | state: "); Serial.println((int)currentState);
+    */
     switch (currentState)
     {
     case STATES::START:
@@ -313,6 +357,7 @@ void LARCStateMachine::setState(STATES newState)
     clearStartMs = 0;
     noObstacleStartMs = 0;
 
+    // Reset corrección lateral LOOKFORLINE
     lfCorrecting        = false;
     lfCorrectionDir     = 0;
     lfCorrectionStartMs = 0;
@@ -324,6 +369,7 @@ void LARCStateMachine::setState(STATES newState)
 
 void LARCStateMachine::startStateTime()
 {
+    // Serial.print("start state time");
     if (state_start_time == 0)
     {
         state_start_time = millis();
@@ -332,13 +378,14 @@ void LARCStateMachine::startStateTime()
 
 void LARCStateMachine::setPoolState(PoolSubState newState)
 {
+    // Serial.print("POOL State");
     if (poolState == newState)
         return;
 
     poolState = newState;
     clearStartMs = 0;
     sideDetectStartMs = 0;
-    noObstacleStartMs = 0;
+    noObstacleStartMs = 0; 
     poolStateStartMs = millis();
 
     Serial.print(F("Pool substate -> "));
@@ -347,6 +394,8 @@ void LARCStateMachine::setPoolState(PoolSubState newState)
 
 void LARCStateMachine::readVision()
 {
+    // Serial.print("VISION State");
+
     if (Serial.available() >= 3)
     {
         if (Serial.read() == 0xFF)
@@ -361,7 +410,7 @@ void LARCStateMachine::handleStartState(uint32_t now, bool backDetected)
 {
     vision.stop();
 
-    const bool limitPressed = (digitalRead(limitSwitch) == HIGH);
+    const bool limitPressed = (digitalRead(limitSwitch) == HIGH); // ==HIGH
 
     if (limitPressed != lastLimitPressed)
     {
@@ -375,9 +424,11 @@ void LARCStateMachine::handleStartState(uint32_t now, bool backDetected)
 
     switch (action_stage)
     {
+    // ── Subir por 9000 ms ────────────────────────────────────────────────
     case 0:
         if (limitPressed)
         {
+            // Limit presionado durante la subida → interrumpir y bajar
             elevator.ElevatorPosition(0);
             odomMove_.stop();
             action_start_time = now;
@@ -390,34 +441,40 @@ void LARCStateMachine::handleStartState(uint32_t now, bool backDetected)
 
             if ((now - action_start_time) >= 12000)
             {
+                // Subida completa → pasar al elevador stop
                 action_start_time = now;
                 action_stage = 4;
             }
         }
         break;
 
+    // ── Bajar mientras limit esté presionado ─────────────────────────────
     case 1:
         elevator.ElevatorPosition(1);
         odomMove_.stop();
 
         if (!limitPressed)
         {
+            // Limit suelto → esperar 2000 ms antes de reintentar subida
             action_start_time = now;
             action_stage = 2;
         }
         break;
 
+    // ── Esperar 2000 ms con elevador parado ──────────────────────────────
     case 2:
         elevator.ElevatorPosition(0);
         odomMove_.stop();
 
         if ((now - action_start_time) >= 2000)
         {
+            // Reintentar subida desde cero
             action_start_time = now;
             action_stage = 0;
         }
         break;
 
+    // ── Subida completa: elevador stop 3000 ms ───────────────────────────
     case 4:
         elevator.ElevatorPosition(0);
         odomMove_.stop();
@@ -428,6 +485,7 @@ void LARCStateMachine::handleStartState(uint32_t now, bool backDetected)
         }
         break;
 
+    // ── Avanzar y transicionar a POOL ────────────────────────────────────
     case 5:
         elevator.ElevatorPosition(0);
         odomMove_.forward(50.0f);
@@ -448,6 +506,7 @@ void LARCStateMachine::handlePoolState(uint32_t now, bool obstacle, bool leftDet
 
     switch (poolState)
     {
+
     case PoolSubState::FORWARD:
     {
         static bool     lineCorrectionActive   = false;
@@ -512,6 +571,7 @@ void LARCStateMachine::handlePoolState(uint32_t now, bool obstacle, bool leftDet
 
     case PoolSubState::AVOID_LEFT:
     {
+        // Si el obstáculo se acerca demasiado, retroceder
         const float distL = tofLeft.getDistanceCm();
         const float distR = tofRight.getDistanceCm();
         const bool tooClose = (tofLeft.isValid()  && distL < 12.0f) ||
@@ -558,6 +618,7 @@ void LARCStateMachine::handlePoolState(uint32_t now, bool obstacle, bool leftDet
 
     case PoolSubState::AVOID_RIGHT:
     {
+        // Si el obstáculo se acerca demasiado, retroceder
         const float distL = tofLeft.getDistanceCm();
         const float distR = tofRight.getDistanceCm();
         const bool tooClose = (tofLeft.isValid()  && distL < 10.0f) ||
@@ -610,6 +671,7 @@ void LARCStateMachine::handleLookForLineState(uint32_t now,
                                               bool rightDetected,
                                               bool onLine)
 {
+    // ── case 0: retroceder 400 ms ─────────────────────────────────────────
     if (action_stage == 0)
     {
         if (action_start_time == 0)
@@ -625,6 +687,7 @@ void LARCStateMachine::handleLookForLineState(uint32_t now,
         return;
     }
 
+    // ── case 1: avanzar 400 ms ────────────────────────────────────────────
     if (action_stage == 1)
     {
         odomMove_.backward(200.0f);
@@ -637,6 +700,7 @@ void LARCStateMachine::handleLookForLineState(uint32_t now,
         return;
     }
 
+    // ── case 2: stop 400 ms ───────────────────────────────────────────────
     if (action_stage == 2)
     {
         odomMove_.forward(120.0f);
@@ -649,6 +713,7 @@ void LARCStateMachine::handleLookForLineState(uint32_t now,
         return;
     }
 
+    // ── case 3: búsqueda normal ───────────────────────────────────────────
     static constexpr uint32_t kBorderCorrectMs = 150;
     static constexpr float    kTofBorderCm     = 15.0f;
 
@@ -700,13 +765,14 @@ void LARCStateMachine::handleLookForLineState(uint32_t now,
         odomMove_.left(55.0f);
         return;
     }
-
+  
     odomMove_.forward(50.0f);
 }
 
 void LARCStateMachine::handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx)
 {
-    static constexpr uint32_t kCornerStopMs = 8200;
+
+    static constexpr uint32_t kCornerStopMs = 8200;//1200; //Para que vision empiece
     static constexpr uint32_t kSoftStartMs  = 500;
 
     switch (action_stage)
@@ -716,12 +782,12 @@ void LARCStateMachine::handleLookForCornerState(uint32_t now, bool cornerLEFTDet
         if (cornerLEFTDetected)
         {
             odomMove_.stop();
-            vision.startBeans();
+            vision.startBeans(); 
             action_stage = 1;
             action_start_time = now;
             return;
         }
-        const int error = 2900 - qtrFront.getPosition();
+        const int error = 2900 - qtrFront.getPosition(); // ← invertido
         const float corr = constrain(error * 0.03f, -30.0f, 30.0f);
         odomMove_.setTranslation(-50.0f, corr);
         break;
@@ -729,6 +795,7 @@ void LARCStateMachine::handleLookForCornerState(uint32_t now, bool cornerLEFTDet
 
     case 1:
     {
+        
         odomMove_.stop();
 
         if ((now - action_start_time) >= kCornerStopMs)
@@ -823,7 +890,7 @@ void LARCStateMachine::handleBEANSGoBackState(uint32_t now, bool frontLeftDetect
         elevator.ElevatorPosition(0);
         odomMove_.stop();
         action_start_time = now;
-        action_stage = 1;
+        action_stage = 1;  // ← falta esto
         return;
 
     case 1:
@@ -834,7 +901,17 @@ void LARCStateMachine::handleBEANSGoBackState(uint32_t now, bool frontLeftDetect
         return;
 
     case 2:
+        //elevator.ElevatorPosition(1);
         odomMove_.stop();
+        /*
+        if ((now - action_start_time) >= 3700)
+        {   vision.stop();
+            vision.clearErrors();
+            action_start_time = now;
+            action_stage = 3;
+        }
+        return;
+        */
 
     case 3:
         elevator.ElevatorPosition(0);
@@ -986,6 +1063,10 @@ case PoolSubState::AVOID_RIGHT:
 
 void LARCStateMachine::handleLookForLineBackWards(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected)
 {
+
+    //servos.intakeUpperDeploy();
+    //servos.intakeLowerDeploy();
+
     switch (action_stage)
     {
     case 0:
@@ -1066,7 +1147,7 @@ void LARCStateMachine::handleBenefitsStartCorner(uint32_t now, bool cornerLeftDe
 
         if (!onLine)
         {
-            LARC.left(kBaseSpeed);
+            LARC.left(kBaseSpeed); // <- Provicionial LARC.stop();
             return;
         }
 
@@ -1089,6 +1170,7 @@ void LARCStateMachine::handleBenefitsStartCorner(uint32_t now, bool cornerLeftDe
 
 void LARCStateMachine::handleBenefits(uint32_t now, bool cornerRIGHTDetected, float vx, bool online)
 {
+
     switch (action_stage)
     {
     case 0:
@@ -1110,6 +1192,7 @@ void LARCStateMachine::handleBenefits(uint32_t now, bool cornerRIGHTDetected, fl
     {
         LARC.setTranslation(vx, -0.48f);
 
+        // Here goes the rutine
         if (cornerRIGHTDetected)
         {
             action_stage = 2;

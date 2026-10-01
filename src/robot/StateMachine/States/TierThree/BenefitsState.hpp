@@ -1,3 +1,9 @@
+/*
+*@author:  Ximena Patricia García Magdaleno
+* BenefitsState.hpp
+* State Machine Tier Three.3- Benefits State
+*/
+
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
@@ -13,6 +19,7 @@ public:
         transitionToStop = false;
 
         switch (action_stage) {
+            // ── Stage 0: Decidir si ya estamos en la esquina RIGHT ──────────
             case 0: {
                 if (!cornerRIGHTDetected) {
                     action_stage = 1;
@@ -24,6 +31,7 @@ public:
                 break;
             }
 
+            // ── Stage 1: Avanzar hasta detectar la esquina RIGHT ────────────
             case 1: {
                 LARC.setTranslation(vx, -0.48f);
 
@@ -33,6 +41,7 @@ public:
                 break;
             }
 
+            // ── Stage 2: Brake por 1000 ms antes de transicionar a STOP ────
             case 2: {
                 LARC.brake();
 
