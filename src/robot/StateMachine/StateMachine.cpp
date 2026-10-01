@@ -3,35 +3,36 @@
 #include "robot/instances/instances.hpp"
 #include "constants.h"
 #include "Vision.hpp"
-#include "testOdometry.hpp"
 
 namespace
 {
+    static constexpr STATES kInitialState = STATES::LOOKFORLINE;
+
     const __FlashStringHelper *mainStateName(STATES state)
     {
         switch (state)
         {
-        case STATES::START:
+        case STATES::START: // ST:0
             return F(""); // F("START ♡ ♡ ♡");
-        case STATES::POOL:
+        case STATES::POOL: // ST:1
             return F(""); // F("POOL");
-        case STATES::LOOKFORLINE:
+        case STATES::LOOKFORLINE: // ST:2
             return F(""); // F("LOOKFORLINE");
-        case STATES::LOOKFORCORNER:
+        case STATES::LOOKFORCORNER: // ST:3
             return F(""); // F("LOOKFORCORNER");
-        case STATES::BEANS:
+        case STATES::BEANS: // ST:4
             return F(""); // F("BEANS");
-        case STATES::BEANSGOBACK:
+        case STATES::BEANSGOBACK: // ST:5
             return F(""); // F("BEANSGOBACK");
-        case STATES::POOLSGOBACK:
+        case STATES::POOLSGOBACK: // ST:6
             return F(""); // F("POOLSGOBACK");
-        case STATES::LOOKFORLINEBACKWARDS:
+        case STATES::LOOKFORLINEBACKWARDS: // ST:7
             return F(""); // F("LOOKFORLINEBACKWARDS");
-        case STATES::BENEFITSSTARTCORNER:
+        case STATES::BENEFITSSTARTCORNER: // ST:8
             return F(""); // F("BENEFITSSTARTCORNER");
-        case STATES::BENEFITS:
+        case STATES::BENEFITS: // ST:9
             return F(""); // F("BENEFITS");
-        case STATES::STOP:
+        case STATES::STOP: // ST:10
             return F(""); // F("STOP ♡ ♡ ♡ ♡ ♡");
         default:
             return F(""); // F("DEFAULT");
@@ -45,15 +46,13 @@ LARCStateMachine::LARCStateMachine()
 
 void LARCStateMachine::begin()
 {
-    currentState = STATES::START; // always in START
-
+    currentState = kInitialState;
     state_start_time = millis();
 
     visionLeft = 0;
     visionRight = 0;
 
-    // Elevator
-
+    //Elevator
     pinMode(limitSwitch, INPUT_PULLUP);
 
     vision.begin();
@@ -61,101 +60,46 @@ void LARCStateMachine::begin()
 
     Wire.begin();
     Wire.setClock(400000);
-    i2cMux.begin();
 
-    bool okL = tofLeft.begin();
-    bool okR = tofRight.begin();
+    Wire1.begin();
+    Wire1.setClock(100000);
+    Serial.print("i2cMux init: "); Serial.println(i2cMux.begin() ? "OK" : "FAIL");
 
-    Serial.print("tofLeft init: ");  Serial.println(okL ? "OK" : "FAIL");
-    Serial.print("tofRight init: "); Serial.println(okR ? "OK" : "FAIL");
+    // UL/UR (frente) para POOL, LL/LR (atras) para POOLSGOBACK
+    ToF* tofs[] = {&tofLeft, &tofRight, &tofBackLeft, &tofBackRight};
+    const char* tofNames[] = {"tofLeft (UL)", "tofRight (UR)", "tofBackLeft (LL)", "tofBackRight (LR)"};
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        const bool ok = tofs[i]->begin();
+        Serial.print(tofNames[i]); Serial.print(" init: "); Serial.println(ok ? "OK" : "FAIL");
+        tofs[i]->setMaxRange(Perception::kTofMaxRangeMm);
+        tofs[i]->setUpdateInterval(30);
+    }
 
     //QTR
     qtrFront.begin();
     qtrFront.useDefaultCalibration(0);   // FRONT qtr
 
-    tofLeft.setMaxRange(600);
-    tofRight.setMaxRange(600);
-
-    tofLeft.setUpdateInterval(30);
-    tofRight.setUpdateInterval(30);
-
     ir.begin();
     qtrRear.begin();
     qtrRear.useDefaultCalibration(1);
 
-    odomMove_.begin();
-    odomMove_.setCommandTimeout(100);
-    odomMove_.resetPose();
-    odomMove_.captureCurrentYawTarget();
+    LARC.begin();
+    LARC.holdYaw(true);
 
-    startState_.begin();
+    beginState(currentState);
 }
 
 void LARCStateMachine::update()
 {
-    ir.update();
-    qtrFront.update();
-    vision.update();
     const uint32_t now = millis();
+    perception_.update(now);
+    vision.update();
     startStateTime();
 
-    perception_.update(now);
     const PerceptionSnapshot &p = perception_.get();
 
-    const bool onLine = p.onLine;
-    const float vx = p.vx;
-
-    const bool FL = p.FL;
-    const bool FR = p.FR;
-    const bool BL = p.BL;
-    const bool BR = p.BR;
-
-    static uint32_t debugPrintMs = 0;
-    if ((now - debugPrintMs) >= 100)
-    {
-    debugPrintMs = now;
-
-    // Odometría
-    Serial.print(F(" ❤ Odometria❤ | X:"));    Serial.print(odomMove_.getX(),   3);
-    Serial.print(F(" Y:"));      Serial.print(odomMove_.getY(),   3);
-    Serial.print(F(" Yaw:"));    Serial.print(odomMove_.getThetaDeg(), 1);
-    Serial.print(F(" UL:"));     Serial.print(odomMove_.getRpmUL(), 0);
-    Serial.print(F(" UR:"));     Serial.print(odomMove_.getRpmUR(), 0);
-    Serial.print(F(" LL:"));     Serial.print(odomMove_.getRpmLL(), 0);
-    Serial.print(F(" LR:"));     Serial.print(odomMove_.getRpmLR(), 0);
-
-    // Estado actual
-    Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState); Serial.print(")");
-
-    // ToF
-    Serial.print(F(" ❤ Tof❤ |"));
-    Serial.print(F(" TL:")); Serial.print(tofLeft.getDistanceCm(), 0);
-    Serial.print(F("cm vL:")); Serial.print(tofLeft.isValid() ? "OK" : "NO");
-    Serial.print(F(" TR:")); Serial.print(tofRight.getDistanceCm(), 0);
-    Serial.print(F("cm vR:")); Serial.print(tofRight.isValid() ? "OK" : "NO");
-
-    // IR
-    Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(FL);
-    Serial.print(F(" FR:"));   Serial.print(FR);
-    Serial.print(F(" BL:"));   Serial.print(BL);
-    Serial.print(F(" BR:"));   Serial.print(BR);
-
-    // Línea
-    Serial.print(F(" ❤ qtr| onLine:")); Serial.print(onLine);
-    Serial.print(F(" lPos:"));  Serial.print(qtrFront.getPosition());
-    Serial.print(F(" vx:")); Serial.print(vx);
-    Serial.println();
-    }
-
-    const bool frontLeftDetectedLine = FL; // Also used for corner
-    const bool frontRightDetectedLine = FR;
-    const bool backLeftDetectedLine = BL;
-    const bool backRightDetectedLine = BR;
-    const bool frontDetectedLine = p.frontDetectedLine; // Hacer que con el qtr tambien detecte linea
-    const bool backDetected = p.backDetected;
-    const bool leftDetectedPool = p.leftDetectedPool;
-    const bool rightDetectedPool = p.rightDetectedPool;
-    const bool obstacle = p.obstacle;
+    debugPrint(true); // true = imprime, false = no imprime
 
     switch (currentState)
     {
@@ -171,7 +115,7 @@ void LARCStateMachine::update()
     case STATES::POOL:
     {
         bool transitionToLookForLine = false;
-        poolState_.update(now, obstacle, leftDetectedPool, rightDetectedPool, transitionToLookForLine);
+        poolState_.update(now, p.obstacle, p.leftDetectedPool, p.rightDetectedPool, p.tofReady, transitionToLookForLine);
         if (transitionToLookForLine)
             setState(STATES::LOOKFORLINE);
         break;
@@ -180,7 +124,7 @@ void LARCStateMachine::update()
     case STATES::LOOKFORLINE:
     {
         bool transitionToCorner = false;
-        lookForLineState_.update(now, frontDetectedLine, frontLeftDetectedLine, frontRightDetectedLine, onLine, transitionToCorner);
+        lookForLineState_.update(now, p.frontDetectedLine, p.frontLeftDetectedLine, p.frontRightDetectedLine, p.onLine, transitionToCorner);
         if (transitionToCorner)
             setState(STATES::LOOKFORCORNER);
         break;
@@ -189,7 +133,7 @@ void LARCStateMachine::update()
     case STATES::LOOKFORCORNER:
     {
         bool transitionToBeans = false;
-        lookForCornerState_.update(now, backLeftDetectedLine, vx, transitionToBeans);
+        lookForCornerState_.update(now, p.backLeftDetectedLine, p.onLine, transitionToBeans);
         if (transitionToBeans)
             setState(STATES::BEANS);
         break;
@@ -197,32 +141,24 @@ void LARCStateMachine::update()
 
     case STATES::BEANS:
     {
-        bool transitionToBeansGoBack = false;
         bool transitionToPoolsGoBack = false;
         bool transitionToStop = false;
-        beansState_.update(now, backRightDetectedLine, onLine, vx, transitionToBeansGoBack, transitionToPoolsGoBack, transitionToStop);
+        beansState_.update(now, p.backRightDetectedLine, p.onLine, transitionToPoolsGoBack, transitionToStop);
         if (transitionToStop)
             setState(STATES::STOP);
-        else if (transitionToBeansGoBack)
-            setState(STATES::BEANSGOBACK);
         else if (transitionToPoolsGoBack)
             setState(STATES::POOLSGOBACK);
         break;
     }
 
-    case STATES::BEANSGOBACK:
-    {
-        bool transitionToBeans = false;
-        beansGoBackState_.update(now, frontLeftDetectedLine, onLine, vx, transitionToBeans);
-        if (transitionToBeans)
-            setState(STATES::BEANS);
+    case STATES::BEANSGOBACK: //(17-09-2026) We are skipping this step by the moment
+        beansGoBackState_.update(p.BL, p.BR, p.FL);
         break;
-    }
 
     case STATES::POOLSGOBACK:
     {
         bool transitionToLookForLineBackwards = false;
-        poolsGoBackState_.update(now, obstacle, leftDetectedPool, rightDetectedPool, transitionToLookForLineBackwards);
+        poolsGoBackState_.update(now, p.rearObstacle, p.leftDetectedPool, p.rightDetectedPool, p.tofReady, transitionToLookForLineBackwards);
         if (transitionToLookForLineBackwards)
             setState(STATES::LOOKFORLINEBACKWARDS);
         break;
@@ -231,7 +167,7 @@ void LARCStateMachine::update()
     case STATES::LOOKFORLINEBACKWARDS:
     {
         bool transitionToBenefitsStartCorner = false;
-        lookForLineBackwardsState_.update(now, backDetected, backLeftDetectedLine, backRightDetectedLine, transitionToBenefitsStartCorner);
+        lookForLineBackwardsState_.update(now, p.backDetected, p.backLeftDetectedLine, p.backRightDetectedLine, transitionToBenefitsStartCorner);
         if (transitionToBenefitsStartCorner)
             setState(STATES::BENEFITSSTARTCORNER);
         break;
@@ -240,7 +176,7 @@ void LARCStateMachine::update()
     case STATES::BENEFITSSTARTCORNER:
     {
         bool transitionToBenefits = false;
-        benefitsStartCornerState_.update(now, frontLeftDetectedLine, vx, onLine, transitionToBenefits);
+        benefitsStartCornerState_.update(now, p.frontLeftDetectedLine, transitionToBenefits);
         if (transitionToBenefits)
             setState(STATES::BENEFITS);
         break;
@@ -249,18 +185,15 @@ void LARCStateMachine::update()
     case STATES::BENEFITS:
     {
         bool transitionToStop = false;
-        benefitsState_.update(now, backLeftDetectedLine, vx, onLine, transitionToStop);
+        benefitsState_.update(now, p.frontRightDetectedLine, transitionToStop);
         if (transitionToStop)
             setState(STATES::STOP);
         break;
     }
 
     case STATES::STOP:
-        stopState_.update(now);
-        break;
-
     default:
-        stopState_.update(now);
+        stopState_.update();
         break;
     }
 }
@@ -273,46 +206,32 @@ void LARCStateMachine::setState(STATES newState)
     currentState = newState;
     state_start_time = millis();
 
-    switch (newState)
-    {
-    case STATES::START:
-        startState_.begin();
-        break;
-    case STATES::POOL:
-        poolState_.begin();
-        break;
-    case STATES::LOOKFORLINE:
-        lookForLineState_.begin();
-        break;
-    case STATES::LOOKFORCORNER:
-        lookForCornerState_.begin();
-        break;
-    case STATES::BEANS:
-        beansState_.begin();
-        break;
-    case STATES::BEANSGOBACK:
-        beansGoBackState_.begin();
-        break;
-    case STATES::POOLSGOBACK:
-        poolsGoBackState_.begin();
-        break;
-    case STATES::LOOKFORLINEBACKWARDS:
-        lookForLineBackwardsState_.begin();
-        break;
-    case STATES::BENEFITSSTARTCORNER:
-        benefitsStartCornerState_.begin();
-        break;
-    case STATES::BENEFITS:
-        benefitsState_.begin();
-        break;
-    case STATES::STOP:
-        stopState_.begin();
-        break;
-    }
+    beginState(newState);
+
+    qtrFront.resetFilter();
+    qtrRear.resetFilter();
 
     vision.resetGuards();
 
     Serial.println(mainStateName(currentState));
+}
+
+void LARCStateMachine::beginState(STATES state)
+{
+    switch (state)
+    {
+    case STATES::START:                startState_.begin(); break;
+    case STATES::POOL:                 poolState_.begin(); break;
+    case STATES::LOOKFORLINE:          lookForLineState_.begin(); break;
+    case STATES::LOOKFORCORNER:        lookForCornerState_.begin(); break;
+    case STATES::BEANS:                beansState_.begin(); break;
+    case STATES::BEANSGOBACK:          beansGoBackState_.begin(); break;
+    case STATES::POOLSGOBACK:          poolsGoBackState_.begin(); break;
+    case STATES::LOOKFORLINEBACKWARDS: lookForLineBackwardsState_.begin(); break;
+    case STATES::BENEFITSSTARTCORNER:  benefitsStartCornerState_.begin(); break;
+    case STATES::BENEFITS:             benefitsState_.begin(); break;
+    case STATES::STOP:                 stopState_.begin(); break;
+    }
 }
 
 void LARCStateMachine::startStateTime()
@@ -323,7 +242,75 @@ void LARCStateMachine::startStateTime()
     }
 }
 
+void LARCStateMachine::debugPrint(bool enabled)
+{
+    if (!enabled)
+        return;
+
+    const uint32_t now = millis();
+    static uint32_t debugPrintMs = 0;
+    if ((now - debugPrintMs) < 100)
+        return;
+    debugPrintMs = now;
+
+    const PerceptionSnapshot &p = perception_.get();
+
+    Serial.print(F("LARCStateMachine"));
+
+    Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
+
+    // Estado actual
+    Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState);
+    Serial.print(F(" PS:"));
+    Serial.print(currentState == STATES::POOLSGOBACK ? (int)poolsGoBackState_.getSubState()
+                                                     : (int)poolState_.getSubState());
+    Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
+
+    // ToF en mm (-1 = sin lectura valida)
+    auto printTof = [](const __FlashStringHelper* label, const ToF& tof)
+    {
+        Serial.print(label);
+        Serial.print(tof.isValid() ? (int)tof.getDistanceMm() : -1);
+        Serial.print(F("mm"));
+    };
+    Serial.print(F(" ❤ ToF❤ |"));
+    printTof(F(" UR:"), tofRight);
+    printTof(F(" UL:"), tofLeft);
+    printTof(F(" LL:"), tofBackLeft);
+    printTof(F(" LR:"), tofBackRight);
+
+    // IR
+    Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(p.FL);
+    Serial.print(F(" FR:")); Serial.print(p.FR);
+    Serial.print(F(" BL:")); Serial.print(p.BL);
+    Serial.print(F(" BR:")); Serial.print(p.BR);
+
+    // Línea (lPos sirve para saber el valor del centro del qtr)
+    Serial.print(F(" ❤ qtr| onLine:")); Serial.print(p.onLine);
+    Serial.print(F(" lPos:")); Serial.print(p.linePos);
+    Serial.print(F(" vx:")); Serial.print(p.vx);
+
+    Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine(Constants::QTRCalibration::kBinaryThreshold));
+    Serial.print(F(" lPos:")); Serial.print(qtrRear.getPosition());
+
+    auto printRawNorm = [](const __FlashStringHelper* rawLabel,
+                           const __FlashStringHelper* normLabel,
+                           const QTR& qtr)
+    {
+        const uint16_t* raw  = qtr.getRaw();
+        const uint16_t* norm = qtr.getNorm();
+        Serial.print(rawLabel);
+        for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(raw[i]); Serial.print(','); }
+        Serial.print(normLabel);
+        for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(norm[i]); Serial.print(','); }
+    };
+    printRawNorm(F(" | raw:"), F(" norm:"), qtrFront);
+    printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
+
+    Serial.println();
+}
+
 void LARCStateMachine::updateControl()
 {
-    odomMove_.update();
+    LARC.update();
 }

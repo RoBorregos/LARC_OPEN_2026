@@ -1,27 +1,27 @@
 /*
 *@author:  Ximena Patricia García Magdaleno
-* StartState.hpp
-* State Machine Tier One.3- Start State 
+* BenefitsStartCorner.hpp
+* State Machine Tier Three.2- Benefits Start Corner State
 */
-
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
+#include "../StateCommon.hpp"
 
 class BenefitsStartCornerState {
 public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
+        rearCorrFiltered = 0.0f;
     }
 
-    void update(uint32_t now, bool cornerLeftDetected, float vx, bool onLine, bool& transitionToBenefits) {
+    void update(uint32_t now, bool cornerLeftDetected, bool& transitionToBenefits) {
+        using namespace StateCommon;
         transitionToBenefits = false;
 
-        static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
-
         switch (action_stage) {
-            // ── Stage 0: Buscar esquina LEFT ────────────────────────────────
+            // ── Stage 0: Buscar esquina LEFT con corrección de qtrRear ──────
             case 0: {
                 if (cornerLeftDetected) {
                     LARC.brake();
@@ -30,18 +30,16 @@ public:
                     return;
                 }
 
-                if (!onLine) {
-                    LARC.left(kBaseSpeed);
-                    return;
-                }
+                const float corrTarget = rearCornerCorrTarget();
+                rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
 
-                LARC.setTranslation(vx, 0.48f);
+                LARC.setTranslation(rearCorrFiltered, kVelocity);
                 break;
             }
 
-            // ── Stage 1: Brake por 1000 ms antes de transicionar ──────────
+            // ── Stage 1: Stop por 1000 ms antes de transicionar ──────────
             case 1: {
-                LARC.brake();
+                LARC.stop();
                 if ((now - action_start_time) >= 1000) {
                     transitionToBenefits = true;
                 }
@@ -51,6 +49,7 @@ public:
     }
 
 private:
-    uint8_t action_stage = 0;
+    int action_stage = 0;
     uint32_t action_start_time = 0;
+    float rearCorrFiltered = 0.0f;
 };
