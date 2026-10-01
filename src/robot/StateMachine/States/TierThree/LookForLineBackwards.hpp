@@ -1,9 +1,3 @@
-/*
-*@author:  Ximena Patricia García Magdaleno
-* StartState.hpp
-* State Machine Tier One.3- Start State 
-*/
-
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
@@ -22,7 +16,6 @@ public:
         static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
 
         switch (action_stage) {
-            // ── Stage 0: Buscar línea trasera completa ──────────────────────
             case 0: {
                 if (backDetected) {
                     transitionToBenefitsStartCorner = true;
@@ -45,7 +38,6 @@ public:
                 break;
             }
 
-            // ── Stage 1: Girar derecha por 500 ms ──────────────────────────
             case 1: {
                 if (backDetected) {
                     transitionToBenefitsStartCorner = true;
@@ -60,7 +52,6 @@ public:
                 break;
             }
 
-            // ── Stage 2: Girar izquierda por 500 ms ───────────────────────
             case 2: {
                 if (backDetected) {
                     transitionToBenefitsStartCorner = true;

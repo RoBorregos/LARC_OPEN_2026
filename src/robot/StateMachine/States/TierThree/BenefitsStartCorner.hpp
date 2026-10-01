@@ -1,9 +1,3 @@
-/*
-*@author:  Ximena Patricia García Magdaleno
-* StartState.hpp
-* State Machine Tier One.3- Start State 
-*/
-
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
@@ -21,7 +15,6 @@ public:
         static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
 
         switch (action_stage) {
-            // ── Stage 0: Buscar esquina LEFT ────────────────────────────────
             case 0: {
                 if (cornerLeftDetected) {
                     LARC.brake();
@@ -39,7 +32,6 @@ public:
                 break;
             }
 
-            // ── Stage 1: Brake por 1000 ms antes de transicionar ──────────
             case 1: {
                 LARC.brake();
                 if ((now - action_start_time) >= 1000) {
