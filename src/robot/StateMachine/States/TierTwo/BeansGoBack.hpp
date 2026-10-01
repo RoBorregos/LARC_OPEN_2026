@@ -1,3 +1,9 @@
+/*
+*@author:  Ximena Patricia García Magdaleno
+* StartState.hpp
+* State Machine Tier One.2- Start State 
+*/
+
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
@@ -13,6 +19,7 @@ public:
         transitionToBeans = false;
 
         switch (action_stage) {
+            // ── Stage 0: Parar y resetear ──────────────────────────────────
             case 0: {
                 vision.stop();
                 vision.clearErrors();
@@ -23,6 +30,7 @@ public:
                 return;
             }
 
+            // ── Stage 1: Elevador parado, espera y transición ───────────────
             case 1: {
                 elevator.ElevatorPosition(0);
                 odomMove_.stop();
@@ -31,10 +39,13 @@ public:
                 return;
             }
 
+            // ── Stage 2: Parado (cae directo a stage 3) ─────────────────────
             case 2: {
                 odomMove_.stop();
+                // [[fallthrough]]
             }
 
+            // ── Stage 3: Retroceder buscando línea FRONT-LEFT ──────────────
             case 3: {
                 elevator.ElevatorPosition(0);
 
@@ -55,6 +66,7 @@ public:
                 return;
             }
 
+            // ── Stage 4: Stop esperando antes de reintentar BEANS ─────────
             case 4: {
                 elevator.ElevatorPosition(0);
                 odomMove_.stop();
