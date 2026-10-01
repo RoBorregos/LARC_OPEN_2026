@@ -3,10 +3,17 @@
 
 void Perception::update(uint32_t now)
 {
+    ir.update();
+    tofLeft.update();
+    tofRight.update();
+    tofBackLeft.update();
+    tofBackRight.update();
+    qtrFront.update();
+    qtrRear.update();
+
     updateIR();
     updateQTR();
     updateToF(now);
-    updateEncoders(now);
 }
 
 void Perception::updateIR()
@@ -16,6 +23,10 @@ void Perception::updateIR()
     snap_.BL = ir.getState(IRLine::BL);
     snap_.BR = ir.getState(IRLine::BR);
 
+    snap_.frontLeftDetectedLine  = snap_.FL;
+    snap_.frontRightDetectedLine = snap_.FR;
+    snap_.backLeftDetectedLine   = snap_.BR;
+    snap_.backRightDetectedLine  = snap_.BL;
     snap_.frontDetectedLine = snap_.FL || snap_.FR;
     snap_.backDetected      = snap_.BL || snap_.BR;
     snap_.leftDetectedPool  = snap_.FL || snap_.BL;
@@ -33,59 +44,56 @@ void Perception::updateQTR()
 
 void Perception::updateToF(uint32_t now)
 {
-    if (tofReadyTimestamp_ == 0 && (tofLeft.isValid() || tofRight.isValid()))
+    if (tofReadyTimestamp_ == 0 &&
+        (tofLeft.isValid() || tofRight.isValid() || tofBackLeft.isValid() || tofBackRight.isValid()))
         tofReadyTimestamp_ = now;
 
     const bool tofReady = tofReadyTimestamp_ != 0 &&
                           (now - tofReadyTimestamp_) > kTofWarmupMs;
+    snap_.tofReady = tofReady;
 
-    snap_.obstacleLeft  = tofReady && tofLeft.isValid()  && tofLeft.getDistanceCm()  < kObstacleDistanceCm;
-    snap_.obstacleRight = tofReady && tofRight.isValid() && tofRight.getDistanceCm() < kObstacleDistanceCm;
-
-    if (!obstacleLatched_)
+    auto seesObstacle = [&](const ToF &tof)
     {
-        if (snap_.obstacleLeft || snap_.obstacleRight)
-        {
-            if (obstacleDetectStartMs_ == 0)
-                obstacleDetectStartMs_ = now;
+        return tofReady && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
+    };
 
-            if ((now - obstacleDetectStartMs_) >= kObstacleConfirmMs)
-            {
-                obstacleLatched_       = true;
-                obstacleClearStartMs_  = 0;
-                obstacleDetectStartMs_ = 0;
-            }
-        }
-        else
+    snap_.obstacle     = frontLatch_.update(now, seesObstacle(tofLeft) || seesObstacle(tofRight));
+    snap_.rearObstacle = rearLatch_.update(now, seesObstacle(tofBackLeft) || seesObstacle(tofBackRight));
+}
+
+bool Perception::ObstacleLatch::update(uint32_t now, bool seenNow)
+{
+    if (!latched)
+    {
+        if (!seenNow)
         {
-            obstacleDetectStartMs_ = 0; // reset si deja de verse
+            detectStartMs = 0;
+            return false;
         }
+        if (detectStartMs == 0)
+            detectStartMs = now;
+        if ((now - detectStartMs) >= kConfirmMs)
+        {
+            latched       = true;
+            clearStartMs  = 0;
+            detectStartMs = 0;
+        }
+        return latched;
+    }
+
+    if (seenNow)
+    {
+        clearStartMs = 0;
     }
     else
     {
-        if (snap_.obstacleLeft || snap_.obstacleRight)
+        if (clearStartMs == 0)
+            clearStartMs = now;
+        if ((now - clearStartMs) >= kReleaseMs)
         {
-            obstacleClearStartMs_ = 0;
-        }
-        else
-        {
-            if (obstacleClearStartMs_ == 0)
-                obstacleClearStartMs_ = now;
-
-            if ((now - obstacleClearStartMs_) >= kObstacleReleaseMs)
-            {
-                obstacleLatched_      = false;
-                obstacleClearStartMs_ = 0;
-            }
+            latched      = false;
+            clearStartMs = 0;
         }
     }
-
-    snap_.obstacle = obstacleLatched_;
-}
-
-void Perception::updateEncoders(uint32_t /*now*/)
-{
-    // TODO: once ENCODER exposes per-wheel deltas, compute wheelStalled and
-    // distanceTraveledCm here so Pool/PoolsGoBack can gate on wheel slip
-    // instead of relying only on ToF + timers.
+    return latched;
 }

@@ -1,20 +1,21 @@
-#ifndef DRIVESTATEMACHINETEST_H
-#define DRIVESTATEMACHINETEST_H
+#ifndef STATEMACHINE_H
+#define STATEMACHINE_H
 
 #include <Arduino.h>
 #include "constants.h"
 #include "pins.h"
+#include "testOdometry.hpp"
 #include "robot/instances/instances.hpp"
 
 //State machine (states) files...
-#include "../States/TierOne/StartState.hpp"
-#include "../States/TierOne/PoolState.hpp"
-#include "../States/TierOne/LookForLineState.hpp"
+#include "robot/StateMachine/States/TierOne/StartState.hpp"
+#include "robot/StateMachine/States/TierOne/PoolState.hpp"
+#include "robot/StateMachine/States/TierOne/LookForLineState.hpp"
 
-enum class DriveTestSTATES
+enum class STATES
 {
     START,
-    POOL,
+    POOL,         
     LOOKFORLINE,          //Try if this works well, in case there aren't pools (add qtr for front line detection)
     LOOKFORCORNER,
     BEANS,                // BEANS(left to right) :: Recoje las pelotas y inicializa vision + Sorter (vision)
@@ -26,17 +27,17 @@ enum class DriveTestSTATES
     STOP                  // FINISH ALL TASKS      :D          !!! Ends in right corner
 };
 
-class DriveStateMachineTest
+class LARCStateMachine
 {
 public:
-    DriveStateMachineTest();
+    LARCStateMachine();
 
     void begin();
     void update();
     void updateControl();
 
 private:
-    DriveTestSTATES currentState = DriveTestSTATES::START;
+    STATES currentState = STATES::START;
     PoolSubState poolState = PoolSubState::FORWARD;
 
     uint32_t state_start_time = 0;
@@ -45,8 +46,6 @@ private:
 
     uint32_t clearStartMs = 0;
     uint32_t noObstacleStartMs = 0;
-
-    bool tofReady_ = false;
 
     byte visionLeft = 0;
     byte visionRight = 0;
@@ -69,22 +68,11 @@ private:
     uint32_t lfLeftHoldMs        = 0;
     uint32_t lfRightHoldMs       = 0;
 
-    float cornerCorrFiltered = 0.0f;
-
-    float rearCorrFiltered = 0.0f;
-
-    bool     backLineArmed   = false;
-    uint32_t backLineArmedMs = 0;
-
     // Set states
-    void setState(DriveTestSTATES newState);
+    void setState(STATES newState);
     void setPoolState(PoolSubState newState);
     void startStateTime();
     void readVision();
-
-    // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
-    void debugPrint(bool enabled);
-    float lastVx_ = 0.0f; // vx del ultimo update(), solo para debugPrint
 
     // Cases
     // First part
@@ -92,10 +80,10 @@ private:
                                                                                                           // Second part (AVOID)
     void handlePoolState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected);             // POOLS
     void handleLookForLineState(uint32_t now, bool frontDetected, bool leftDetected, bool rightDetected, bool onLine); // LOOKFORLINE(no obstacle detected | obstacle no longer detected)
-    void handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx, bool onLine);          // LOOKFORCORNER (to start vision)
+    void handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx);                       // LOOKFORCORNER (to start vision)
     // Third part (RECOLECT)
     void handleBEANS(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx); // BEANS state (recolection + sorting)
-    void handleBEANSGoBackState(uint32_t now, bool BL, bool BR, bool FL);
+    void handleBEANSGoBackState(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx);
     // Fourth part (GO BACK)
     void handlePOOLSGoBackState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected);
     void handleLookForLineBackWards(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected);

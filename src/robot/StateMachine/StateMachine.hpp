@@ -4,7 +4,6 @@
 #include <Arduino.h>
 #include "constants.h"
 #include "pins.h"
-#include "testOdometry.hpp"
 #include "robot/instances/instances.hpp"
 #include "robot/Perception/Perception.hpp"
 
@@ -56,10 +55,8 @@ private:
     // ELEVATOR
     const int limitSwitch = Pins::kLimitSwitch;
 
-    // Shared sensor fusion (ToF/IR/QTR, encoders soon), computed once per tick
     Perception perception_;
 
-    // One instance per state class (see States/Tier*)
     StartState startState_;
     PoolState poolState_;
     LookForLineState lookForLineState_;
@@ -73,7 +70,11 @@ private:
     StopState stopState_;
 
     void setState(STATES newState);
+    void beginState(STATES state);
     void startStateTime();
+
+    // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
+    void debugPrint(bool enabled);
 };
 
 #endif

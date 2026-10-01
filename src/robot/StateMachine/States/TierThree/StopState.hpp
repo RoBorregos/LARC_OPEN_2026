@@ -1,24 +1,17 @@
 /*
 *@author:  Ximena Patricia García Magdaleno
-* StartState.hpp
-* State Machine Tier One.3- Start State 
+* StopState.hpp
+* State Machine Tier Three.4- Stop State
 */
-
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
 
 class StopState {
 public:
-    void begin() {
-        // Nada que inicializar
-    }
+    void begin() {}
 
-    void update(uint32_t now) {
-        // Solo detener el robot
-        LARC.brake();
+    void update() {
+        LARC.stop();
     }
-
-private:
-    // Sin estado interno
 };

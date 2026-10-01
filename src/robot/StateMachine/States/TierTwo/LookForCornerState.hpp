@@ -1,40 +1,49 @@
+/*
+*@author:  Ximena Patricia García Magdaleno
+* LookForCornerState.hpp
+* State Machine Tier Two.1- Look For Corner State
+*/
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
+#include "../StateCommon.hpp"
 
 class LookForCornerState {
 public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
+        cornerCorrFiltered = 0.0f;
     }
 
-    void update(uint32_t now, bool cornerLEFTDetected, float vx, bool& transitionToBeans) {
+    void update(uint32_t now, bool cornerLEFTDetected, bool onLine, bool& transitionToBeans) {
+        using namespace StateCommon;
         transitionToBeans = false;
 
-        static constexpr uint32_t kCornerStopMs = 8200;  // Para que vision empiece
-        static constexpr uint32_t kSoftStartMs = 500;
+        static constexpr uint32_t kCornerStopMs = 8200; //Para que vision empiece
+        static constexpr uint32_t kSoftStartMs  = 500;
 
         switch (action_stage) {
-            // ── Stage 0: Buscar esquina LEFT y esperar ─────────────────────────
+            // ── Stage 0: Buscar esquina LEFT con corrección de línea ────────────
             case 0: {
                 if (cornerLEFTDetected) {
-                    odomMove_.stop();
+                    LARC.stop();
                     vision.startBeans();
                     action_stage = 1;
                     action_start_time = now;
                     return;
                 }
-                // Avanzar hacia atrás con corrección de línea
-                const int error = 2900 - qtrFront.getPosition();
-                const float corr = constrain(error * 0.03f, -30.0f, 30.0f);
-                odomMove_.setTranslation(-50.0f, corr);
+
+                const float corrTarget = frontCornerCorrTarget(onLine);
+                cornerCorrFiltered += (corrTarget - cornerCorrFiltered) * kCornerCorrAlpha;
+
+                LARC.setTranslation(-cornerCorrFiltered, kVelocity);
                 break;
             }
 
             // ── Stage 1: Stop por kCornerStopMs (esperando a vision) ──────────
             case 1: {
-                odomMove_.stop();
+                LARC.stop();
 
                 if ((now - action_start_time) >= kCornerStopMs) {
                     action_stage = 2;
@@ -45,7 +54,7 @@ public:
 
             // ── Stage 2: Stop por kSoftStartMs antes de transicionar ────────
             case 2: {
-                odomMove_.stop();
+                LARC.stop();
 
                 if ((now - action_start_time) >= kSoftStartMs) {
                     transitionToBeans = true;
@@ -56,6 +65,7 @@ public:
     }
 
 private:
-    uint8_t action_stage = 0;
+    int action_stage = 0;
     uint32_t action_start_time = 0;
+    float cornerCorrFiltered = 0.0f;
 };

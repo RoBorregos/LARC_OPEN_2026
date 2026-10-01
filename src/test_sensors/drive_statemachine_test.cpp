@@ -11,7 +11,7 @@
  */
 
 #include <Arduino.h>
-#include "robot/StateMachine/DriveStateMachineTest/DriveStateMachineTest.hpp"
+#include "robot/UnusedStateMachines/DriveStateMachineTest/DriveStateMachineTest.hpp"
 
 DriveStateMachineTest sm;
 
