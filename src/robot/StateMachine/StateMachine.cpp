@@ -12,29 +12,29 @@ namespace
         switch (state)
         {
         case STATES::START:
-            return F(""); // F("START ♡ ♡ ♡");
+            return F("");
         case STATES::POOL:
-            return F(""); // F("POOL");
+            return F("");
         case STATES::LOOKFORLINE:
-            return F(""); // F("LOOKFORLINE");
+            return F("");
         case STATES::LOOKFORCORNER:
-            return F(""); // F("LOOKFORCORNER");
+            return F("");
         case STATES::BEANS:
-            return F(""); // F("BEANS");
+            return F("");
         case STATES::BEANSGOBACK:
-            return F(""); // F("BEANSGOBACK");
+            return F("");
         case STATES::POOLSGOBACK:
-            return F(""); // F("POOLSGOBACK");
+            return F("");
         case STATES::LOOKFORLINEBACKWARDS:
-            return F(""); // F("LOOKFORLINEBACKWARDS");
+            return F("");
         case STATES::BENEFITSSTARTCORNER:
-            return F(""); // F("BENEFITSSTARTCORNER");
+            return F("");
         case STATES::BENEFITS:
-            return F(""); // F("BENEFITS");
+            return F("");
         case STATES::STOP:
-            return F(""); // F("STOP ♡ ♡ ♡ ♡ ♡");
+            return F("");
         default:
-            return F(""); // F("DEFAULT");
+            return F("");
         }
     }
 }
@@ -45,14 +45,12 @@ LARCStateMachine::LARCStateMachine()
 
 void LARCStateMachine::begin()
 {
-    currentState = STATES::START; // always in START
+    currentState = STATES::START;
 
     state_start_time = millis();
 
     visionLeft = 0;
     visionRight = 0;
-
-    // Elevator
 
     pinMode(limitSwitch, INPUT_PULLUP);
 
@@ -69,9 +67,8 @@ void LARCStateMachine::begin()
     Serial.print("tofLeft init: ");  Serial.println(okL ? "OK" : "FAIL");
     Serial.print("tofRight init: "); Serial.println(okR ? "OK" : "FAIL");
 
-    //QTR
     qtrFront.begin();
-    qtrFront.useDefaultCalibration(0);   // FRONT qtr
+    qtrFront.useDefaultCalibration(0);
 
     tofLeft.setMaxRange(600);
     tofRight.setMaxRange(600);
@@ -115,7 +112,6 @@ void LARCStateMachine::update()
     {
     debugPrintMs = now;
 
-    // Odometría
     Serial.print(F(" ❤ Odometria❤ | X:"));    Serial.print(odomMove_.getX(),   3);
     Serial.print(F(" Y:"));      Serial.print(odomMove_.getY(),   3);
     Serial.print(F(" Yaw:"));    Serial.print(odomMove_.getThetaDeg(), 1);
@@ -124,34 +120,30 @@ void LARCStateMachine::update()
     Serial.print(F(" LL:"));     Serial.print(odomMove_.getRpmLL(), 0);
     Serial.print(F(" LR:"));     Serial.print(odomMove_.getRpmLR(), 0);
 
-    // Estado actual
     Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState); Serial.print(")");
 
-    // ToF
     Serial.print(F(" ❤ Tof❤ |"));
     Serial.print(F(" TL:")); Serial.print(tofLeft.getDistanceCm(), 0);
     Serial.print(F("cm vL:")); Serial.print(tofLeft.isValid() ? "OK" : "NO");
     Serial.print(F(" TR:")); Serial.print(tofRight.getDistanceCm(), 0);
     Serial.print(F("cm vR:")); Serial.print(tofRight.isValid() ? "OK" : "NO");
 
-    // IR
     Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(FL);
     Serial.print(F(" FR:"));   Serial.print(FR);
     Serial.print(F(" BL:"));   Serial.print(BL);
     Serial.print(F(" BR:"));   Serial.print(BR);
 
-    // Línea
     Serial.print(F(" ❤ qtr| onLine:")); Serial.print(onLine);
     Serial.print(F(" lPos:"));  Serial.print(qtrFront.getPosition());
     Serial.print(F(" vx:")); Serial.print(vx);
     Serial.println();
     }
 
-    const bool frontLeftDetectedLine = FL; // Also used for corner
+    const bool frontLeftDetectedLine = FL;
     const bool frontRightDetectedLine = FR;
     const bool backLeftDetectedLine = BL;
     const bool backRightDetectedLine = BR;
-    const bool frontDetectedLine = p.frontDetectedLine; // Hacer que con el qtr tambien detecte linea
+    const bool frontDetectedLine = p.frontDetectedLine;
     const bool backDetected = p.backDetected;
     const bool leftDetectedPool = p.leftDetectedPool;
     const bool rightDetectedPool = p.rightDetectedPool;

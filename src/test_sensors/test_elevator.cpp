@@ -1,28 +1,21 @@
 /*
-    Prueba standalone (sin RTOS) de la clase Elevator. Pines via Pins::
-    (pins.h): IN1_M5 = pin 4, IN2_M5 = pin 3, PWM_M5 = pin 12 (velocidad
-    fija en Elevator.cpp).
-
-    Elevator::ElevatorPosition(): 0 = stop, 1 = subir, 2 = bajar.
-
-    OJO: esta prueba no lee los limit switches. Por eso subir/bajar se cortan solos a los
-    kMoveMs para no chocar contra el tope mecanico.
-
-    Comandos por serial (115200):
-      u -> subir (se detiene solo a los kMoveMs)
-      d -> bajar (se detiene solo a los kMoveMs)
-      s -> parar ya
+    Standalone elevator test with two limit switches.
+    - Limit1 (Pins::kLimitSwitch) pressed  -> elevator goes DOWN
+    - Limit1 (Pins::kLimitSwitch) released -> elevator goes UP
+    - Limit2 (Pins::kLimitSwitch2) is only read and printed.
 
     pio run -e test_elevator -t upload -t monitor
 */
 
 #include <Arduino.h>
-#include <Wire.h>
 #include "Elevator.hpp"
+#include "pins.h"
 
 namespace
 {
-    constexpr uint32_t kMoveMs = 900; // corte de seguridad por movimiento
+    // Switches have external pull-ups, so plain INPUT (no internal pull-up).
+    // Flip to LOW if the switches read inverted.
+    constexpr int kPressedLevel = HIGH;
 
     constexpr int kStop = 0;
     constexpr int kUp   = 1;
@@ -30,13 +23,17 @@ namespace
 
     Elevator elevator;
 
-    int      currentState = kStop;
-    uint32_t stateSince   = 0;
+    int  currentState = -1;
+    bool lastLimit1   = false;
+    bool lastLimit2   = false;
+
+    bool isPressed(uint8_t pin) { return digitalRead(pin) == kPressedLevel; }
 
     void setState(int s)
     {
+        if (s == currentState)
+            return;
         currentState = s;
-        stateSince   = millis();
         elevator.ElevatorPosition(s);
         Serial.println(s == kUp ? "[elevator] UP" : (s == kDown ? "[elevator] DOWN" : "[elevator] STOP"));
     }
@@ -47,22 +44,30 @@ void setup()
     Serial.begin(115200);
     while (!Serial && millis() < 900) {}
 
+    pinMode(Pins::kLimitSwitch, INPUT);
+    pinMode(Pins::kLimitSwitch2, INPUT);
+
     elevator.begin();
     setState(kStop);
 
-    Serial.println("Elevator test (sin control de velocidad): u=subir  d=bajar  s=stop");
+    Serial.println("Elevator test: Limit1 pressed = DOWN, released = UP");
 }
 
 void loop()
 {
-    while (Serial.available())
+    const bool limit1 = isPressed(Pins::kLimitSwitch);
+    const bool limit2 = isPressed(Pins::kLimitSwitch2);
+
+    if (limit1 != lastLimit1)
     {
-        char c = Serial.read();
-        if (c == 'u')      setState(kUp);
-        else if (c == 'd') setState(kDown);
-        else if (c == 's') setState(kStop);
+        Serial.println(limit1 ? "Limit1 PRESSED" : "Limit1 RELEASED");
+        lastLimit1 = limit1;
+    }
+    if (limit2 != lastLimit2)
+    {
+        Serial.println(limit2 ? "Limit2 PRESSED" : "Limit2 RELEASED");
+        lastLimit2 = limit2;
     }
 
-    if (currentState != kStop && millis() - stateSince >= kMoveMs)
-        setState(kStop);
+    setState(limit1 ? kDown : kUp);
 }
