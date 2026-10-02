@@ -29,7 +29,7 @@
 
 static Mux74HC4067 mux(Pins::kMuxSig2);
 static QTR qtrFront(Pins::kQtrFrontFirstCh, mux);
-static QTR qtrRear(Pins::kQtrRearFirstCh, mux);
+static QTR qtrRear(Pins::kQtrRearFirstCh, mux, Pins::kQtrRearCount);
 
 static void loadDefaults()
 {

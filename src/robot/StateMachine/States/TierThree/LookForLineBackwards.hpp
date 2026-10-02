@@ -7,83 +7,146 @@
 #include <Arduino.h>
 #include "constants.h"
 #include "robot/instances/instances.hpp"
+#include "robot/StateMachine/States/QtrEntryTracker.hpp"
 
 class LookForLineBackwardsState {
 public:
     void begin() {
-        lfCorrecting = false;
-        lfCorrectionDir = 0;
-        lfCorrectionStartMs = 0;
-        backLineArmed = false;
-        backLineArmedMs = 0;
+        tracker_.reset();
+        left_.clear();
+        right_.clear();
+        correcting_      = false;
+        correctionDir_   = 0;
+        correctionStart_ = 0;
     }
 
-    void update(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected,
+    // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
+    void update(uint32_t now, bool FL, bool FR, bool BL, bool BR,
                 bool& transitionToBenefitsStartCorner) {
         transitionToBenefitsStartCorner = false;
 
-        static constexpr uint32_t kBorderCorrectMs = 150;
-        static constexpr uint16_t kTofBorderMm     = 150;
-        static constexpr uint32_t kBackLineArmDelayMs = 700;
-
-        const bool realBorderLeft  = backLeftDetected  && tofLeft.isValid()  && tofLeft.getDistanceMm()  > kTofBorderMm;
-        const bool realBorderRight = backRightDetected && tofRight.isValid() && tofRight.getDistanceMm() > kTofBorderMm;
-
-        if (backDetected && !backLineArmed) {
-            backLineArmed   = true;
-            backLineArmedMs = now;
-        }
-
-        const bool armDelayElapsed = backLineArmed && (now - backLineArmedMs) >= kBackLineArmDelayMs;
-
-        // Off-line floor already reads norm ~470 on qtrRear, so the default 200 is useless here.
-        if (armDelayElapsed && qtrRear.onLine(Constants::QTRCalibration::kBinaryThreshold)) {
-            lfCorrecting        = false;
-            lfCorrectionDir     = 0;
-            lfCorrectionStartMs = 0;
-            Serial.println("[LOOKFORLINE] FRONT DETECTED -> LOOKFORCORNER");
+        if (tracker_.update() == QtrEntryTracker::Phase::ON) {
+            correcting_ = false;
+            Serial.println("[LOOKFORLINEBACKWARDS] QTR ON -> BENEFITSSTARTCORNER");
             LARC.stop();
             transitionToBenefitsStartCorner = true;
             return;
         }
 
-        if (lfCorrecting) {
-            if ((now - lfCorrectionStartMs) < kBorderCorrectMs) {
-                if (lfCorrectionDir < 0)
-                    LARC.left(0.30f);
+        if (correcting_) {
+            if ((now - correctionStart_) < kBorderCorrectMs) {
+                if (correctionDir_ < 0)
+                    LARC.left(kSpeed);
                 else
-                    LARC.right(0.30f);
+                    LARC.right(kSpeed);
                 return;
             }
-            lfCorrecting = false;
-            LARC.forward(0.30f);
+            correcting_ = false;
+        }
+
+        const bool leftCorrect  = left_.update(now, FL, BL);
+        const bool rightCorrect = right_.update(now, FR, BR);
+
+        // Both sides at once means a line crossing the robot, not a side border.
+        if (left_.latched && right_.latched) {
+            left_.clear();
+            right_.clear();
+        } else if (leftCorrect && !(FR || BR)) {
+            startCorrection(now, +1);
+            LARC.right(kSpeed);
+            return;
+        } else if (rightCorrect && !(FL || BL)) {
+            startCorrection(now, -1);
+            LARC.left(kSpeed);
             return;
         }
 
-        if (realBorderLeft && !backRightDetected) {
-            lfCorrecting        = true;
-            lfCorrectionDir     = +1;
-            lfCorrectionStartMs = now;
-            LARC.right(0.30f);
-            return;
-        }
-
-        if (realBorderRight && !backLeftDetected) {
-            lfCorrecting        = true;
-            lfCorrectionDir     = -1;
-            lfCorrectionStartMs = now;
-            LARC.left(0.30f);
-            return;
-        }
-
-        LARC.backward(0.30f);
+        LARC.backward(kSpeed);
     }
 
 private:
-    bool     lfCorrecting        = false;
-    int8_t   lfCorrectionDir     = 0;
-    uint32_t lfCorrectionStartMs = 0;
+    static constexpr float    kSpeed           = 0.30f;
+    static constexpr uint32_t kBorderCorrectMs = 150;
+    static constexpr uint32_t kLatchTimeoutMs  = 800;
+    static constexpr uint32_t kLatchIrOffMs    = 150;
 
-    bool     backLineArmed   = false;
-    uint32_t backLineArmedMs = 0;
+    // One side's IR pair: first IR latches, the other IR of the same side triggers the correction.
+    struct SideLatch {
+        bool     latched   = false;
+        bool     firstFront = false;
+        uint32_t latchMs   = 0;
+        uint32_t offSinceMs = 0;
+
+        void clear() {
+            latched    = false;
+            latchMs    = 0;
+            offSinceMs = 0;
+        }
+
+        bool update(uint32_t now, bool front, bool back) {
+            if (!latched) {
+                if (front && back)
+                    return true;
+                if (front || back) {
+                    latched    = true;
+                    firstFront = front;
+                    latchMs    = now;
+                    offSinceMs = 0;
+                }
+                return false;
+            }
+
+            const bool firstOn = firstFront ? front : back;
+            const bool otherOn = firstFront ? back : front;
+
+            if (otherOn) {
+                clear();
+                return true;
+            }
+            if ((now - latchMs) >= kLatchTimeoutMs) {
+                clear();
+                return false;
+            }
+            if (firstOn) {
+                offSinceMs = 0;
+            } else {
+                if (offSinceMs == 0)
+                    offSinceMs = now;
+                if ((now - offSinceMs) >= kLatchIrOffMs)
+                    clear();
+            }
+            return false;
+        }
+    };
+
+    // qtrRear: C8..C13 (indices 0..5), the line enters through C8 when going backwards.
+    // Floor already reads norm ~470 on qtrRear, so thresholds sit above it.
+    static QtrEntryTracker::Config trackerCfg() {
+        return {
+            /*entryAtHighIndex*/ false,
+            /*onThreshold*/      Constants::QTRCalibration::kBinaryThreshold,
+            /*offThreshold*/     Constants::QTRCalibration::kBinaryThreshold - 80,
+            /*entryMaxProgress*/ 1.0f,
+            /*centerProgress*/   2.5f,
+            /*centerTolerance*/  0.75f,
+            /*maxRegress*/       0.6f,
+            /*confirmReads*/     2,
+            /*onReads*/          3,
+            /*lostReads*/        5,
+        };
+    }
+
+    QtrEntryTracker tracker_{qtrRear, trackerCfg()};
+    SideLatch left_;
+    SideLatch right_;
+
+    bool     correcting_      = false;
+    int8_t   correctionDir_   = 0;
+    uint32_t correctionStart_ = 0;
+
+    void startCorrection(uint32_t now, int8_t dir) {
+        correcting_      = true;
+        correctionDir_   = dir;
+        correctionStart_ = now;
+    }
 };

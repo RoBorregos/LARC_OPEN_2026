@@ -167,7 +167,7 @@ void LARCStateMachine::update()
     case STATES::LOOKFORLINEBACKWARDS:
     {
         bool transitionToBenefitsStartCorner = false;
-        lookForLineBackwardsState_.update(now, p.backDetected, p.backLeftDetectedLine, p.backRightDetectedLine, transitionToBenefitsStartCorner);
+        lookForLineBackwardsState_.update(now, p.FL, p.FR, p.BL, p.BR, transitionToBenefitsStartCorner);
         if (transitionToBenefitsStartCorner)
             setState(STATES::BENEFITSSTARTCORNER);
         break;
@@ -300,9 +300,9 @@ void LARCStateMachine::debugPrint(bool enabled)
         const uint16_t* raw  = qtr.getRaw();
         const uint16_t* norm = qtr.getNorm();
         Serial.print(rawLabel);
-        for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(raw[i]); Serial.print(','); }
+        for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(raw[i]); Serial.print(','); }
         Serial.print(normLabel);
-        for (uint8_t i = 0; i < QTR::N; i++) { Serial.print(norm[i]); Serial.print(','); }
+        for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(norm[i]); Serial.print(','); }
     };
     printRawNorm(F(" | raw:"), F(" norm:"), qtrFront);
     printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);

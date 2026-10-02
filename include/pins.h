@@ -137,7 +137,8 @@ namespace Pins
     // (handleLookForCornerState/handleBEANS).
     // =========================================================
     static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C6 (C7 no se usa, QTR::N=7)
-    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C14 (C15 no se usa, mismo patron que front: QTR::N=7)
+    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C13 (C14/C15 no se usan)
+    static constexpr uint8_t kQtrRearCount    = 6; // C8 = first sensor to touch the line when going backwards
 
     // =========================================================
     // IR SENSORS
@@ -147,7 +148,7 @@ namespace Pins
     // L3 (BL) y L4 (BR) se mueven al mux compartido con los QTR (ver
     // seccion "QTR ARRAYS ON MUX1/MUX2" arriba), usando los canales que
     // quedan libres en cada bloque de 8 -- QTR::N=7 solo usa C0..C6 y
-    // C8..C14, dejando C7 y C15 sin conexion. kIrChBL/kIrChBR (pines 15/14)
+    // C8..C13 (qtrRear tiene 6 sensores), dejando C7, C14 y C15 sin conexion. kIrChBL/kIrChBR (pines 15/14)
     // quedan documentados abajo por referencia pero ya NO se usan para
     // L3/L4.
     // Canal fisico confirmado por el equipo (2026-09-16): L3->C15,
