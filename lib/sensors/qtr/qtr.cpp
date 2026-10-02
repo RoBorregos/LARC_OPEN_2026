@@ -12,10 +12,10 @@
 
 static constexpr bool LINE_IS_BLACK = false;
 
-QTR::QTR(uint8_t firstChannel, Mux74HC4067& mux_)
-    : firstCh(firstChannel), initialized(false), learning(false), ambientDelta(0), mux(mux_), position(0), posHistoryIdx(0), lastRawPos(0)
+QTR::QTR(uint8_t firstChannel, Mux74HC4067& mux_, uint8_t sensorCount)
+    : firstCh(firstChannel), count(sensorCount > N ? N : sensorCount), initialized(false), learning(false), ambientDelta(0), mux(mux_), position(0), posHistoryIdx(0), lastRawPos(0)
 {
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         raw[i]    = 0;
         calMin[i] = 0;
@@ -48,7 +48,7 @@ bool QTR::begin()
 
 void QTR::ensureCalValid()
 {
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         if (calMax[i] <= calMin[i])
             calMax[i] = calMin[i] + 1;
@@ -57,7 +57,7 @@ void QTR::ensureCalValid()
 
 void QTR::setCalibration(const uint16_t* minVals, const uint16_t* maxVals)
 {
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         calMin[i] = minVals[i];
         calMax[i] = maxVals[i];
@@ -70,13 +70,13 @@ void QTR::calibrate(uint32_t durationMs)
     uint16_t cMin[N], cMax[N];
 
     // Init min to max possible, max to 0
-    for (uint8_t i = 0; i < N; i++) { cMin[i] = 65535; cMax[i] = 0; }
+    for (uint8_t i = 0; i < count; i++) { cMin[i] = 65535; cMax[i] = 0; }
 
     uint32_t t0 = millis();
     while (millis() - t0 < durationMs) {
         update();
         // Track min/max raw values seen per sensor
-        for (uint8_t i = 0; i < N; i++) {
+        for (uint8_t i = 0; i < count; i++) {
             if (raw[i] < cMin[i]) cMin[i] = raw[i];
             if (raw[i] > cMax[i]) cMax[i] = raw[i];
         }
@@ -100,7 +100,7 @@ bool QTR::ambientCalibrate(uint32_t durationMs)
     const uint32_t t0 = millis();
     while (millis() - t0 < durationMs)
     {
-        for (uint8_t i = 0; i < N; i++)
+        for (uint8_t i = 0; i < count; i++)
             sum[i] += mux.read(firstCh + i);
         samples++;
         delay(2);
@@ -110,7 +110,7 @@ bool QTR::ambientCalibrate(uint32_t durationMs)
         return false;
 
     long deltaSum = 0;
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         const long bg = (long)(sum[i] / samples);
         const long d  = (long)calMax[i] - (long)calMin[i];
@@ -124,10 +124,10 @@ bool QTR::ambientCalibrate(uint32_t durationMs)
         deltaSum += bg - (long)calMin[i];
     }
 
-    long delta = deltaSum / (long)N;
+    long delta = deltaSum / (long)count;
     delta = constrain(delta, -(long)kAmbientMaxDelta, (long)kAmbientMaxDelta);
 
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         const long m = (long)calMin[i] + delta;
         calMin[i] = (uint16_t)(m < 0 ? 0 : m);
@@ -143,7 +143,7 @@ bool QTR::ambientCalibrate(uint32_t durationMs)
 
 void QTR::beginAutoCal()
 {
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         baseMin[i]   = calMin[i];
         baseMax[i]   = calMax[i];
@@ -161,7 +161,7 @@ void QTR::learnStep()
 {
     using namespace Constants::QTRCalibration;
 
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         // Normalizado con la calibracion EN USO (no la que se esta aprendiendo)
         const long d = (long)calMax[i] - (long)calMin[i];
@@ -209,7 +209,7 @@ uint8_t QTR::endAutoCal()
     learning = false;
     uint8_t updated = 0;
 
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         long nMin = bgSeeded[i] ? lroundf(bgEma[i]) : (long)baseMin[i];
         long nMax = (peak[i] > 0) ? (long)peak[i] : (long)baseMax[i];
@@ -257,7 +257,7 @@ void QTR::update()
         return;
 
     // 1) Read raw (ADC)
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
         raw[i] = mux.read(firstCh + i);
 
     // Ventana de autocalibracion abierta: acumula (no cambia calMin/calMax)
@@ -265,7 +265,7 @@ void QTR::update()
         learnStep();
 
     // 2) Normalize raw values to 0..1000 based on calibration
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         const long x = (long)(raw[i] - calMin[i]) * 1000L;
         const long d = (long)(calMax[i] - calMin[i]);
@@ -280,7 +280,7 @@ void QTR::update()
     uint32_t sum      = 0;
     uint32_t weighted = 0;
 
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         const uint16_t v = norm[i];
         sum      += v;
@@ -320,7 +320,7 @@ int QTR::getPosition() const
 bool QTR::onLine(uint16_t threshold) const
 {
     uint16_t maxv = 0;
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
         if (norm[i] > maxv)
             maxv = norm[i];
 
@@ -331,7 +331,7 @@ int QTR::getBinaryPosition() const { //Hubo cambio de funcion
     uint32_t weightedSum = 0;
     uint32_t totalWeight = 0;
 
-    for (uint8_t i = 0; i < N; i++) {
+    for (uint8_t i = 0; i < count; i++) {
         if (norm[i] > Constants::QTRCalibration::kBinaryThreshold) {
             weightedSum += (uint32_t)norm[i] * i * 1000;
             totalWeight += norm[i];
@@ -348,16 +348,16 @@ void QTR::printCalibration(const char* label) const
     // Print in constants.h ready format, copy paste directly
     Serial.print(label); Serial.println(":");
     Serial.print("min = {");
-    for (uint8_t i = 0; i < N; i++) {
+    for (uint8_t i = 0; i < count; i++) {
         Serial.print(calMin[i]);
-        if (i < N - 1) Serial.print(", ");
+        if (i < count - 1) Serial.print(", ");
     }
     Serial.println("};");
 
     Serial.print("max = {");
-    for (uint8_t i = 0; i < N; i++) {
+    for (uint8_t i = 0; i < count; i++) {
         Serial.print(calMax[i]);
-        if (i < N - 1) Serial.print(", ");
+        if (i < count - 1) Serial.print(", ");
     }
     Serial.println("};");
 }
@@ -365,18 +365,18 @@ void QTR::printCalibration(const char* label) const
 void QTR::debugPrint() const
 {
     Serial.print(F("RAW : "));
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         Serial.print(raw[i]);
-        if (i < N - 1) Serial.print('\t');
+        if (i < count - 1) Serial.print('\t');
     }
     Serial.println();
 
     Serial.print(F("NORM: "));
-    for (uint8_t i = 0; i < N; i++)
+    for (uint8_t i = 0; i < count; i++)
     {
         Serial.print(norm[i]);
-        if (i < N - 1) Serial.print('\t');
+        if (i < count - 1) Serial.print('\t');
     }
     Serial.println();
 

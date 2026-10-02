@@ -46,7 +46,9 @@ namespace StateCommon
     {
         if (!qtrRear.onLine())
             return 0.0f;
-        const float mirroredRearPos = kQtrPosMax - qtrRear.getPosition();
+        // Rear has fewer sensors: rescale to the front 0..kQtrPosMax range.
+        const int   rearPosMax      = (qtrRear.size() - 1) * 1000;
+        const float mirroredRearPos = (float)(rearPosMax - qtrRear.getPosition()) * kQtrPosMax / rearPosMax;
         const float error = kCornerSetpoint - mirroredRearPos;
         return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
     }

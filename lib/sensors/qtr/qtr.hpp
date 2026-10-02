@@ -53,9 +53,10 @@ public:
     static constexpr uint8_t N = 7;
 
     // firstChannel as it states is where the QTR starts in the mux.
-    // QTR qtrFront(0, mux); (C0..C7)
-    // QTR qtrRear(8, mux);  (C8..C15)
-    explicit QTR(uint8_t firstChannel, Mux74HC4067& mux);
+    // sensorCount: sensors actually wired, from firstChannel (max N).
+    // QTR qtrFront(0, mux);    (C0..C6)
+    // QTR qtrRear(8, mux, 6); (C8..C13)
+    explicit QTR(uint8_t firstChannel, Mux74HC4067& mux, uint8_t sensorCount = N);
 
     // Initializes the pin arrangement on the mux
     // Called once on setup()
@@ -78,7 +79,9 @@ public:
     // representativa.
     void resetFilter();
 
-    // Pos on the array from 0 (extreme left) to 7000 (extreme right)
+    uint8_t size() const { return count; }
+
+    // Pos on the array from 0 (first sensor) to (size()-1)*1000 (last sensor)
     int getPosition() const;
 
     // True if any sensor is over the threshold.
@@ -135,6 +138,7 @@ public:
 private:
 
     uint8_t         firstCh;
+    uint8_t         count;
     bool            initialized;
     bool            learning;
     int16_t         ambientDelta;
