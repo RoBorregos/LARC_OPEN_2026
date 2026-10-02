@@ -5,20 +5,26 @@
 */
 #pragma once
 #include <Arduino.h>
+#include "constants.h"
 #include "robot/instances/instances.hpp"
+#include "robot/StateMachine/States/QtrEntryTracker.hpp"
+#include "robot/StateMachine/States/IrSideLatch.hpp"
 
 class LookForLineState {
 public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
-        lfCorrecting = false;
-        lfCorrectionDir = 0;
-        lfCorrectionStartMs = 0;
+        tracker_.reset();
+        left_.clear();
+        right_.clear();
+        correcting_      = false;
+        correctionDir_   = 0;
+        correctionStart_ = 0;
     }
 
-    void update(uint32_t now, bool frontDetected, bool leftDetected, bool rightDetected,
-                bool onLine, bool& transitionToCorner) {
+    // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
+    void update(uint32_t now, bool FL, bool FR, bool BL, bool BR, bool& transitionToCorner) {
         transitionToCorner = false;
 
         // ── Stage 0: retroceder 200 ms ────────────────────────────────────────
@@ -58,59 +64,82 @@ public:
         }
 
         // ── Stage 3: búsqueda normal ───────────────────────────────────────────
-        static constexpr uint32_t kBorderCorrectMs = 150;
-        static constexpr uint16_t kTofBorderMm     = 150;
-
-        const bool realBorderLeft  = leftDetected  && tofLeft.isValid()  && tofLeft.getDistanceMm()  > kTofBorderMm;
-        const bool realBorderRight = rightDetected && tofRight.isValid() && tofRight.getDistanceMm() > kTofBorderMm;
-
-        if (frontDetected && onLine) {
-            lfCorrecting        = false;
-            lfCorrectionDir     = 0;
-            lfCorrectionStartMs = 0;
-            Serial.println("[LOOKFORLINE] FRONT DETECTED -> LOOKFORCORNER");
+        if (tracker_.update() == QtrEntryTracker::Phase::ON) {
+            correcting_ = false;
+            Serial.println("[LOOKFORLINE] QTR ON -> LOOKFORCORNER");
             LARC.stop();
             transitionToCorner = true;
             return;
         }
 
-        if (lfCorrecting) {
-            if ((now - lfCorrectionStartMs) < kBorderCorrectMs) {
-                if (lfCorrectionDir < 0)
-                    LARC.left(0.30f);
+        if (correcting_) {
+            if ((now - correctionStart_) < kBorderCorrectMs) {
+                if (correctionDir_ < 0)
+                    LARC.left(kSpeed);
                 else
-                    LARC.right(0.30f);
+                    LARC.right(kSpeed);
                 return;
             }
-            lfCorrecting = false;
-            LARC.forward(0.30f);
+            correcting_ = false;
+        }
+
+        const bool leftCorrect  = left_.update(now, FL, BL);
+        const bool rightCorrect = right_.update(now, FR, BR);
+
+        // Both sides at once means a line crossing the robot, not a side border.
+        if (left_.latched && right_.latched) {
+            left_.clear();
+            right_.clear();
+        } else if (leftCorrect && !(FR || BR)) {
+            startCorrection(now, +1);
+            LARC.right(kSpeed);
+            return;
+        } else if (rightCorrect && !(FL || BL)) {
+            startCorrection(now, -1);
+            LARC.left(kSpeed);
             return;
         }
 
-        if (realBorderLeft && !rightDetected) {
-            lfCorrecting        = true;
-            lfCorrectionDir     = +1;
-            lfCorrectionStartMs = now;
-            LARC.right(0.30f);
-            return;
-        }
-
-        if (realBorderRight && !leftDetected) {
-            lfCorrecting        = true;
-            lfCorrectionDir     = -1;
-            lfCorrectionStartMs = now;
-            LARC.left(0.30f);
-            return;
-        }
-
-        LARC.forward(0.30f);
+        LARC.forward(kSpeed);
     }
 
 private:
+    static constexpr float    kSpeed           = 0.30f;
+    static constexpr uint32_t kBorderCorrectMs = 150;
+
+    // qtrFront: C0..C6 (indices 0..6), C6 is the frontmost sensor.
+    // Set to false if the line enters through C0 when going forward.
+    static constexpr bool kEntryAtHighIndex = true;
+
+    static QtrEntryTracker::Config trackerCfg() {
+        return {
+            /*entryAtHighIndex*/ kEntryAtHighIndex,
+            /*onThreshold*/      Constants::QTRCalibration::kBinaryThreshold,
+            /*offThreshold*/     Constants::QTRCalibration::kBinaryThreshold - 80,
+            /*entryMaxProgress*/ 1.0f,
+            /*centerProgress*/   3.0f,
+            /*centerTolerance*/  0.75f,
+            /*maxRegress*/       0.6f,
+            /*confirmReads*/     2,
+            /*onReads*/          3,
+            /*lostReads*/        5,
+        };
+    }
+
     int action_stage = 0;
     uint32_t action_start_time = 0;
 
-    bool     lfCorrecting        = false;
-    int8_t   lfCorrectionDir     = 0;
-    uint32_t lfCorrectionStartMs = 0;
+    QtrEntryTracker tracker_{qtrFront, trackerCfg()};
+    IrSideLatch left_;
+    IrSideLatch right_;
+
+    bool     correcting_      = false;
+    int8_t   correctionDir_   = 0;
+    uint32_t correctionStart_ = 0;
+
+    void startCorrection(uint32_t now, int8_t dir) {
+        correcting_      = true;
+        correctionDir_   = dir;
+        correctionStart_ = now;
+    }
 };

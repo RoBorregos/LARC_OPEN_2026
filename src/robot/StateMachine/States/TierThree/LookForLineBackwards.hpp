@@ -8,6 +8,7 @@
 #include "constants.h"
 #include "robot/instances/instances.hpp"
 #include "robot/StateMachine/States/QtrEntryTracker.hpp"
+#include "robot/StateMachine/States/IrSideLatch.hpp"
 
 class LookForLineBackwardsState {
 public:
@@ -67,57 +68,6 @@ public:
 private:
     static constexpr float    kSpeed           = 0.30f;
     static constexpr uint32_t kBorderCorrectMs = 150;
-    static constexpr uint32_t kLatchTimeoutMs  = 800;
-    static constexpr uint32_t kLatchIrOffMs    = 150;
-
-    // One side's IR pair: first IR latches, the other IR of the same side triggers the correction.
-    struct SideLatch {
-        bool     latched   = false;
-        bool     firstFront = false;
-        uint32_t latchMs   = 0;
-        uint32_t offSinceMs = 0;
-
-        void clear() {
-            latched    = false;
-            latchMs    = 0;
-            offSinceMs = 0;
-        }
-
-        bool update(uint32_t now, bool front, bool back) {
-            if (!latched) {
-                if (front && back)
-                    return true;
-                if (front || back) {
-                    latched    = true;
-                    firstFront = front;
-                    latchMs    = now;
-                    offSinceMs = 0;
-                }
-                return false;
-            }
-
-            const bool firstOn = firstFront ? front : back;
-            const bool otherOn = firstFront ? back : front;
-
-            if (otherOn) {
-                clear();
-                return true;
-            }
-            if ((now - latchMs) >= kLatchTimeoutMs) {
-                clear();
-                return false;
-            }
-            if (firstOn) {
-                offSinceMs = 0;
-            } else {
-                if (offSinceMs == 0)
-                    offSinceMs = now;
-                if ((now - offSinceMs) >= kLatchIrOffMs)
-                    clear();
-            }
-            return false;
-        }
-    };
 
     // qtrRear: C8..C13 (indices 0..5), the line enters through C8 when going backwards.
     // Floor already reads norm ~470 on qtrRear, so thresholds sit above it.
@@ -137,8 +87,8 @@ private:
     }
 
     QtrEntryTracker tracker_{qtrRear, trackerCfg()};
-    SideLatch left_;
-    SideLatch right_;
+    IrSideLatch left_;
+    IrSideLatch right_;
 
     bool     correcting_      = false;
     int8_t   correctionDir_   = 0;
