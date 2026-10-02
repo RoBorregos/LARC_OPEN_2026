@@ -124,7 +124,7 @@ void LARCStateMachine::update()
     case STATES::LOOKFORLINE:
     {
         bool transitionToCorner = false;
-        lookForLineState_.update(now, p.frontDetectedLine, p.frontLeftDetectedLine, p.frontRightDetectedLine, p.onLine, transitionToCorner);
+        lookForLineState_.update(now, p.FL, p.FR, p.BL, p.BR, transitionToCorner);
         if (transitionToCorner)
             setState(STATES::LOOKFORCORNER);
         break;
