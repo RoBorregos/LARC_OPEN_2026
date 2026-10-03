@@ -21,6 +21,8 @@ public:
         correcting_      = false;
         correctionDir_   = 0;
         correctionStart_ = 0;
+        lastFrontIrMs_   = 0;
+        qtrOnMs_         = 0;
     }
 
     // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
@@ -64,12 +66,28 @@ public:
         }
 
         // ── Stage 3: búsqueda normal ───────────────────────────────────────────
+        // QTR detects the line, a front IR (FL/FR) confirms it within kIrConfirmMs.
+        // Dark patches that only the QTR sees are discarded.
+        if (FL || FR)
+            lastFrontIrMs_ = now;
+        const bool irRecent = lastFrontIrMs_ != 0 && (now - lastFrontIrMs_) <= kIrConfirmMs;
+
         if (tracker_.update() == QtrEntryTracker::Phase::ON) {
-            correcting_ = false;
-            Serial.println("[LOOKFORLINE] QTR ON -> LOOKFORCORNER");
-            LARC.stop();
-            transitionToCorner = true;
-            return;
+            if (qtrOnMs_ == 0)
+                qtrOnMs_ = now;
+
+            if (irRecent) {
+                correcting_ = false;
+                Serial.println("[LOOKFORLINE] QTR ON + IR -> LOOKFORCORNER");
+                LARC.stop();
+                transitionToCorner = true;
+                return;
+            }
+            if ((now - qtrOnMs_) > kIrConfirmMs) {
+                Serial.println("[LOOKFORLINE] QTR ON without IR -> ignored");
+                tracker_.reset();
+                qtrOnMs_ = 0;
+            }
         }
 
         if (correcting_) {
@@ -106,6 +124,7 @@ public:
 private:
     static constexpr float    kSpeed           = 0.30f;
     static constexpr uint32_t kBorderCorrectMs = 150;
+    static constexpr uint32_t kIrConfirmMs     = 400;
 
     // qtrFront: C0..C6 (indices 0..6), C6 is the frontmost sensor.
     // Set to false if the line enters through C0 when going forward.
@@ -136,6 +155,8 @@ private:
     bool     correcting_      = false;
     int8_t   correctionDir_   = 0;
     uint32_t correctionStart_ = 0;
+    uint32_t lastFrontIrMs_   = 0;
+    uint32_t qtrOnMs_         = 0;
 
     void startCorrection(uint32_t now, int8_t dir) {
         correcting_      = true;
