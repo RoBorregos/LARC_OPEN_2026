@@ -34,47 +34,22 @@ public:
         }
 
         switch (action_stage) {
-            // ── Stage 0: Goes up for 12000 ms ────────────────────────────────────
+            // ── Stage 0: Up by default, down while the limit switch is pressed ──
             case 0:
+                LARC.stop();
+
                 if (limitPressed) {
-                    // If Limit switch is pressed during the ascent - interrupt and descend
-                    setElevator(kElevatorStop);
-                    LARC.stop();
+                    setElevator(kElevatorDown);
+                    // The 12000 ms ascent restarts once the switch is released
                     action_start_time = now;
-                    action_stage = 1;
                 } else {
                     setElevator(kElevatorUp);
-                    LARC.stop();
 
                     if ((now - action_start_time) >= 12000) {
                         // Finishes going up - elevetor goes to "stop" state
                         action_start_time = now;
                         action_stage = 4;
                     }
-                }
-                break;
-
-            // ── Stage 1: Elevator goes down while limit switch is pressed ───────────────────
-            case 1:
-                setElevator(kElevatorDown);
-                LARC.stop();
-
-                if (!limitPressed) {
-                    // Limit switch release - waits 2000 ms before going up again
-                    action_start_time = now;
-                    action_stage = 2;
-                }
-                break;
-
-            // ── Stage 2: Waits 2000 ms with the elevator being stopped──────────────────
-            case 2:
-                setElevator(kElevatorStop);
-                LARC.stop();
-
-                if ((now - action_start_time) >= 2000) {
-                    // Reintentar subida desde cero
-                    action_start_time = now;
-                    action_stage = 0;
                 }
                 break;
 
