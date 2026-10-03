@@ -38,6 +38,7 @@ void Drive::begin() {
     }
 
     yawPid_.setAngleWrapping(true);
+    yawPid_.setSampleTime(kControlMs); // PID_v1 defaults to 100 ms, update() runs every kControlMs
     yawPid_.reset();
 
     m1_ul_.setPPR(475.0f);
@@ -85,9 +86,29 @@ void Drive::update() {
 
     // 3) Yaw PID
     const float yaw = bno_.getYaw();
+
+    // BNO reports at 50 Hz and this loop runs faster: only refresh the rate on a new sample.
+    if (yaw != prevYaw_) {
+        const float dt = (now - prevYawMs_) / 1000.0f;
+        if (prevYawMs_ != 0 && dt > 0.0f)
+            yawRate_ = wrapAngle(yaw - prevYaw_) / dt;
+        prevYaw_   = yaw;
+        prevYawMs_ = now;
+    }
     float omega = 0.0f;
     if      (manualOmegaEnabled_) omega = manualOmega_;
-    else if (yawHoldEnabled_)     omega = yawPid_.update(yaw, targetYaw_);
+    else if (yawHoldEnabled_) {
+        omega = yawPid_.update(yaw, targetYaw_);
+
+        // Small errors give an omega below the motors' deadband: push it to the minimum that moves them,
+        // but only while stuck or drifting away. If it is already turning toward the target, let it coast
+        // so it does not overshoot.
+        const float yawErr  = wrapAngle(targetYaw_ - yaw);
+        const bool  closing = (yawErr * yawRate_) > 0.0f && fabsf(yawRate_) > kYawRateClosing;
+
+        if (fabsf(yawErr) > kYawDeadband && fabsf(omega) < kOmegaMin && !closing)
+            omega = (yawErr > 0.0f) ? kOmegaMin : -kOmegaMin;
+    }
     omega = clampf(omega, -kOmegaMax, +kOmegaMax);
 
     // 4) Movermotors

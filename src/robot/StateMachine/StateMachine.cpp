@@ -6,7 +6,7 @@
 
 namespace
 {
-    static constexpr STATES kInitialState = STATES::START;
+    static constexpr STATES kInitialState = STATES::LOOKFORLINE;
 
     const __FlashStringHelper *mainStateName(STATES state)
     {

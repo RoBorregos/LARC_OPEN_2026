@@ -40,8 +40,11 @@ namespace Constants
     {
         static constexpr float kKp = 1.20f;//1.20;   // 4.8f;  2.5f; 1.5f
         static constexpr float kKi = 0.002f; // 0.002f
-        static constexpr float kKd = 0.0042f;  // 0.0012f; // 0.06f; 0.0f
+        static constexpr float kKd = 0.04f;  // 0.0042f; 0.0012f; 0.06f; 0.0f
         static constexpr float kOmegaMax = 0.25f; //0.25f;
+        static constexpr float kOmegaMin = 0.12f;       // minimum omega that moves the motors (deadband)
+        static constexpr float kYawDeadbandDeg = 1.5f;  // below this yaw error no minimum push
+        static constexpr float kYawRateClosingDegS = 5.0f; // turning toward the target faster than this: no minimum push
         static constexpr float kcurrentVelocity = 0.30f; // Velocity according to PID
 
     } // namespace PID

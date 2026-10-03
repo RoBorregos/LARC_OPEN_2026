@@ -108,6 +108,12 @@ private:
     static constexpr float I         = Constants::PID::kKi;
     static constexpr float D         = Constants::PID::kKd;
     static constexpr float kOmegaMax = Constants::PID::kOmegaMax;
+    static constexpr float kOmegaMin    = Constants::PID::kOmegaMin;
+    static constexpr float kYawDeadband = Constants::PID::kYawDeadbandDeg * (M_PI / 180.0f);
+    static constexpr float kYawRateClosing = Constants::PID::kYawRateClosingDegS * (M_PI / 180.0f);
+    float    prevYaw_   = 0.0f;
+    uint32_t prevYawMs_ = 0;
+    float    yawRate_   = 0.0f;
 
     PIDController yawPid_;
     float targetYaw_          = 0.0f;
