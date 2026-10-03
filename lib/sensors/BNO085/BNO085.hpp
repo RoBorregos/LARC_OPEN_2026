@@ -53,6 +53,11 @@ private:
     float filteredYawDeg_ = 0.0f;
     bool firstYawSample_  = true;
 
+    // After a chip reset the game rotation vector restarts from a new reference:
+    // the offset keeps the yaw continuous instead of jumping.
+    float yawOffsetDeg_ = 0.0f;
+    bool  reanchorYaw_  = false;
+
     uint32_t lastValidMs_ = 0;
 
     void quaternionToEuler(float qw, float qx, float qy, float qz,
