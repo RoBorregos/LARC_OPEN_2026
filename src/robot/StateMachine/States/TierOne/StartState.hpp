@@ -24,15 +24,6 @@ public:
 
         const bool limitPressed = kLimitSwitchConnected && (digitalRead(Pins::kLimitSwitch) == kLimitPressedLevel);
 
-        //Elevator
-        if (limitPressed != lastLimitPressed) {
-            if (limitPressed)
-                Serial.println("LIMIT SWITCH PRESIONADO");
-            else
-                Serial.println("LIMIT SWITCH LIBERADO");
-            lastLimitPressed = limitPressed;
-        }
-
         switch (action_stage) {
             // ── Stage 0: Up by default, down while the limit switch is pressed ──
             case 0:
@@ -45,7 +36,7 @@ public:
                 } else {
                     setElevator(kElevatorUp);
 
-                    if ((now - action_start_time) >= 12000) {
+                    if ((now - action_start_time) >= 9000) {
                         // Finishes going up - elevetor goes to "stop" state
                         action_start_time = now;
                         action_stage = 4;
