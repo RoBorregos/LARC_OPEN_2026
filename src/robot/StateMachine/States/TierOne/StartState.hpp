@@ -13,6 +13,7 @@ public:
     void begin() {
         action_stage = 0;
         action_start_time = millis();
+        elevatorCmd_ = -1;
     }
 
     void update(uint32_t now, bool& transitionToPool) {
@@ -21,7 +22,7 @@ public:
 
         vision.stop();
 
-        const bool limitPressed = kLimitSwitchConnected && (digitalRead(Pins::kLimitSwitch) == HIGH);
+        const bool limitPressed = kLimitSwitchConnected && (digitalRead(Pins::kLimitSwitch) == kLimitPressedLevel);
 
         //Elevator
         if (limitPressed != lastLimitPressed) {
@@ -37,12 +38,12 @@ public:
             case 0:
                 if (limitPressed) {
                     // If Limit switch is pressed during the ascent - interrupt and descend
-                    elevator.ElevatorPosition(0);
+                    setElevator(kElevatorStop);
                     LARC.stop();
                     action_start_time = now;
                     action_stage = 1;
                 } else {
-                    elevator.ElevatorPosition(2);
+                    setElevator(kElevatorUp);
                     LARC.stop();
 
                     if ((now - action_start_time) >= 12000) {
@@ -55,7 +56,7 @@ public:
 
             // ── Stage 1: Elevator goes down while limit switch is pressed ───────────────────
             case 1:
-                elevator.ElevatorPosition(1);
+                setElevator(kElevatorDown);
                 LARC.stop();
 
                 if (!limitPressed) {
@@ -67,7 +68,7 @@ public:
 
             // ── Stage 2: Waits 2000 ms with the elevator being stopped──────────────────
             case 2:
-                elevator.ElevatorPosition(0);
+                setElevator(kElevatorStop);
                 LARC.stop();
 
                 if ((now - action_start_time) >= 2000) {
@@ -79,7 +80,7 @@ public:
 
             // ── Stage 4: Elevador stop 1500 ms ───────────────────────────────
             case 4:
-                elevator.ElevatorPosition(0);
+                setElevator(kElevatorStop);
                 LARC.stop();
                 if ((now - action_start_time) >= 1500) {
                     action_start_time = now;
@@ -89,7 +90,7 @@ public:
 
             // ── Stage 5: Avanzar y transicionar a POOL ───────────────────────
             case 5:
-                elevator.ElevatorPosition(0);
+                setElevator(kElevatorStop);
                 LARC.forward(0.30f);
 
                 if ((now - action_start_time) >= kStartIgnoreTimeMs) {
@@ -103,4 +104,14 @@ private:
     int action_stage = 0;
     uint32_t action_start_time = 0;
     bool lastLimitPressed = false;
+    int  elevatorCmd_ = -1;
+
+    void setElevator(int cmd) {
+        using namespace StateCommon;
+        if (cmd == elevatorCmd_)
+            return;
+        elevatorCmd_ = cmd;
+        elevator.ElevatorPosition(cmd);
+        Serial.println(cmd == kElevatorUp ? "[elevator] UP" : (cmd == kElevatorDown ? "[elevator] DOWN" : "[elevator] STOP"));
+    }
 };

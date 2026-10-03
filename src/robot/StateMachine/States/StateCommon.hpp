@@ -30,7 +30,14 @@ namespace StateCommon
     static constexpr uint16_t kTooCloseAvoidLeftMm  = 120;
     static constexpr uint16_t kTooCloseAvoidRightMm = 100;
 
-    static constexpr bool kLimitSwitchConnected = false;
+    static constexpr bool kLimitSwitchConnected = true;
+    // External pull-ups: pressed reads HIGH (same as test_elevator). Flip to LOW if inverted.
+    static constexpr int  kLimitPressedLevel = HIGH;
+
+    // Elevator::ElevatorPosition() states
+    static constexpr int kElevatorStop = 0;
+    static constexpr int kElevatorUp   = 1;
+    static constexpr int kElevatorDown = 2;
 
     // qtrFront -> vx correction target (0 when the line is lost)
     inline float frontCornerCorrTarget(bool onLine)

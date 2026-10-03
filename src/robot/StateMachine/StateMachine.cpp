@@ -6,7 +6,7 @@
 
 namespace
 {
-    static constexpr STATES kInitialState = STATES::LOOKFORLINE;
+    static constexpr STATES kInitialState = STATES::POOL;
 
     const __FlashStringHelper *mainStateName(STATES state)
     {
@@ -53,7 +53,8 @@ void LARCStateMachine::begin()
     visionRight = 0;
 
     //Elevator
-    pinMode(limitSwitch, INPUT_PULLUP);
+    pinMode(limitSwitch, INPUT);
+    elevator.begin();
 
     vision.begin();
     vision.requestStatus();
