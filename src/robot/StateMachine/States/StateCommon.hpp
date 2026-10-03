@@ -34,7 +34,7 @@ namespace StateCommon
     // External pull-ups: pressed reads HIGH (same as test_elevator). Flip to LOW if inverted.
     static constexpr int  kLimitPressedLevel = HIGH;
 
-    // Elevator::ElevatorPosition() states
+    // Elevator::ElevatorPosition() states, same as test_elevator
     static constexpr int kElevatorStop = 0;
     static constexpr int kElevatorUp   = 1;
     static constexpr int kElevatorDown = 2;
