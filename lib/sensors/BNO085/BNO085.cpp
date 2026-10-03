@@ -134,6 +134,8 @@ bool BNO085::begin()
     initialized     = true;
     firstYawSample_ = true;
     filteredYawDeg_ = 0.0f;
+    yawOffsetDeg_   = 0.0f;
+    reanchorYaw_    = false;
     lastValidMs_    = millis();
 
     return true;
@@ -160,6 +162,7 @@ void BNO085::recover()
     }
 
     enableReports();
+    reanchorYaw_ = true;
     lastValidMs_ = millis();
 }
 
@@ -167,6 +170,15 @@ void BNO085::update()
 {
     if (!initialized)
         return;
+
+    // A brownout (e.g. the elevator motor reversing) resets the chip and disables its reports.
+    if (bno.wasReset())
+    {
+        Serial.println("BNO085: chip reset, re-enabling reports");
+        enableReports();
+        reanchorYaw_ = true;
+        lastValidMs_ = millis();
+    }
 
     sh2_SensorValue_t val;
     if (!bno.getSensorEvent(&val))
@@ -200,6 +212,11 @@ void BNO085::update()
         static constexpr float alpha = 0.30f; // 0.07 added ~0.3 s of lag and made the yaw hold oscillate
 
         float rawNeg = -wrapAngle(rawYawDeg);
+
+        if (reanchorYaw_ && !firstYawSample_)
+            yawOffsetDeg_ = wrapAngle(filteredYawDeg_ - rawNeg);
+        reanchorYaw_ = false;
+        rawNeg = wrapAngle(rawNeg + yawOffsetDeg_);
 
         if (firstYawSample_)
         {
