@@ -84,9 +84,9 @@ bool BNO085::tryAddress(uint8_t address)
 
 bool BNO085::enableReports()
 {
-    if (!bno.enableReport(SH2_ROTATION_VECTOR, REPORT_PERIOD_US))
+    if (!bno.enableReport(SH2_GAME_ROTATION_VECTOR, REPORT_PERIOD_US)) // no magnetometer: motors bend its heading
     {
-        Serial.println("Failed to enable ROTATION_VECTOR report");
+        Serial.println("Failed to enable GAME_ROTATION_VECTOR report");
         return false;
     }
 
@@ -184,12 +184,12 @@ void BNO085::update()
 
     lastValidMs_ = millis();
 
-    if (val.sensorId == SH2_ROTATION_VECTOR)
+    if (val.sensorId == SH2_GAME_ROTATION_VECTOR)
     {
-        float qw = val.un.rotationVector.real;
-        float qx = val.un.rotationVector.i;
-        float qy = val.un.rotationVector.j;
-        float qz = val.un.rotationVector.k;
+        float qw = val.un.gameRotationVector.real;
+        float qx = val.un.gameRotationVector.i;
+        float qy = val.un.gameRotationVector.j;
+        float qz = val.un.gameRotationVector.k;
 
         float rawYawDeg, rawPitchDeg, rawRollDeg;
         quaternionToEuler(qw, qx, qy, qz, rawYawDeg, rawPitchDeg, rawRollDeg);
@@ -197,7 +197,7 @@ void BNO085::update()
         pitchDeg_ = rawPitchDeg;
         rollDeg_  = rawRollDeg;
 
-        static constexpr float alpha = 0.07f;
+        static constexpr float alpha = 0.30f; // 0.07 added ~0.3 s of lag and made the yaw hold oscillate
 
         float rawNeg = -wrapAngle(rawYawDeg);
 
