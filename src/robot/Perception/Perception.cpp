@@ -25,8 +25,8 @@ void Perception::updateIR()
 
     snap_.frontLeftDetectedLine  = snap_.FL;
     snap_.frontRightDetectedLine = snap_.FR;
-    snap_.backLeftDetectedLine   = snap_.BR;
-    snap_.backRightDetectedLine  = snap_.BL;
+    snap_.backLeftDetectedLine   = snap_.BL;
+    snap_.backRightDetectedLine  = snap_.BR;
     snap_.frontDetectedLine = snap_.FL || snap_.FR;
     snap_.backDetected      = snap_.BL || snap_.BR;
     snap_.leftDetectedPool  = snap_.FL || snap_.BL;
