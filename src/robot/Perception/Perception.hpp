@@ -8,8 +8,8 @@ struct PerceptionSnapshot
     bool FL = false, FR = false, BL = false, BR = false;
     bool frontLeftDetectedLine  = false; // FL
     bool frontRightDetectedLine = false; // FR
-    bool backLeftDetectedLine   = false; // BR
-    bool backRightDetectedLine  = false; // BL
+    bool backLeftDetectedLine   = false; // BL
+    bool backRightDetectedLine  = false; // BR
     bool frontDetectedLine = false;      // FL || FR
     bool backDetected      = false;      // BL || BR
     bool leftDetectedPool  = false;      // FL || BL
