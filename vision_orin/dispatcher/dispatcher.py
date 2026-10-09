@@ -59,7 +59,7 @@ AUTOSTART_PHASE = os.environ.get("LARC_AUTOSTART_PHASE", "").strip().lower() or 
 # Tuning
 LOOP_HZ = 100 # how often we recompute the command
 # Only affects the wait for the first report; normal stale limits stay unchanged.
-STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "120"))
+STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "15"))
 if not 0 < STARTUP_GRACE_SEC <= 180:
     raise ValueError("LARC_STARTUP_GRACE_SEC must be greater than 0 and at most 180")
 HEALTH_CHECK_SEC = 2.0
@@ -156,20 +156,15 @@ class VisionState:
 
     def invalidate(self, source):
         with self._lock:
-            had_report = source in self.reports
             self.reports.pop(source, None)
-            # Before the first valid report, keep the launch deadline intact.
-            # Errors neither grant readiness nor extend that deadline. Once a
-            # source has reported, invalidate it immediately with no new grace.
+            # Outputs go safe now, but timestamps are kept: errors neither
+            # extend the deadline nor fault at once. A single bad frame must
+            # not latch a fault on the Teensy; STALE_MS decides that.
             if source == 'intake':
                 self.intake_upper = self.intake_lower = False
-                if had_report:
-                    self.intake_ms = 0
             elif source == 'separator':
                 self.sep_side = vp.SEP_NEUTRAL
                 self.sep_until_ms = 0
-                if had_report:
-                    self.separator_ms = 0
 
     def note_launched(self, sources) -> None:
         stamp = now_ms()
