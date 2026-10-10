@@ -3,38 +3,9 @@
 
 #include <Arduino.h>
 
-// =============================================================
-// pins.h ACTUALIZADO (2026-08-14) para la PCB nueva.
-//
-// La PCB nueva es parecida a la anterior pero cambio el mapeo de pines.
-// Los valores de abajo salen del esquematico compartido por el equipo
-// ese dia. Donde el esquematico no daba suficiente informacion para
-// estar seguros (que pin fisico corresponde a que rol logico), se dejo
-// un comentario "// placeholder" explicando que falta confirmar.
-//
-// IMPORTANTE: varias constantes de este archivo (kElevator*, los
-// servos con nombre) hoy NO estan conectadas a sus clases consumidoras
-// (Elevator, ServoSystem parecen hardcodear sus propios pines
-// internamente) -- ver nota en cada seccion. Actualizarlas aqui no
-// cambia el comportamiento real hasta que esas clases se revisen por
-// separado.
-// =============================================================
-
 namespace Pins
 {
-    // =========================================================
-    // CHASSIS MOTORS (M1-M4) -- confirmado por el equipo.
-    // IN1_Mx / IN2_Mx / PWM_Mx, M1=upper-left, M2=upper-right,
-    // M3=lower-left, M4=lower-right (mismo orden que la version anterior
-    // de este archivo).
-    // =========================================================
-    // Valores tomados de src/test_sensors/motor_test.cpp (2026-08-31), que el
-    // equipo confirmo como los pines correctos ya verificados en hardware.
-    // motor_test.cpp cablea las variables de codigo m2_ur/m3_ll cruzadas
-    // respecto al chasis fisico ("M2 en codigo es M3 en chasis" y viceversa)
-    // -- los valores de abajo ya estan acomodados por POSICION FISICA
-    // (M1=upper-left, M2=upper-right, M3=lower-left, M4=lower-right), no por
-    // nombre de variable en ese archivo.
+    // CHASSIS MOTORS
     constexpr uint8_t kPwmPin[5] = {
         8,  // PWM_M1
         10, // PWM_M2 (pin del PWM de m3_ll en motor_test.cpp)
@@ -57,26 +28,12 @@ namespace Pins
         34   // IN2_M1
     };
 
-    // Reasignados (antes 16/17): IN1_M5 = pin 4, IN2_M5 = pin 3 (los pines 3/4
-    // eran SERVO2/SERVO3, ya no se usan como servo). PWM_M5 sigue en
-    // kPwmPin[4] (pin 12).
     constexpr uint8_t kElevator[2] = {
         4, // IN1_M5
         3  // IN2_M5
     };
 
-    // =========================================================
-    // ENCODERS (ENA_Mx / ENB_Mx en el esquematico = canales A/B por motor)
-    // kEncoders = {B1, A1, A2, B2, A3, B3, A4, B4}
-    // Se preserva el mismo orden/patron que la version anterior de este
-    // archivo (no es A,B,A,B... simetrico -- motor1 arranca en B), solo
-    // se actualizaron los valores de pin.
-    // =========================================================
-    // ENA_M2/ENB_M2 actualizados a 2/13 segun m3_ll en motor_test.cpp (pin de
-    // chasis M2 -- ver nota arriba sobre el cruce m2_ur/m3_ll). OJO: 2 y 13
-    // coinciden con kBnoRstReserved/kBnoIntReserved mas abajo -- mismo
-    // conflicto de pines que ya estaba documentado ahi, solo que ahora
-    // recae sobre el encoder de M2 en vez de M3.
+    // ENCODERS
     constexpr uint8_t kEncoders[8] = {
         0,  // ENB_M1
         1,  // ENA_M1
@@ -88,34 +45,11 @@ namespace Pins
         20  // ENB_M4
     };
 
-    // =========================================================
-    // ELEVATOR (motor 5: IN1_M5/IN2_M5/PWM_M5 en el esquematico) --
-    // confirmado por el equipo. No tiene ENA/ENB propio (usa los limit
-    // switches en vez de encoder).
-    // =========================================================
-
-    // =========================================================
-    // LIMIT SWITCH
-    // El esquematico nuevo muestra DOS limit switches (antes solo habia
-    // uno en este archivo). kLimitSwitch se mantiene con el mismo nombre
-    // para no romper StateMachine.hpp (que ya lo usa); kLimitSwitch2 es
-    // nuevo y todavia no esta conectado a ningun lado en el codigo.
-    // Sin pull-up interna del Teensy -- pull-up externa en la PCB.
-    // =========================================================
+    // LIMIT SWITCHES
     constexpr uint8_t kLimitSwitch  = 7; // Limit1
     constexpr uint8_t kLimitSwitch2 = 6; // Limit2 // placeholder: no usado aun en el codigo, confirmar su rol (elevator top/bottom, sorter, etc.)
 
-    // =========================================================
-    // 74HC4067 MULTIPLEXERS (x2)
-    // shared S0-S3, different SIG. Segun el equipo, AMBOS muxes son
-    // para QTR (front/rear) -- el IR ya NO pasa por mux (ver seccion
-    // IR mas abajo). El QTR real esta cableado a SIG_A1 (kMuxSig2), no a
-    // SIG_A0 (kMuxSig) -- confirmado comparando qtr_test.cpp (valores
-    // fijos en kMuxSig) contra vlx_qtr_test.cpp (valores variables en
-    // kMuxSig2). instances.cpp instancia su unico Mux74HC4067 con
-    // kMuxSig2 por eso; kMuxSig (mux1/SIG_A0) queda disponible pero sin
-    // usar hasta que se cablee un segundo QTR ahi.
-    // =========================================================
+    // 74HC4067 MULTIPLEXERS
     static constexpr uint8_t kMuxSig  = 26; // SIG_A0 -- mux1 (QTR front)
     static constexpr uint8_t kMuxSig2 = 22; // SIG_A1 -- mux2 (QTR rear)
 
@@ -124,89 +58,27 @@ namespace Pins
     static constexpr uint8_t kMuxS2 = 29; // s2_MUX
     static constexpr uint8_t kMuxS3 = 30; // s3_MUX
 
-    // =========================================================
-    // QTR ARRAYS ON MUX1/MUX2
-    // Numeros de canal dentro del mux (0-15), no pines fisicos del
-    // Teensy -- el esquematico no los afecta directamente, sin cambios.
-    //
-    // Orientacion fisica confirmada en campo (2026-09-12): dentro de
-    // qtrFront (indices 0-6 = C0-C6), C6 (indice 6, QTR::getPosition()
-    // alto/cerca de 6000) es el sensor mas ADELANTADO del arreglo; C0
-    // (position baja/cerca de 0) es el mas TRASERO. Usado para fijar el
-    // signo de la correccion QTR->vx en DriveStateMachineTest.cpp
-    // (handleLookForCornerState/handleBEANS).
-    // =========================================================
+    // QTR ARRAYS (mux channels)
     static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C6 (C7 no se usa, QTR::N=7)
     static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C13 (C14/C15 no se usan)
     static constexpr uint8_t kQtrRearCount    = 6; // C8 = first sensor to touch the line when going backwards
 
-    // =========================================================
     // IR SENSORS
-    // L1 (FL) y L2 (FR) se quedan igual que antes: GPIO directo
-    // (instances.cpp los trata como pines directos, ver "IR directos" ahi).
-    //
-    // L3 (BL) y L4 (BR) se mueven al mux compartido con los QTR (ver
-    // seccion "QTR ARRAYS ON MUX1/MUX2" arriba), usando los canales que
-    // quedan libres en cada bloque de 8 -- QTR::N=7 solo usa C0..C6 y
-    // C8..C13 (qtrRear tiene 6 sensores), dejando C7, C14 y C15 sin conexion. kIrChBL/kIrChBR (pines 15/14)
-    // quedan documentados abajo por referencia pero ya NO se usan para
-    // L3/L4.
-    // Canal fisico confirmado por el equipo (2026-09-16): L3->C15,
-    // L4->C7.
-    // =========================================================
     static constexpr uint8_t kIrChFL = 15; // L1
     static constexpr uint8_t kIrChFR = 14; // L2
     static constexpr uint8_t kIrChBL = 15;//23; // ya no usado para L3 (ver kIrChBLMux)
     static constexpr uint8_t kIrChBR = 14;//41; // ya no usado para L4 (ver kIrChBRMux)
 
-    static constexpr uint8_t kIrChBLMux = 15; // L3 -- canal libre del bloque rear (C8..C15)
-    static constexpr uint8_t kIrChBRMux = 7;  // L4 -- canal libre del bloque front (C0..C7)
+    static constexpr uint8_t kIrChBLMux = 7;  // back-left  -- free channel of the front block (C0..C7)
+    static constexpr uint8_t kIrChBRMux = 15; // back-right -- free channel of the rear block (C8..C15)
 
-    // =========================================================
-    // TOF SENSORS ON I2C MUX (TCA9548A)
-    // Numeros de canal del TCA9548A (0-7), no pines fisicos del
-    // Teensy. El TCA esta en Wire1 (SDA1=17, SCL1=16) -- confirmado en
-    // hardware con vlx_single_test.cpp (instances.cpp lo instancia asi).
-    // U = upper (frente), L = lower (atras).
-    // =========================================================
+    // TOF SENSORS (TCA9548A channels)
     static constexpr uint8_t kToFchFR = 0; // UR -- Front Right
     static constexpr uint8_t kToFchFL = 2; // UL -- Front Left
     static constexpr uint8_t kToFchBL = 3; // LL -- Back Left
     static constexpr uint8_t kToFchBR = 4; // LR -- Back Right
 
-    // =========================================================
-    // SERVOS -- 6 conectores JST directos (SERVO1-SERVO6) confirmados
-    // en la hoja SERVOS del esquematico completo, mas un PCA9685 (I2C)
-    // aparte para hasta 7 servos adicionales.
-    //
-    // OJO / CONFLICTO A CONFIRMAR: en esa hoja, la señal de SERVO1 tiene
-    // el mismo nombre de net que "INT" (pin 13) y la de SERVO5 el mismo
-    // nombre que "RST" (pin 2) -- los mismos pines que antes el equipo
-    // dijo que eran "extras del BNO, no conectados" (ver EXTRASBNO en
-    // la hoja principal). Mismo nombre de net en el esquematico
-    // normalmente = mismo nodo electrico, asi que lo mas probable es
-    // que esos 2 pines EN REALIDAD esten manejando SERVO1/SERVO5, no
-    // libres para el BNO. Se dejan mapeados aca con esa advertencia;
-    // confirmar con el equipo antes de que el firmware los use para
-    // otra cosa.
-    //
-    // SERVO6: no se pudo identificar su pin en el esquematico
-    // compartido -- placeholder.
-    //
-    // Los 5 roles con nombre (Upper/Lower Intake, Separator, Benefit,
-    // Holder) todavia no se pueden asignar a SERVO1-6 -- falta esa
-    // relacion logica con el equipo.
-    //
-    // OJO -- CORRECCION: a diferencia de lo que decia antes esta nota,
-    // ServoSystem.cpp SI usa estas constantes directamente como pines
-    // GPIO reales (ver su constructor: Pins::kUpperIntakeServo, etc. ->
-    // _pin[i], usados por la libreria Servo de Arduino, PWM directo, NO
-    // el PCA9685). Con el valor actual (255) son pines INVALIDOS: si
-    // este firmware llega a correr servos.begin() en hardware real tal
-    // como esta, va a intentar usar el pin 255 -- no es solo un dato
-    // pendiente, es un bug esperando a pasar. Hay que resolver esto
-    // antes de subir cualquier build que llame servos.begin().
-    // =========================================================
+    // SERVOS
     constexpr uint8_t kServoPin1 = 13; // SERVO1 -- mismo net que "INT" (BNO), CONFIRMAR
     constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- OJO: pin 3 ahora es IN2_M5 (elevator), no usar
     constexpr uint8_t kServoPin3 = 4;  // SERVO3 -- OJO: pin 4 ahora es IN1_M5 (elevator), no usar
@@ -220,29 +92,11 @@ namespace Pins
     constexpr uint8_t kBenefitServo     = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
     constexpr uint8_t kHolderServo      = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
 
-    // =========================================================
-    // BNO055 -- RST/INT
-    // Ver advertencia arriba (seccion SERVOS): estos mismos numeros de
-    // pin coinciden con las señales de SERVO5/SERVO1 en el esquematico.
-    // El equipo dijo antes que estos pines "no estan conectados" para
-    // el BNO -- probablemente fueron reutilizados para los servos en
-    // vez de quedar libres. PENDIENTE CONFIRMAR cual uso es el real
-    // antes de que el firmware los use para cualquiera de los dos fines.
-    // =========================================================
+    // BNO RST/INT
     static constexpr uint8_t kBnoRstReserved = 2;  // posible conflicto con SERVO5 -- confirmar
     static constexpr uint8_t kBnoIntReserved = 13; // posible conflicto con SERVO1 -- confirmar
 
-    // NOTA: el equipo menciono "3 pines extra" ademas de los del BNO.
-    // No se pudieron identificar sus numeros ni en el esquematico
-    // inicial ni en el layout completo -- pendiente de confirmar antes
-    // de asignarles un uso.
-
-    // =========================================================
-    // OPTIONAL / LEGACY ULTRASONICS
-    // El esquematico nuevo no menciona ultrasonicos -- posiblemente
-    // obsoleto / reemplazado por los IR directos y el ToF. Sin cambios,
-    // se deja como estaba.
-    // =========================================================
+    // LEGACY ULTRASONICS
     constexpr uint8_t kDistanceSensors[4][2] = {
         {35, 33},     // FRONT LEFT  {TRIG, ECHO}
         {36, 34},     // FRONT RIGHT {TRIG, ECHO}
@@ -250,9 +104,7 @@ namespace Pins
         {255, 255}    // BACK LEFT  not confirmed
     };
 
-    // =========================================================
-    // OPTIONAL / LEGACY
-    // =========================================================
+    // LEGACY
     // constexpr uint8_t kBluetoothRx = 7;
     // constexpr uint8_t kBluetoothTx = 8;
 }

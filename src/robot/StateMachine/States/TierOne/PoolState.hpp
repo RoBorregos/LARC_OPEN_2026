@@ -33,11 +33,11 @@ public:
                 break;
 
             case PoolSubState::AVOID_LEFT:
-                handleAvoidLeft(now, obstacle, leftDetected);
+                handleAvoidLeft(now, obstacle, leftDetected, rightDetected);
                 break;
 
             case PoolSubState::AVOID_RIGHT:
-                handleAvoidRight(now, obstacle, rightDetected);
+                handleAvoidRight(now, obstacle, leftDetected, rightDetected);
                 break;
         }
     }
@@ -132,7 +132,7 @@ private:
         }
     }
 
-    void handleAvoidLeft(uint32_t now, bool obstacle, bool leftDetected) {
+    void handleAvoidLeft(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected) {
         using namespace StateCommon;
 
         // Si el obstáculo se acerca demasiado, retroceder
@@ -149,29 +149,16 @@ private:
         LARC.left(0.30f);
 
         const bool justEntered = (now - poolStateStartMs) < 150;
+        // Both sides at once means a line crossing the robot, not the left border.
+        const bool borderReached = leftDetected && !rightDetected && !justEntered;
 
-        if (leftDetected && !justEntered) {
-            clearStartMs = 0;
-            sideDetectStartMs = 0;
-            setSubState(PoolSubState::AVOID_RIGHT);
-        } else {
-            sideDetectStartMs = 0;
+        if (handleBorder(now, obstacle, borderReached, PoolSubState::AVOID_RIGHT))
+            return;
 
-            if (!obstacle) {
-                if (clearStartMs == 0)
-                    clearStartMs = now;
-
-                if ((now - clearStartMs) >= kClearDelayMs) {
-                    noObstacleStartMs = 0;
-                    setSubState(PoolSubState::FORWARD);
-                }
-            } else {
-                clearStartMs = 0;
-            }
-        }
+        updateClear(now, obstacle);
     }
 
-    void handleAvoidRight(uint32_t now, bool obstacle, bool rightDetected) {
+    void handleAvoidRight(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected) {
         using namespace StateCommon;
 
         // Si el obstáculo se acerca demasiado, retroceder
@@ -188,25 +175,48 @@ private:
         LARC.right(0.30f);
 
         const bool justEntered = (now - poolStateStartMs) < 100;
+        const bool borderReached = rightDetected && !leftDetected && !justEntered;
 
-        if (rightDetected && !justEntered) {
+        if (handleBorder(now, obstacle, borderReached, PoolSubState::AVOID_LEFT))
+            return;
+
+        updateClear(now, obstacle);
+    }
+
+    // Border line held for kSideDetectHoldMs: if the obstacle is already clear,
+    // go FORWARD instead of strafing back in front of it.
+    bool handleBorder(uint32_t now, bool obstacle, bool borderReached, PoolSubState opposite) {
+        using namespace StateCommon;
+
+        if (!borderReached) {
+            sideDetectStartMs = 0;
+            return false;
+        }
+
+        if (sideDetectStartMs == 0)
+            sideDetectStartMs = now;
+
+        if ((now - sideDetectStartMs) >= kSideDetectHoldMs) {
+            noObstacleStartMs = 0;
+            setSubState(obstacle ? opposite : PoolSubState::FORWARD);
+        }
+        return true;
+    }
+
+    void updateClear(uint32_t now, bool obstacle) {
+        using namespace StateCommon;
+
+        if (obstacle) {
             clearStartMs = 0;
-            sideDetectStartMs = 0;
-            setSubState(PoolSubState::AVOID_LEFT);
-        } else {
-            sideDetectStartMs = 0;
+            return;
+        }
 
-            if (!obstacle) {
-                if (clearStartMs == 0)
-                    clearStartMs = now;
+        if (clearStartMs == 0)
+            clearStartMs = now;
 
-                if ((now - clearStartMs) >= kClearDelayMs) {
-                    noObstacleStartMs = 0;
-                    setSubState(PoolSubState::FORWARD);
-                }
-            } else {
-                clearStartMs = 0;
-            }
+        if ((now - clearStartMs) >= kClearDelayMs) {
+            noObstacleStartMs = 0;
+            setSubState(PoolSubState::FORWARD);
         }
     }
 };

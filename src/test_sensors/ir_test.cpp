@@ -1,87 +1,55 @@
 /**
  * @file ir_test.cpp
- * @brief Diagnostico standalone de los 4 sensores IR digitales L1-L4,
- *        usando los pines del esquematico de la PCB nueva (compartido por
- *        el equipo), NO los de include/pins.h -- esos siguen reflejando
- *        una placa anterior y no coinciden con esta (ver comparacion
- *        hecha en la sesion de debug). No pasa por ningun mux ni por la
- *        maquina de estados: es puro digitalRead() sobre los 4 pines.
+ * @brief Standalone diagnostic of the 4 IR line sensors, same wiring as
+ *        robot/instances/instances.cpp: L1 (FL) / L2 (FR) on direct GPIO,
+ *        L3 (BL) / L4 (BR) as analog channels on the mux (kMuxSig2).
  *
- *        L1 -> pin 15
- *        L2 -> pin 14
- *        L3 -> pin 23
- *        L4 -> pin 41
+ *        Prints the IRLine state used by Perception (FL FR BL BR) plus the
+ *        raw mux value of BL/BR against its threshold.
  *
- * Como usarlo: abre el monitor serie y pasa la mano sobre cada sensor uno
- * por uno. Un sensor conectado y funcionando debe mostrar su columna
- * cambiando de forma estable (0/1) al bloquear/destapar el sensor. Un pin
- * flotante (sensor desconectado, sin pull-up/pull-down) tipicamente se ve
- * "ruidoso": cambia solo, rapido, sin que nadie toque nada.
+ * Place one corner of the robot at a time over the line and check which
+ * column turns on (e.g. back-left corner only -> BL should be 1).
  *
  * pio run -e ir_test -t upload -t monitor
  */
 
 #include <Arduino.h>
 
-struct IrPin
-{
-    const char *label;
-    uint8_t pin;
-};
+#include "pins.h"
+#include "constants.h"
+#include "IR/IR.hpp"
+#include "mux.h"
 
-static const IrPin kIrPins[4] = {
-    {"L1", 15},
-    {"L2", 14},
-    {"L3", 23},
-    {"L4", 41},
-};
+Mux74HC4067 mux(Pins::kMuxSig2);
+IRLine ir(Pins::kIrChFL, Pins::kIrChFR, mux,
+          Pins::kIrChBLMux, Pins::kIrChBRMux, 0b0000);
 
 void setup()
 {
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {}
 
-    for (const auto &ir : kIrPins)
-        pinMode(ir.pin, INPUT);
+    ir.begin();
 
-    Serial.println(F("[IR TEST] pines (del esquematico nuevo, sin pull-up interna):"));
-    for (const auto &ir : kIrPins)
-        Serial.printf("  %s -> pin %u\n", ir.label, ir.pin);
-    Serial.println(F("[IR TEST] pasa la mano sobre cada sensor y observa que columna cambia."));
+    Serial.printf("[IR TEST] FL pin %u | FR pin %u | BL mux C%u (thr %u) | BR mux C%u (thr %u)\n",
+                  Pins::kIrChFL, Pins::kIrChFR,
+                  Pins::kIrChBLMux, Constants::IRCalibration::kThreshBL,
+                  Pins::kIrChBRMux, Constants::IRCalibration::kThreshBR);
 }
 
 void loop()
 {
     static uint32_t lastPrint = 0;
-    static uint32_t sampleCount = 0;
-    static uint32_t transitions[4] = {0, 0, 0, 0};
-    static int lastValue[4] = {-1, -1, -1, -1};
 
-    // Muestreo rapido para detectar "ruido" de pines flotantes entre prints.
-    for (uint8_t i = 0; i < 4; ++i)
-    {
-        int v = digitalRead(kIrPins[i].pin);
-        if (lastValue[i] != -1 && v != lastValue[i])
-            ++transitions[i];
-        lastValue[i] = v;
-    }
-    ++sampleCount;
+    ir.update();
 
     const uint32_t now = millis();
-    if (now - lastPrint >= 200)
-    {
-        lastPrint = now;
-        Serial.printf(
-            "[%lu ms] L1=%d(%lu) L2=%d(%lu) L3=%d(%lu) L4=%d(%lu)  (valor actual(transiciones desde el print anterior, de %lu muestras))\n",
-            (unsigned long)now,
-            lastValue[0], (unsigned long)transitions[0],
-            lastValue[1], (unsigned long)transitions[1],
-            lastValue[2], (unsigned long)transitions[2],
-            lastValue[3], (unsigned long)transitions[3],
-            (unsigned long)sampleCount);
+    if (now - lastPrint < 150)
+        return;
+    lastPrint = now;
 
-        for (uint8_t i = 0; i < 4; ++i)
-            transitions[i] = 0;
-        sampleCount = 0;
-    }
+    Serial.printf("FL=%d FR=%d BL=%d BR=%d | rawBL=%d rawBR=%d\n",
+                  ir.getState(IRLine::FL), ir.getState(IRLine::FR),
+                  ir.getState(IRLine::BL), ir.getState(IRLine::BR),
+                  mux.read(Pins::kIrChBLMux), mux.read(Pins::kIrChBRMux));
 }

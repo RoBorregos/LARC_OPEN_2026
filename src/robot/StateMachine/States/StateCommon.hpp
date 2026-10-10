@@ -10,7 +10,7 @@
 
 namespace StateCommon
 {
-    static constexpr float kVelocity = 0.30f;
+    static constexpr float kVelocity = 0.25f;
     static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
 
     static constexpr float kCornerSetpoint = 2900.0f;
@@ -22,8 +22,8 @@ namespace StateCommon
     static constexpr float kRearCorrAlpha = 0.15f;
 
     static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
-    static constexpr uint32_t kClearDelayMs = 1500;         // Tiempo para cambiar nuevamente a Forward
-    static constexpr uint32_t kNoObstacleToCornerMs = 1000; // Time without obstacle to go forward and LOOKFORLINE
+    static constexpr uint32_t kClearDelayMs = 500;         // Tiempo de mantener esquivando Time to change again to Forward HandlePool
+    static constexpr uint32_t kNoObstacleToCornerMs = 1000; // WithoutPools, before changing to LookForLineStateTime without obstacle to go forward and LOOKFORLINE
 
     static constexpr uint32_t kMinAvoidTimeMs = 250;
     static constexpr uint32_t kSideDetectHoldMs = 80;

@@ -68,12 +68,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-             {69, 68, 64, 70, 80, 87, 84},          // On white
-             {849, 848, 853, 890, 904, 900, 904}}; // black (up and DOWN)
+             {66, 67, 68, 67, 75, 83, 72},          // On white
+             {827, 869, 863, 863, 872, 880, 856}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-              {65, 62, 65, 112, 193, 192},
-            {843, 823, 862, 930, 888, 904}};
+              {68, 68, 78, 263, 256, 176},
+            {824, 865, 888, 938, 892, 904}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -108,8 +108,8 @@ namespace Constants
         // PLACEHOLDERS
         static constexpr uint16_t kThreshFL = 50; // Front-Left
         static constexpr uint16_t kThreshFR = 300; // Front-Right
-        static constexpr uint16_t kThreshBL = 50;  // Back-Left
-        static constexpr uint16_t kThreshBR = 112; // Back-Right
+        static constexpr uint16_t kThreshBL = 112; // Back-Left  (mux C7)
+        static constexpr uint16_t kThreshBR = 50;  // Back-Right (mux C15)
 
         static constexpr uint16_t kHysteresis = 5;    // Hysteresis margin (same for all sensors)
         static constexpr uint16_t kDebounceCount = 3; // Number of consecutive readings to confirm state change

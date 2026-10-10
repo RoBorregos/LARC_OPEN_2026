@@ -57,7 +57,7 @@ public:
             // ── Stage 5: Avanzar y transicionar a POOL ───────────────────────
             case 5:
                 setElevator(kElevatorStop);
-                LARC.forward(0.25f);
+                LARC.forward(0.28f);
 
                 if ((now - action_start_time) >= kStartIgnoreTimeMs) {
                     transitionToPool = true;
