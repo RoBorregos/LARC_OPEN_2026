@@ -71,7 +71,8 @@ enum class SeparatorCode : uint8_t
 //BENEFITS payload
 constexpr uint8_t kMaskBenefit1     = 0x01;
 constexpr uint8_t kMaskBenefit2     = 0x02;
-constexpr uint8_t kBenefitsReserved = 0xFC; // must be zero
+constexpr uint8_t kMaskBoxVisible   = 0x04; // any ROI sees a box colour
+constexpr uint8_t kBenefitsReserved = 0xF8; // must be zero
 
 //STATUS byte
 constexpr uint8_t kStatusMainFault       = 0x01; // critical
@@ -103,6 +104,7 @@ struct Command
     SeparatorCode separator;
     bool          benefit1Open;
     bool          benefit2Open;
+    bool          boxVisible;   // BENEFITS: a box is in view, centred or not
     bool          separatorInvalid; // saw 0b11; separator forced NEUTRAL
     uint8_t       status;
     uint8_t       rawPayload; // as received, for the confirmation filter
@@ -131,7 +133,7 @@ bool phaseValid(uint8_t phaseByte);
 uint8_t makeBeansPayload(bool intakeUpper, bool intakeLower, SeparatorCode separator);
 
 /// Build the BENEFITS payload byte.
-uint8_t makeBenefitsPayload(bool benefit1Open, bool benefit2Open);
+uint8_t makeBenefitsPayload(bool benefit1Open, bool benefit2Open, bool boxVisible = false);
 
 /// Fill out[kFrameLen] with a complete, CRC'd frame.
 void buildFrame(uint8_t seq, Phase phase, uint8_t payload, uint8_t status,

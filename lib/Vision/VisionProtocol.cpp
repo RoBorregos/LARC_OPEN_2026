@@ -56,11 +56,12 @@ uint8_t makeBeansPayload(bool intakeUpper, bool intakeLower, SeparatorCode separ
     return p;
 }
 
-uint8_t makeBenefitsPayload(bool benefit1Open, bool benefit2Open)
+uint8_t makeBenefitsPayload(bool benefit1Open, bool benefit2Open, bool boxVisible)
 {
     uint8_t p = 0;
     if (benefit1Open) p |= kMaskBenefit1;
     if (benefit2Open) p |= kMaskBenefit2;
+    if (boxVisible)   p |= kMaskBoxVisible;
     return p;
 }
 
@@ -88,6 +89,7 @@ Command decodeCommand(Phase phase, uint8_t payload, uint8_t status)
     cmd.separator        = SeparatorCode::NEUTRAL;
     cmd.benefit1Open     = false;
     cmd.benefit2Open     = false;
+    cmd.boxVisible       = false;
     cmd.separatorInvalid = false;
     cmd.status           = status;
     cmd.rawPayload       = payload;
@@ -106,6 +108,7 @@ Command decodeCommand(Phase phase, uint8_t payload, uint8_t status)
     {
         cmd.benefit1Open = (payload & kMaskBenefit1) != 0;
         cmd.benefit2Open = (payload & kMaskBenefit2) != 0;
+        cmd.boxVisible   = (payload & kMaskBoxVisible) != 0;
     }
 
     return cmd;
