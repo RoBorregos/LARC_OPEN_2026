@@ -14,7 +14,8 @@ Stop    : Ctrl+C or systemctl stop — both park the robot in IDLE first
 Script contract
     intake     VISION:XX        bit 0 = intake upper, bit 1 = intake lower
     separator  VISION:FD:WW:CC  WW = warm hit, CC = cool hit (00 or 01)
-    benefits   VISION:FE:XX     00 none, 01 red, 02 blue (only when centred)
+    benefits   VISION:FE:XX:VV  XX 00 none, 01 red, 02 blue (only when centred)
+                                VV 01 when any ROI sees a box (optional, else 00)
 """
 
 from __future__ import annotations
@@ -79,7 +80,7 @@ WARM_IS = vp.SEP_LEFT # warm ball - separator LEFT  (mature)
 COOL_IS = vp.SEP_RIGHT # cool ball - separator RIGHT (overmature)
 
 BOX_NONE, BOX_RED, BOX_BLUE = 0, 1, 2
-BOX_DOOR = {BOX_RED: 0, BOX_BLUE: 1}   # box type - which door opens
+BOX_DOOR = {BOX_RED: 1, BOX_BLUE: 0}   # box type - which door opens
 BOX_NAMES = {BOX_NONE: "NONE", BOX_RED: "RED", BOX_BLUE: "BLUE"}
 
 FAULT_BIT = {
@@ -115,6 +116,7 @@ class VisionState:
         self.separator_ms = 0
 
         self.box = BOX_NONE
+        self.box_visible = False
         self.box_ms = 0
 
         self.reports = {} # actual reports only; startup grace is not readiness
@@ -146,8 +148,9 @@ class VisionState:
                 self.reports[source] = stamp
                 return True
 
-            if source == "benefits" and len(fields) == 2 and fields[0] == 0xFE:
+            if source == "benefits" and len(fields) in (2, 3) and fields[0] == 0xFE:
                 self.box = fields[1]
+                self.box_visible = len(fields) == 3 and bool(fields[2])
                 self.box_ms = stamp
                 self.reports[source] = stamp
                 return True
@@ -185,6 +188,7 @@ class VisionState:
             self.sep_side = vp.SEP_NEUTRAL
             self.sep_until_ms = 0
             self.box = BOX_NONE
+            self.box_visible = False
             self.stale.clear()
             self.reports.clear()
 
@@ -224,13 +228,15 @@ class VisionState:
             if stamp - self.box_ms > STALE_MS["benefits"]:
                 stale.add("benefits")
                 self.stale = stale
-                return False, False, stale
+                return False, False, False, stale
 
             # Held while benefits.py sees the box centred. The Teensy decides
             # when to open (openBenefit()); timed doors re-arm on their own.
+            # visible: any part of a box in view, so the Teensy can tell
+            # "box sliding out" from "box gone".
             door = BOX_DOOR.get(self.box)
             self.stale = stale
-            return door == 0, door == 1, stale
+            return door == 0, door == 1, self.box_visible, stale
 
 
 # Child processes
@@ -474,9 +480,9 @@ class Dispatcher:
             summary = (f"BEANS upper={int(upper)} lower={int(lower)} "
                        f"sep={vp.SEP_NAMES[separator]}")
         elif phase == "benefits":
-            door1, door2, stale = self.state.benefits_command()
-            self.link.set_benefits(door1, door2)
-            summary = f"BENEFITS door1={int(door1)} door2={int(door2)}"
+            door1, door2, visible, stale = self.state.benefits_command()
+            self.link.set_benefits(door1, door2, visible)
+            summary = f"BENEFITS door1={int(door1)} door2={int(door2)} visible={int(visible)}"
         else:
             return
 
