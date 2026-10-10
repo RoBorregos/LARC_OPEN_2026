@@ -48,7 +48,7 @@ PANEL_W, PANEL_H = 420, 300
 
 BOX_NONE, BOX_RED, BOX_BLUE = 0, 1, 2
 BOX_NAMES = {BOX_NONE: "NONE", BOX_RED: "RED", BOX_BLUE: "BLUE"}
-BOX_DOOR = {BOX_RED: 0, BOX_BLUE: 1} # must match dispatcher.py
+BOX_DOOR = {BOX_RED: 1, BOX_BLUE: 0} # must match dispatcher.py
 PULSE_SEC = 0.35 # how long we assert "open"
 
 DEFAULT_CFG = dict(

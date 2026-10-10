@@ -8,7 +8,8 @@ Purpose : Watch three small ROIs (left, centre, right) during the benefits
           Teensy only stops at a box it is lined up with.
 Camera  : role "benefits" in ../cameras.json (C920 serial 0E9612EF, MJPG)
 Config  : benefits_config.json
-Output  : VISION:FE:XX lines on stdout (00 none, 01 red, 02 blue).
+Output  : VISION:FE:XX:VV lines on stdout. XX: 00 none, 01 red, 02 blue
+          (only when centred). VV: 01 when any ROI sees a box colour.
           This file owns no serial port.
 Tune    : python3 tools/tune_beans_web.py --no-intake --no-separator
 Stop    : Ctrl+C
@@ -164,8 +165,9 @@ def main():
             result = analyze(frame, cfg)
             box_type = result['box']
 
-            # Emit vision data for the dispatcher to forward: VISION:FE:XX (hex)
-            print(f"VISION:FE:{box_type:02X}", flush=True)
+            # Emit vision data for the dispatcher to forward: VISION:FE:XX:VV (hex)
+            visible = any(c != BOX_NONE for c in result['colours'])
+            print(f"VISION:FE:{box_type:02X}:{int(visible):02X}", flush=True)
 
             frame_count += 1
             now = time.time()
