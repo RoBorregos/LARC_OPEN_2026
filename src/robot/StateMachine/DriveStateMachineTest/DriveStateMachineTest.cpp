@@ -462,9 +462,14 @@ void DriveStateMachineTest::setState(DriveTestSTATES newState)
     if (currentState == newState)
         return;
 
-    // Stop sorting as soon as we leave the beans route.
-    if ((currentState == DriveTestSTATES::BEANS || currentState == DriveTestSTATES::BEANSGOBACK)
-        && newState != DriveTestSTATES::BEANS && newState != DriveTestSTATES::BEANSGOBACK) {
+    // Keep sorting from BEANS all the way back to the benefits corner; stop
+    // only when entering BENEFITS (or STOP). The intakes stay live too.
+    auto isSortingState = [](DriveTestSTATES s) {
+        return s == DriveTestSTATES::BEANS || s == DriveTestSTATES::BEANSGOBACK ||
+               s == DriveTestSTATES::POOLSGOBACK || s == DriveTestSTATES::LOOKFORLINEBACKWARDS ||
+               s == DriveTestSTATES::BENEFITSSTARTCORNER;
+    };
+    if (isSortingState(currentState) && !isSortingState(newState)) {
         vision.resetGuards();
         vision.stop();
     }
@@ -476,6 +481,8 @@ void DriveStateMachineTest::setState(DriveTestSTATES newState)
     benefitColour = VisionLink::kNoBenefit;
     benefitArmed = true;
     benefitOpened = false;
+    benefitLastSeenMs = 0;
+    benefitApproachMs = 0;
     state_start_time = millis();
     action_start_time = 0;
     action_stage = 0;
@@ -1460,9 +1467,6 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
         return;
     }
 
-    if (!vision.benefitSeen())
-        benefitArmed = true;
-
     switch (action_stage)
     {
     case 0:
@@ -1499,6 +1503,21 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
 
         LARC.setTranslation(rearCorrFiltered, -kVelocity);
 
+        // Re-arm only once the box has FULLY left the camera (no ROI sees
+        // it) for kBenefitRearmMs, so a box sliding out slowly, or flickering
+        // between CENTER and RIGHT, cannot cause a second stop.
+        if (vision.benefitVisible())
+            benefitLastSeenMs = now;
+        else if (now - benefitLastSeenMs >= kBenefitRearmMs)
+            benefitArmed = true;
+
+        // The box must stay centred for kBenefitApproachMs before we stop,
+        // so a one-frame CENTER while it is still entering is ignored.
+        if (!vision.benefitSeen())
+            benefitApproachMs = 0;
+        else if (benefitApproachMs == 0)
+            benefitApproachMs = now;
+
         if (cornerRIGHTDetected)
         {
             LARC.stop();
@@ -1506,10 +1525,12 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
             action_stage = 2;
         }
         // The 3 benefits ROIs see the same colour: stop, then open
-        else if (benefitArmed && vision.benefitSeen())
+        else if (benefitArmed && vision.benefitSeen() && benefitApproachMs != 0 &&
+                 (now - benefitApproachMs) >= kBenefitApproachMs)
         {
             LARC.stop();
             benefitArmed = false;
+            benefitApproachMs = 0;
             benefitOpened = false;
             benefitCentredMs = now;
             benefitColour = vision.seenBenefit();
@@ -1539,7 +1560,7 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
             benefitCentredMs = now;
             benefitColour = vision.seenBenefit();
         }
-        if (!benefitOpened && vision.benefitSeen() && (now - benefitCentredMs) >= 300)
+        if (!benefitOpened && vision.benefitSeen() && (now - benefitCentredMs) >= kBenefitConfirmMs)
         {
             vision.openBenefit();
             benefitOpened = vision.benefitHeld();
@@ -1553,6 +1574,11 @@ void DriveStateMachineTest::handleBenefits(uint32_t now, bool cornerRIGHTDetecte
             (!benefitOpened && (now - action_start_time) >= kBenefitStopMs))
         {
             vision.closeBenefit();
+            benefitLastSeenMs = now; // the box must vanish for kBenefitRearmMs from here
+            // No door opened (colour never held): stay armed, so the robot
+            // stops again once this box is properly centred.
+            if (!benefitOpened)
+                benefitArmed = true;
             action_stage = 1;
         }
         break;

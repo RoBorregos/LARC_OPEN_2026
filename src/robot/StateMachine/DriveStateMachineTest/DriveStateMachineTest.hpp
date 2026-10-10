@@ -96,6 +96,8 @@ private:
     bool     benefitArmed    = true;
     bool     benefitOpened   = false;
     uint32_t benefitOpenedMs = 0;
+    uint32_t benefitLastSeenMs = 0; // last time any part of a box was in view while driving
+    uint32_t benefitApproachMs = 0; // when the box became centred while driving, 0 = not centred
 
     // Set states
     void setState(DriveTestSTATES newState);
