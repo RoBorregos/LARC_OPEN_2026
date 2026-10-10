@@ -9,6 +9,7 @@
  * 
  * @date 2026-01-12
  * 
+ * First layer for control of CONTROL (1)
  * 
  */
 
@@ -54,7 +55,7 @@ class DCMotor
         float getDistanceMeters() const;   
         void  setPPR(float ppr);     // to configure the motor
 
-        void testForwardBackward();
+        void testForwardBackward(const char* label = "motor");
 
 
     private:

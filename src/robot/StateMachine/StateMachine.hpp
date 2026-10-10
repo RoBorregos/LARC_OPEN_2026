@@ -4,13 +4,26 @@
 #include <Arduino.h>
 #include "constants.h"
 #include "pins.h"
-#include "testOdometry.hpp"
 #include "robot/instances/instances.hpp"
+#include "robot/Perception/Perception.hpp"
+
+// State machine (states) files...
+#include "States/TierOne/StartState.hpp"
+#include "States/TierOne/PoolState.hpp"
+#include "States/TierOne/LookForLineState.hpp"
+#include "States/TierTwo/LookForCornerState.hpp"
+#include "States/TierTwo/BeansState.hpp"
+#include "States/TierTwo/BeansGoBack.hpp"
+#include "States/TierTwo/PoolsGoBackState.hpp"
+#include "States/TierThree/LookForLineBackwards.hpp"
+#include "States/TierThree/BenefitsStartCorner.hpp"
+#include "States/TierThree/BenefitsState.hpp"
+#include "States/TierThree/StopState.hpp"
 
 enum class STATES
 {
     START,
-    POOL,         
+    POOL,
     LOOKFORLINE,          //Try if this works well, in case there aren't pools (add qtr for front line detection)
     LOOKFORCORNER,
     BEANS,                // BEANS(left to right) :: Recoje las pelotas y inicializa vision + Sorter (vision)
@@ -22,13 +35,6 @@ enum class STATES
     STOP                  // FINISH ALL TASKS      :D          !!! Ends in right corner
 };
 
-enum class PoolSubState
-{
-    FORWARD,
-    AVOID_LEFT,
-    AVOID_RIGHT
-};
-
 class LARCStateMachine
 {
 public:
@@ -36,65 +42,39 @@ public:
 
     void begin();
     void update();
+    void updateControl();
 
 private:
     STATES currentState = STATES::START;
-    PoolSubState poolState = PoolSubState::FORWARD;
 
     uint32_t state_start_time = 0;
-    uint32_t action_start_time = 0;
-    int action_stage = 0;
-
-    uint32_t clearStartMs = 0;
-    uint32_t noObstacleStartMs = 0;
 
     byte visionLeft = 0;
     byte visionRight = 0;
 
     // ELEVATOR
     const int limitSwitch = Pins::kLimitSwitch;
-    bool lastLimitPressed = false;
-    bool limitWasPressed = false;
-    bool elevatorGoingUpByLimit = false;
-    uint32_t elevatorUpStartMs = 0;
 
-    // IRs to change of left or right
-    uint32_t poolStateStartMs = 0;
-    uint32_t sideDetectStartMs = 0;
+    Perception perception_;
 
-    // lateral correction for LOOKFORLINE
-    bool     lfCorrecting        = false;
-    int8_t   lfCorrectionDir     = 0;
-    uint32_t lfCorrectionStartMs = 0;
-    uint32_t lfLeftHoldMs        = 0;  
-    uint32_t lfRightHoldMs       = 0;  
+    StartState startState_;
+    PoolState poolState_;
+    LookForLineState lookForLineState_;
+    LookForCornerState lookForCornerState_;
+    BeansState beansState_;
+    BeansGoBackState beansGoBackState_;
+    PoolsGoBackState poolsGoBackState_;
+    LookForLineBackwardsState lookForLineBackwardsState_;
+    BenefitsStartCornerState benefitsStartCornerState_;
+    BenefitsState benefitsState_;
+    StopState stopState_;
 
-    OdomMovement odomMove_;
-
-    // Set states
     void setState(STATES newState);
-    void setPoolState(PoolSubState newState);
+    void beginState(STATES state);
     void startStateTime();
-    void readVision();
 
-    // Cases
-    // First part
-    void handleStartState(uint32_t now, bool backDetected);                                                                  // START
-                                                                                                          // Second part (AVOID)
-    void handlePoolState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected);             // POOLS
-    void handleLookForLineState(uint32_t now, bool frontDetected, bool leftDetected, bool rightDetected, bool onLine); // LOOKFORLINE(no obstacle detected | obstacle no longer detected)
-    void handleLookForCornerState(uint32_t now, bool cornerLEFTDetected, float vx);                       // LOOKFORCORNER (to start vision)
-    // Third part (RECOLECT)
-    void handleBEANS(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx); // BEANS state (recolection + sorting)
-    void handleBEANSGoBackState(uint32_t now, bool cornerRIGHTDetected, bool onLine, float vx);
-    // Fourth part (GO BACK)
-    void handlePOOLSGoBackState(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected);
-    void handleLookForLineBackWards(uint32_t now, bool backDetected, bool backLeftDetected, bool backRightDetected);
-    void handleBenefitsStartCorner(uint32_t now, bool cornerLeftDetected, float vx, bool onLine);
-    void handleBenefits(uint32_t now, bool cornerRightDetected, float vx, bool onLine);
-
-    // The End ♡
-    void handleStopState(); // END of tasks :D !!!
+    // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
+    void debugPrint(bool enabled);
 };
 
 #endif

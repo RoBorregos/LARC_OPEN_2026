@@ -40,9 +40,12 @@ namespace Constants
     {
         static constexpr float kKp = 1.20f;//1.20;   // 4.8f;  2.5f; 1.5f
         static constexpr float kKi = 0.002f; // 0.002f
-        static constexpr float kKd = 0.0042f;  // 0.0012f; // 0.06f; 0.0f
+        static constexpr float kKd = 0.04f;  // 0.0042f; 0.0012f; 0.06f; 0.0f
         static constexpr float kOmegaMax = 0.25f; //0.25f;
-        static constexpr float kcurrentVelocity = 0.38f; // Velocity according to PID
+        static constexpr float kOmegaMin = 0.12f;       // minimum omega that moves the motors (deadband)
+        static constexpr float kYawDeadbandDeg = 1.5f;  // below this yaw error no minimum push
+        static constexpr float kYawRateClosingDegS = 5.0f; // turning toward the target faster than this: no minimum push
+        static constexpr float kcurrentVelocity = 0.30f; // Velocity according to PID
 
     } // namespace PID
     namespace UltrasonicConstants
@@ -64,23 +67,36 @@ namespace Constants
             uint16_t max[kNumSensors];
         };
 
-        // PLACEHOLDERS
         constexpr Profile Front = {
-            {811, 805, 846, 841, 856, 855, 869},          // On white
-            {997, 995, 1001, 1001, 1001, 1000, 999}}; // black (up and DOWN)
+             {66, 67, 68, 67, 75, 83, 72},          // On white
+             {827, 869, 863, 863, 872, 880, 856}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-            {120, 130, 115, 140, 150, 135, 128, 122},
-            {3100, 3200, 3050, 3300, 3350, 3250, 3150, 3000}};
+              {68, 68, 78, 263, 256, 176},
+            {824, 865, 888, 938, 892, 904}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
+
+        // ── Autocalibracion (ver QTR::ambientCalibrate / beginAutoCal) ──────
+        // Paso 1, ambient (robot quieto sobre fondo sin linea, al arrancar):
+        constexpr uint16_t kAmbientMaxDelta   = 100; // max corrimiento global de calMin (cuentas ADC)
+        constexpr uint16_t kAmbientRejectNorm = 200; // 0-1000: si algun sensor lee mas, NO esta sobre fondo -> se rechaza
+
+        // Paso 2, ventana de aprendizaje por sensor (dentro de los estados):
+        constexpr uint16_t kLearnBgNorm       = 150; // norm < esto -> lectura de fondo (alimenta calMin)
+        constexpr uint16_t kLearnLineNorm     = 400; // norm > esto -> candidato a linea (alimenta calMax)
+        constexpr uint8_t  kLearnHighSamples  = 3;   // lecturas seguidas altas antes de aceptar un maximo (rechaza picos EMI)
+        constexpr float    kLearnBgAlpha      = 0.05f; // filtro exponencial del fondo
+        constexpr uint16_t kLearnMinBand      = 120; // el min aprendido no se aleja mas de esto del valor previo
+        constexpr uint16_t kLearnMaxBand      = 200; // idem para el max
+        constexpr uint16_t kMinSpan           = 300; // rango minimo max-min; si no se cumple, el sensor no se actualiza
 
     } // namespace QTRCalibration
 
     namespace LineFollower
 
     {
-        constexpr int kSetpoint = 2700;//2700; // center of 0-6000 range (el ultimo no se esta tomndo otherwise 0-7000)
+        constexpr int kSetpoint = 2900;//2700; // center of 0-6000 range (el ultimo no se esta tomndo otherwise 0-7000)
         // change to 4000, 2000, etc. as needed
     }
 
@@ -92,8 +108,8 @@ namespace Constants
         // PLACEHOLDERS
         static constexpr uint16_t kThreshFL = 50; // Front-Left
         static constexpr uint16_t kThreshFR = 300; // Front-Right
-        static constexpr uint16_t kThreshBL = 50;  // Back-Left
-        static constexpr uint16_t kThreshBR = 112; // Back-Right
+        static constexpr uint16_t kThreshBL = 112; // Back-Left  (mux C7)
+        static constexpr uint16_t kThreshBR = 50;  // Back-Right (mux C15)
 
         static constexpr uint16_t kHysteresis = 5;    // Hysteresis margin (same for all sensors)
         static constexpr uint16_t kDebounceCount = 3; // Number of consecutive readings to confirm state change

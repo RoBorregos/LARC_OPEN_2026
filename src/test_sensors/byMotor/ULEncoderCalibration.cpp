@@ -1,21 +1,27 @@
-// LL calibration 
+/* UL calibration :: RPMs: 190  (02 Septiembre 2026)
+
+    // En proceso de calibracion  
+
+// Calibration    <<<<<UL>>>>>>
 
 //Use this code to calibrate
 
-// Penultimo code o test para los Encoders
+// Almost last code or test for the Encoders
 // Works (4:50 am)
-// FINAL gives velocity to the motor
+// FINAL gives velocit to the motor
+
+ Calibration A7 440: check
+*/
 #include <Arduino.h>
-#include "pins.h"
 
-const uint8_t encUL_B_Pin = Pins::kEncoders[5];
-const uint8_t encUL_A_Pin = Pins::kEncoders[4];
-const uint8_t motorPWM    = Pins::kPwmPin[2];
-const uint8_t motorIN1    = Pins::kLowerMotors[0];
-const uint8_t motorIN2    = Pins::kLowerMotors[1];
+const uint8_t encUL_B_Pin = 1;
+const uint8_t encUL_A_Pin = 0;
+const uint8_t motorPWM    = 8;
+const uint8_t motorIN1    = 33;
+const uint8_t motorIN2    = 34;
 
-//  Encoder / filter
-#define FILTER_SIZE 8
+// Encoder Filter
+#define FILTER_SIZE 12
 
 volatile unsigned long period_buf[FILTER_SIZE] = {0};
 volatile uint8_t       period_idx  = 0;
@@ -25,16 +31,32 @@ volatile bool          got_pulse   = false;
 
 
 //  PID 
-const float PPR = 495.0f;
-const float Ts  = 0.05f;   // 50ms more stable than 10ms
+const float PPR = 190.0f;
+const float Ts  = 0.05f;   // 50ms — más estable que 10ms
 
-float Kp = 2.1f;
-float Ki = 3.9f; //2.2f;
-float Kd = 0.0012f;
+float Kp = 0.5f;//2.2f;
+float Ki = 0.6f;//0.8f;
+float Kd = 0.0f;//0.0022f;
 
 float setpoint   = 45.0f;
+
+// Feedforward UL: recta PWM = offset + pendiente * rpm.
+// Medido EN EL AIRE:  30 rpm ~ 42 PWM, 45 rpm ~ 58.7 PWM  (pendiente ~1.1)
+// Medido EN EL SUELO: 45 rpm ~ 80.5 PWM, 63.5 rpm (PWM fijo 100)  (pendiente ~1.05, offset ~33)
+// Se deja un poco por debajo de lo medido (el integrador completa lo que falte).
+// Confirmado en el suelo: 30 rpm ~ 65 PWM, 45 rpm ~ 82 PWM.
+const float FF_OFFSET = 32.0f;  // PWM
+const float FF_SLOPE  = 1.05f;  // PWM por rpm  -> 30 rpm: 63.5, 45 rpm: 79
+// Rampa del setpoint efectivo para no arrancar con error grande
+const float SP_RAMP = 90.0f;    // rpm/s
+float sp_ramped = 0.0f;
+
 float integral   = 0.0f;
 float last_error = 0.0f;
+
+// Filtro EMA sobre el RPM medido (suaviza el ruido de cuantizacion del encoder)
+const float RPM_ALPHA = 0.2f; // 0=sin cambio, 1=sin filtro
+float rpm_filt = 0.0f;
 
 unsigned long last_time = 0;
 
@@ -52,7 +74,7 @@ void isrA()
     unsigned long now = micros();
     unsigned long p   = now - last_pulse_us;
     last_pulse_us     = now;
-    if (p > 200UL) pushPeriod(p);  // Ignore bounces < 200µs
+    if (p > 200UL) pushPeriod(p);  // Ignora rebotes < 200µs
 }
 
 void isrB()
@@ -76,7 +98,7 @@ float measureRPM()
     if (!has_got) return 0.0f;
     if (micros() - last > 200000UL) return 0.0f;
 
-// Average of valid periods
+    // Average of valid periods
     unsigned long sum   = 0;
     uint8_t       count = 0;
     for (uint8_t i = 0; i < FILTER_SIZE; i++) {
@@ -88,7 +110,7 @@ float measureRPM()
     return 60000000.0f / (avg_period * 4.0f * PPR);
 }
 
-//  Motor 
+// Motor 
 void setMotor(float pwm)
 {
     if (pwm >= 0.0f) {
@@ -102,6 +124,7 @@ void setMotor(float pwm)
     analogWrite(motorPWM, (int)constrain(pwm, 0.0f, 255.0f));
 }
 
+//  Setup 
 void setup()
 {
     Serial.begin(115200);
@@ -121,6 +144,7 @@ void setup()
     last_time = millis();
 }
 
+//  Loop 
 void loop()
 {
     unsigned long now = millis();
@@ -128,16 +152,28 @@ void loop()
     {
         last_time += (unsigned long)(Ts * 1000.0f);
 
-        float rpm   = measureRPM();
-        float error = setpoint - rpm;
+        float rpm_raw = measureRPM();
+        rpm_filt      += RPM_ALPHA * (rpm_raw - rpm_filt);
+        float rpm     = rpm_filt;
 
-        integral += error * Ts;
-        integral  = constrain(integral, -200.0f, 200.0f);
+        if (sp_ramped < setpoint)      sp_ramped = min(setpoint, sp_ramped + SP_RAMP * Ts);
+        else if (sp_ramped > setpoint) sp_ramped = max(setpoint, sp_ramped - SP_RAMP * Ts);
 
-        float derivative = (error - last_error) / Ts;
-        float output     = Kp * error + Ki * integral + Kd * derivative;
-        output           = constrain(output, 0.0f, 255.0f);
-        last_error       = error;
+        float error   = sp_ramped - rpm;
+        float ff      = (sp_ramped > 0.0f) ? FF_OFFSET + FF_SLOPE * sp_ramped : 0.0f;
+
+        float derivative       = (error - last_error) / Ts;
+        float output_unclamped = ff + Kp * error + Ki * integral + Kd * derivative;
+
+        // Solo integra si el output no esta saturado (anti-windup real)
+        if (output_unclamped > 0.0f && output_unclamped < 255.0f) {
+            integral += error * Ts;
+            // Limite = rango completo de PWM (255) / Ki, para que Ki*integral pueda cubrir todo el output
+            integral  = constrain(integral, -255.0f / Ki, 255.0f / Ki);
+        }
+
+        float output = constrain(output_unclamped, 0.0f, 255.0f);
+        last_error    = error;
 
         setMotor(output);
 

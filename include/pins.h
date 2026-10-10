@@ -5,102 +5,98 @@
 
 namespace Pins
 {
-    // =========================================================
     // CHASSIS MOTORS
-    // =========================================================
-    constexpr uint8_t kPwmPin[4] = {
-        10, // PWM1 UPPER LEFT MOTOR
-        2,  // PWM2 UPPER RIGHT MOTOR
-        29, // PWM3 BOTTOM LEFT MOTOR
-        5   // PWM4 BOTTOM RIGHT MOTOR
+    constexpr uint8_t kPwmPin[5] = {
+        8,  // PWM_M1
+        10, // PWM_M2 (pin del PWM de m3_ll en motor_test.cpp)
+        9,  // PWM_M3 (pin del PWM de m2_ur en motor_test.cpp)
+        11, // PWM_M4
+        12  // PWM_M5 (elevator)
     };
 
     constexpr uint8_t kUpperMotors[4] = {
-        12, // IN1.1 UPPER LEFT MOTOR    m1
-        11, // IN1.2 UPPER LEFT MOTOR    m1
-        38, // IN2.1 UPPER RIGHT MOTOR   m2
-        37  // IN2.2 UPPER RIGHT MOTOR   m2
+        35, // IN1_M3 (pin de m2_ur en motor_test.cpp)
+        36, // IN2_M3
+        40, // IN1_M4
+        39, // IN2_M4
     };
 
     constexpr uint8_t kLowerMotors[4] = {
-        32, // IN3.1 LOWER LEFT MOTOR    m3
-        31, // IN3.2 LOWER LEFT MOTOR    m3
-        26, // IN4.1 LOWER RIGHT MOTOR   m4
-        9   // IN4.2 LOWER RIGHT MOTOR   m4
+        37,  // IN1_M2 (pin de m3_ll en motor_test.cpp)
+        38,  // IN2_M2
+        33,  // IN1_M1
+        34   // IN2_M1
     };
 
-    // =========================================================
+    constexpr uint8_t kElevator[2] = {
+        4, // IN1_M5
+        3  // IN2_M5
+    };
+
     // ENCODERS
-    // kEncoders = {B1, A1, A2, B2, A3, B3, A4, B4}
-    // =========================================================
     constexpr uint8_t kEncoders[8] = {
-        40, // ENC1B
-        39, // ENC1A
-        15, // ENC2A
-        14, // ENC2B
-        41, // ENC3A
-        13, // ENC3B
-        17, // ENC4A
-        16  // ENC4B
+        0,  // ENB_M1
+        1,  // ENA_M1
+        2,  // ENA_M2
+        13, // ENB_M2
+        32, // ENA_M3
+        31, // ENB_M3
+        21, // ENA_M4
+        20  // ENB_M4
     };
 
-    // =========================================================
-    // ELEVATOR
-    // =========================================================
-    constexpr uint8_t kElevatorINA1 = 8;   // IN1_MDC
-    constexpr uint8_t kElevatorINA2 = 1;   // IN2_MDC
-    constexpr uint8_t kElevatorPWM  = 22;  // PWM_DC
+    // LIMIT SWITCHES
+    constexpr uint8_t kLimitSwitch  = 7; // Limit1
+    constexpr uint8_t kLimitSwitch2 = 6; // Limit2 // placeholder: no usado aun en el codigo, confirmar su rol (elevator top/bottom, sorter, etc.)
 
-    // =========================================================
-    // LIMIT SWITCH
-    // =========================================================
-    constexpr uint8_t kLimitSwitch = 28;
-
-    // =========================================================
     // 74HC4067 MULTIPLEXERS
-    // shared S0-S3, different SIG
-    // =========================================================
-    static constexpr uint8_t kMuxSig  = 24; // Sig mux QTR
-    static constexpr uint8_t kMuxSig2 = 20; // Sig2 otro mux IRs
+    static constexpr uint8_t kMuxSig  = 26; // SIG_A0 -- mux1 (QTR front)
+    static constexpr uint8_t kMuxSig2 = 22; // SIG_A1 -- mux2 (QTR rear)
 
-    static constexpr uint8_t kMuxS0 = 27; // S0
-    static constexpr uint8_t kMuxS1 = 21; // S1
-    static constexpr uint8_t kMuxS2 = 0;  // S2
-    static constexpr uint8_t kMuxS3 = 25; // S3
+    static constexpr uint8_t kMuxS0 = 27; // s0_MUX
+    static constexpr uint8_t kMuxS1 = 28; // s1_MUX
+    static constexpr uint8_t kMuxS2 = 29; // s2_MUX
+    static constexpr uint8_t kMuxS3 = 30; // s3_MUX
 
-    // =========================================================
-    // QTR ARRAYS ON MUX1
-    // =========================================================
-    static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C7
-    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C15
+    // QTR ARRAYS (mux channels)
+    static constexpr uint8_t kQtrFrontFirstCh = 0; // C0..C6 (C7 no se usa, QTR::N=7)
+    static constexpr uint8_t kQtrRearFirstCh  = 8; // C8..C13 (C14/C15 no se usan)
+    static constexpr uint8_t kQtrRearCount    = 6; // C8 = first sensor to touch the line when going backwards
 
-    // =========================================================
-    // IR SENSORS ON MUX2
-    // =========================================================
-     static constexpr uint8_t kIrChFL = 30;
-    static constexpr uint8_t kIrChFR = 36;
-    static constexpr uint8_t kIrChBL = 33;
-    static constexpr uint8_t kIrChBR = 35;
+    // IR SENSORS
+    static constexpr uint8_t kIrChFL = 15; // L1
+    static constexpr uint8_t kIrChFR = 14; // L2
+    static constexpr uint8_t kIrChBL = 15;//23; // ya no usado para L3 (ver kIrChBLMux)
+    static constexpr uint8_t kIrChBR = 14;//41; // ya no usado para L4 (ver kIrChBRMux)
 
-    // =========================================================
-    // TOF SENSORS ON I2C MUX
-    // =========================================================
-    static constexpr uint8_t kToFchFR = 0; // Front Right
-    static constexpr uint8_t kToFchFL = 1; // Front Left
-    static constexpr uint8_t kToFchBL = 2; // Back Left / placeholder
-    static constexpr uint8_t kToFchBR = 3; // Back Right / placeholder
+    static constexpr uint8_t kIrChBLMux = 7;  // back-left  -- free channel of the front block (C0..C7)
+    static constexpr uint8_t kIrChBRMux = 15; // back-right -- free channel of the rear block (C8..C15)
 
-   // ======== Servos ========
-    constexpr uint8_t kUpperIntakeServo = 30;
-    constexpr uint8_t kLowerIntakeServo = 6;
-    constexpr uint8_t kSeparatorServo   = 255;
-    constexpr uint8_t kBenefitServo     = 255;
-    constexpr uint8_t kHolderServo      = 255;
+    // TOF SENSORS (TCA9548A channels)
+    static constexpr uint8_t kToFchFR = 0; // UR -- Front Right
+    static constexpr uint8_t kToFchFL = 2; // UL -- Front Left
+    static constexpr uint8_t kToFchBL = 3; // LL -- Back Left
+    static constexpr uint8_t kToFchBR = 4; // LR -- Back Right
 
+    // SERVOS
+    constexpr uint8_t kServoPin1 = 13; // SERVO1 -- mismo net que "INT" (BNO), CONFIRMAR
+    constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- OJO: pin 3 ahora es IN2_M5 (elevator), no usar
+    constexpr uint8_t kServoPin3 = 4;  // SERVO3 -- OJO: pin 4 ahora es IN1_M5 (elevator), no usar
+    constexpr uint8_t kServoPin4 = 5;  // SERVO4
+    constexpr uint8_t kServoPin5 = 2;  // SERVO5 -- mismo net que "RST" (BNO), CONFIRMAR
+    // kServoPin6: placeholder, pin no identificado en el esquematico
 
-    // =========================================================
-    // OPTIONAL / LEGACY ULTRASONICS
-    // =========================================================
+    constexpr uint8_t kUpperIntakeServo = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
+    constexpr uint8_t kLowerIntakeServo = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
+    constexpr uint8_t kSeparatorServo   = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
+    constexpr uint8_t kBenefitServo     = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
+    constexpr uint8_t kHolderServo      = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
+
+    // BNO RST/INT
+    static constexpr uint8_t kBnoRstReserved = 2;  // posible conflicto con SERVO5 -- confirmar
+    static constexpr uint8_t kBnoIntReserved = 13; // posible conflicto con SERVO1 -- confirmar
+
+    // LEGACY ULTRASONICS
     constexpr uint8_t kDistanceSensors[4][2] = {
         {35, 33},     // FRONT LEFT  {TRIG, ECHO}
         {36, 34},     // FRONT RIGHT {TRIG, ECHO}
@@ -108,9 +104,7 @@ namespace Pins
         {255, 255}    // BACK LEFT  not confirmed
     };
 
-    // =========================================================
-    // OPTIONAL / LEGACY
-    // =========================================================
+    // LEGACY
     // constexpr uint8_t kBluetoothRx = 7;
     // constexpr uint8_t kBluetoothTx = 8;
 }
