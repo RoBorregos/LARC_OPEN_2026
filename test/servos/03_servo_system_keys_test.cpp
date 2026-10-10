@@ -23,7 +23,7 @@
 
 using namespace Constants::ServoConfig;
 
-ServoSystem servos;
+ServoSystem servos(true); // timed doors, this test measures the open window
 
 bool upper = false;
 bool lower = false;
