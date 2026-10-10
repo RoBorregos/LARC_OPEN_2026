@@ -113,12 +113,10 @@ void ServoSystem::setBenefit(uint8_t which, bool openRequest)
         return;
     }
 
-    // Close: shut it if it is still open, and re-arm either way.
-    if (b.phase != BenefitPhase::ARMED)
-    {
-        _writeAngle(kBenefitIndex[which], kBenefitClosed[which]);
-        b.phase = BenefitPhase::ARMED;
-    }
+    // Close: always write the closed angle (a no-op once applied, _writeAngle
+    // caches it), so the very first close at boot really drives the door.
+    _writeAngle(kBenefitIndex[which], kBenefitClosed[which]);
+    b.phase = BenefitPhase::ARMED;
 }
 
 void ServoSystem::closeBenefits()
