@@ -137,8 +137,8 @@ namespace Pins
         constexpr uint8_t kIntakeUpperCh = 12;
         constexpr uint8_t kIntakeLowerCh = 8;
         constexpr uint8_t kSeparatorCh   = 4;
-        constexpr uint8_t kBenefit1Ch    = 0;
-        constexpr uint8_t kBenefit2Ch    = 2;
+        constexpr uint8_t kBenefit1Ch    = 15;
+        constexpr uint8_t kBenefit2Ch    = 0;
 
         constexpr uint8_t kChannels[] = {
             kIntakeUpperCh, kIntakeLowerCh, kSeparatorCh, kBenefit1Ch, kBenefit2Ch
