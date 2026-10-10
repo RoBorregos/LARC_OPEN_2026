@@ -145,11 +145,11 @@ class TeensyLink:
         # vision code never has to remember the phase separately.
         self._set(vp.PHASE_BEANS, vp.make_beans_payload(upper, lower, separator))
 
-    def set_benefits(self, door1_open: bool, door2_open: bool) -> None:
+    def set_benefits(self, door1_open: bool, door2_open: bool,
+                     box_visible: bool = False) -> None:
         #The benefits-stage command. Also switches into BENEFITS.
-        
         self._set(vp.PHASE_BENEFITS,
-                  vp.make_benefits_payload(door1_open, door2_open))
+                  vp.make_benefits_payload(door1_open, door2_open, box_visible))
 
     #Health reporting (the STATUS byte in every frame)
     def set_ready(self, ready: bool) -> None:

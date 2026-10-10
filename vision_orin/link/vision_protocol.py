@@ -69,7 +69,8 @@ SEP_NAMES = {SEP_NEUTRAL: "neutral", SEP_LEFT: "left", SEP_RIGHT: "right",
 # BENEFITS payload
 MASK_BENEFIT_1 = 0x01
 MASK_BENEFIT_2 = 0x02
-BENEFITS_RESERVED = 0xFC
+MASK_BOX_VISIBLE = 0x04 # any ROI sees a box colour, centred or not
+BENEFITS_RESERVED = 0xF8
 
 # STATUS byte
 STATUS_MAIN_FAULT = 0x01 # critical on the Teensy
@@ -122,13 +123,16 @@ def make_beans_payload(upper: bool, lower: bool, separator: int) -> int:
     return payload
 
 
-def make_benefits_payload(door1_open: bool, door2_open: bool) -> int:
+def make_benefits_payload(door1_open: bool, door2_open: bool,
+                          box_visible: bool = False) -> int:
     # Pack the BENEFITS payload byte.
     payload = 0
     if door1_open:
         payload |= MASK_BENEFIT_1
     if door2_open:
         payload |= MASK_BENEFIT_2
+    if box_visible:
+        payload |= MASK_BOX_VISIBLE
     return payload
 
 
@@ -178,10 +182,10 @@ def build_beans_frame(seq: int, upper: bool, lower: bool,
 
 
 def build_benefits_frame(seq: int, door1_open: bool, door2_open: bool,
-                         status: int = 0) -> bytes:
+                         status: int = 0, box_visible: bool = False) -> bytes:
     """BENEFITS: the two doors. Intakes and separator are parked all stage."""
     return build_frame(seq, PHASE_BENEFITS,
-                       make_benefits_payload(door1_open, door2_open), status)
+                       make_benefits_payload(door1_open, door2_open, box_visible), status)
 
 
 # Decoding (for tests, log tools, and anything that reads frames back)
@@ -197,6 +201,7 @@ class Command:
     separator: int = SEP_NEUTRAL
     door1_open: bool = False
     door2_open: bool = False
+    box_visible: bool = False
     separator_invalid: bool = False
 
     def describe(self) -> str:
@@ -206,7 +211,8 @@ class Command:
                       f"lower={int(self.intake_lower)} "
                       f"sep={SEP_NAMES[self.separator]}")
         elif self.phase == PHASE_BENEFITS:
-            detail = f"door1={int(self.door1_open)} door2={int(self.door2_open)}"
+            detail = (f"door1={int(self.door1_open)} door2={int(self.door2_open)} "
+                      f"visible={int(self.box_visible)}")
         else:
             detail = "-"
         return (f"seq={self.seq:3d} {name:<8} {detail}  "
@@ -226,6 +232,7 @@ def decode_command(phase: int, payload: int, status: int, seq: int = 0) -> Comma
     elif phase == PHASE_BENEFITS:
         cmd.door1_open = bool(payload & MASK_BENEFIT_1)
         cmd.door2_open = bool(payload & MASK_BENEFIT_2)
+        cmd.box_visible = bool(payload & MASK_BOX_VISIBLE)
 
     return cmd
 
