@@ -87,6 +87,10 @@ public:
     bool    benefitSeen()    const { return _seenBenefit != kNoBenefit; }
     uint8_t seenBenefit()    const { return _seenBenefit; } // 0 or 1, else kNoBenefit
 
+    // Any part of a box in view (centred or not). False once it has fully
+    // left the camera, which is what a stop should re-arm on.
+    bool    benefitVisible() const { return _boxVisible; }
+
     // Which box a door belongs to. Mirrors BOX_DOOR in dispatcher.py.
     static const char *benefitName(uint8_t which);
 
@@ -168,6 +172,7 @@ private:
     bool    _openRequest;
     uint8_t _heldBenefit;
     uint8_t _seenBenefit;
+    bool    _boxVisible;
     bool    _benefitsOnRequest;
 
     void _applySafetyImmediate(const VisionProto::Command &cmd);

@@ -46,6 +46,7 @@ VisionLink::VisionLink(Stream &port, ServoSystem &servos, uint32_t timeoutMs)
     , _openRequest(false)
     , _heldBenefit(kNoBenefit)
     , _seenBenefit(kNoBenefit)
+    , _boxVisible(false)
     , _benefitsOnRequest(false)
 {
     _confirm.reset((uint8_t)Phase::IDLE, 0);
@@ -225,8 +226,8 @@ void VisionLink::handleFaults()
 
 const char *VisionLink::benefitName(uint8_t which)
 {
-    if (which == 0) return "RED";
-    if (which == 1) return "BLUE";
+    if (which == 0) return "BLUE";
+    if (which == 1) return "RED";
     return "-";
 }
 
@@ -273,6 +274,7 @@ void VisionLink::_applySafetyImmediate(const VisionProto::Command &cmd)
             _servos.safeState();
             _dropHold();
             _seenBenefit = kNoBenefit;
+            _boxVisible  = false;
             _appliedPhase = cmd.phase;
             // The payload of these phases is always 0 (validated upstream).
             _confirm.reset((uint8_t)cmd.phase, 0);
@@ -285,6 +287,7 @@ void VisionLink::_applySafetyImmediate(const VisionProto::Command &cmd)
         _servos.closeBenefits();
         _dropHold();
         _seenBenefit = kNoBenefit;
+        _boxVisible  = false;
     }
 
     // A held door ignores the stream; only closeBenefit() shuts it.
@@ -327,6 +330,7 @@ void VisionLink::_applyBenefits(const VisionProto::Command &cmd)
     if (cmd.benefit1Open)      _seenBenefit = 0;
     else if (cmd.benefit2Open) _seenBenefit = 1;
     else                       _seenBenefit = kNoBenefit;
+    _boxVisible = cmd.boxVisible || _seenBenefit != kNoBenefit;
 
     if (_heldBenefit != kNoBenefit)
         return;
@@ -361,6 +365,7 @@ void VisionLink::_goSafe()
     _servos.safeState();
     _dropHold();
     _seenBenefit = kNoBenefit;
+    _boxVisible  = false;
     _appliedPhase = Phase::IDLE;
     _confirm.reset((uint8_t)Phase::IDLE, 0);
 }
