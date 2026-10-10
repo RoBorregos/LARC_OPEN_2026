@@ -13,7 +13,7 @@ a=p.parse_args()
 env=os.environ.copy()
 if a.backend == 'model' or a.separator_backend == 'model':
     # The single persistent model warms up in the dispatcher background worker.
-    env.setdefault('LARC_STARTUP_GRACE_SEC', '120')
+    env.setdefault('LARC_STARTUP_GRACE_SEC', '15')
 if a.model:
     if a.backend=='opencv' and (a.separator_backend or a.backend)=='opencv':
         p.error('--model requires at least one model backend')
