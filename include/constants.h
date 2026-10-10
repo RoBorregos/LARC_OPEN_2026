@@ -67,12 +67,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-            {201, 166, 177, 184, 268, 171, 81}, // On white
-             {947, 916, 873, 869, 907, 912, 930}}; // black 
+            {74, 74, 76, 135, 283, 228, 152}, // On white
+             {942, 924, 921, 967, 964, 972, 982}}; // black 
 
         constexpr Profile Rear = {
-             {81, 74, 68, 73, 111, 74, 69}, // On white
-             {456, 366, 353, 328, 512, 391, 476}}; // black 
+             {138, 141, 172, 165, 353, 232, 302}, // On white
+             {693, 887, 817, 729, 869, 899, 911}}; // black 
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -127,36 +127,49 @@ namespace Constants
         // PROVISIONAL (missing mechanical tests)
         // test/servos/02_pca9685_channel_test.cpp before trusting them.
         static constexpr ServoCalib kCalib[SERVO_COUNT] = {
-            { Pins::Servos::kIntakeUpperCh, 500, 2500, 85, 130 }, // INTAKE_UPPER
-            { Pins::Servos::kIntakeLowerCh, 500, 2500, 40, 90 }, // INTAKE_LOWER
-            { Pins::Servos::kSeparatorCh,   500, 2500, 61, 149 }, // SEPARATOR
-            { Pins::Servos::kBenefit1Ch,    500, 2500, 20, 160 }, // BENEFIT_1
-            { Pins::Servos::kBenefit2Ch,    500, 2500, 20, 160 }  // BENEFIT_2
+            { Pins::Servos::kIntakeUpperCh, 500, 2500, 85, 137 }, // INTAKE_UPPER
+            { Pins::Servos::kIntakeLowerCh, 500, 2500, 65, 168 }, // INTAKE_LOWER
+            { Pins::Servos::kSeparatorCh,   500, 2500, 58, 149 }, // SEPARATOR
+            { Pins::Servos::kBenefit1Ch,    500, 2500, 0, 150 }, // BENEFIT_1
+            { Pins::Servos::kBenefit2Ch,    500, 2500, 10, 160 }  // BENEFIT_2
         };
 
         // Positions (deg) 
         static constexpr uint8_t kIntakeUpperHome   = 97;
-        static constexpr uint8_t kIntakeUpperDeploy = 127;
+        static constexpr uint8_t kIntakeUpperDeploy = 133;
 
-        static constexpr uint8_t kIntakeLowerHome   = 52;
-        static constexpr uint8_t kIntakeLowerDeploy = 86;
+        static constexpr uint8_t kIntakeLowerHome   = 69;
+        static constexpr uint8_t kIntakeLowerDeploy = 110;
 
-        static constexpr uint8_t kSeparatorNeutral  = 101;
-        static constexpr uint8_t kSeparatorLeft     = 66; // mature
+        static constexpr uint8_t kSeparatorNeutral  = 108;
+        static constexpr uint8_t kSeparatorLeft     = 72; // mature
         static constexpr uint8_t kSeparatorRight    = 142; // overmature
 
-        static constexpr uint8_t kBenefit1Closed    = 90;
-        static constexpr uint8_t kBenefit1Open      = 152;
-        static constexpr uint8_t kBenefit2Closed    = 90;
-        static constexpr uint8_t kBenefit2Open      = 30;
+        static constexpr uint8_t kBenefit1Closed    = 153;
+        static constexpr uint8_t kBenefit1Open      = 67;
+        static constexpr uint8_t kBenefit2Closed    = 24;
+        static constexpr uint8_t kBenefit2Open      = 107;
 
         // Time for benefit doors to stay open before closing automatically (ms)
-        static constexpr uint32_t kBenefitOpenMs = 600;
+        static constexpr uint32_t kBenefitOpenMs = 2500;
 
         // BENEFITS routine: how long the robot stays stopped at a box (ms).
         // The door opens kBenefitOpenMs of it.
-        static constexpr uint32_t kBenefitStopMs = 1500;
+        static constexpr uint32_t kBenefitStopMs = 3000;
         static_assert(kBenefitStopMs > kBenefitOpenMs, "kBenefitStopMs must be longer than kBenefitOpenMs");
+
+        // BENEFITS routine: the same box colour must be seen this long while
+        // stopped before the door opens (ms).
+        static constexpr uint32_t kBenefitConfirmMs = 300;
+
+        // BENEFITS routine: after a stop, the box must have FULLY left the
+        // camera (no ROI sees it) this long while driving before the robot may
+        // stop again (ms). Must be shorter than the gap between two boxes.
+        static constexpr uint32_t kBenefitRearmMs = 400;
+
+        // BENEFITS routine: the box must stay centred this long while driving
+        // before the robot stops (ms). Filters a one-frame CENTER at the edge.
+        static constexpr uint32_t kBenefitApproachMs = 100;
     } // namespace ServoConfig
 
     namespace VisionConfig
