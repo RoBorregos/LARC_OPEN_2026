@@ -2,7 +2,7 @@
 #include "StateMachine.hpp"
 #include "robot/instances/instances.hpp"
 #include "constants.h"
-#include "Vision.hpp"
+#include "VisionLink.hpp"
 
 namespace
 {
@@ -56,15 +56,18 @@ void LARCStateMachine::begin()
     pinMode(limitSwitch, INPUT);
     elevator.begin();
 
-    vision.begin();
-    vision.requestStatus();
-
     Wire.begin();
     Wire.setClock(400000);
 
     Wire1.begin();
     Wire1.setClock(100000);
     Serial.print("i2cMux init: "); Serial.println(i2cMux.begin() ? "OK" : "FAIL");
+
+    // Servos after the bus and mux are up; vision.begin() parks them safe.
+    servos.begin();
+    Serial.print("servos (PCA9685) init: "); Serial.println(servos.driverOk() ? "OK" : "FAIL");
+    vision.begin();
+    vision.requestStatus();
 
     // UL/UR (frente) para POOL, LL/LR (atras) para POOLSGOBACK
     ToF* tofs[] = {&tofLeft, &tofRight, &tofBackLeft, &tofBackRight};
@@ -134,8 +137,11 @@ void LARCStateMachine::update()
     case STATES::LOOKFORCORNER:
     {
         bool transitionToBeans = false;
-        lookForCornerState_.update(now, p.backLeftDetectedLine, p.onLine, transitionToBeans);
-        if (transitionToBeans)
+        bool transitionToStop = false;
+        lookForCornerState_.update(now, p.backLeftDetectedLine, p.onLine, transitionToBeans, transitionToStop);
+        if (transitionToStop)
+            setState(STATES::STOP);
+        else if (transitionToBeans)
             setState(STATES::BEANS);
         break;
     }
@@ -197,12 +203,29 @@ void LARCStateMachine::update()
         stopState_.update();
         break;
     }
+
+    // A critical vision fault (link lost, intake or camera dead): park the
+    // servos and tell the Orin to stop. The states decide what to do next.
+    vision.handleFaults();
 }
 
 void LARCStateMachine::setState(STATES newState)
 {
     if (currentState == newState)
         return;
+
+    // Keep sorting from BEANS all the way back to the benefits corner; stop
+    // only when entering BENEFITS (or STOP). The intakes stay live too.
+    auto isSortingState = [](STATES s) {
+        return s == STATES::BEANS || s == STATES::BEANSGOBACK ||
+               s == STATES::POOLSGOBACK || s == STATES::LOOKFORLINEBACKWARDS ||
+               s == STATES::BENEFITSSTARTCORNER;
+    };
+    if (isSortingState(currentState) && !isSortingState(newState))
+    {
+        vision.resetGuards();
+        vision.stop();
+    }
 
     currentState = newState;
     state_start_time = millis();

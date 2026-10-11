@@ -31,6 +31,13 @@ public:
             return;
         }
 
+        // No fresh BEANS results right now (startup or a stall): wait in place
+        // rather than drive past balls nobody is sorting.
+        if (!vision.inBeansPhase() || !vision.isBeansRunning()) {
+            LARC.stop();
+            return;
+        }
+
         switch (action_stage) {
             // ── Stage 0: Búsqueda y recolección de beans ────────────────────
             case 0: {

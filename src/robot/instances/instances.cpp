@@ -1,9 +1,14 @@
 #include "instances.hpp"
 #include "pins.h"
 
+// TCA9548A en Wire1 (SDA1=17/SCL1=16), confirmado en hardware con
+// vlx_single_test.cpp. Frente (UL/UR) para POOL, atras (LL/LR) para POOLSGOBACK.
+// Defined first: the PCA9685 servo board sits behind it too.
+TCA9548A i2cMux(0x70, Wire1);
+
 Drive LARC;
 Mux74HC4067 mux(Pins::kMuxSig2);
-ServoSystem servos;
+ServoSystem servos(false, &i2cMux); // PCA9685 behind i2cMux, ch Pins::Servos::kTcaChannel
 Elevator elevator;
 
 // IR: L1 (FL) y L2 (FR) por GPIO directo, L3 (BL) y L4 (BR) por el mux
@@ -19,11 +24,8 @@ QTR qtrRear(Pins::kQtrRearFirstCh, mux, Pins::kQtrRearCount);
 
 PIDController linePID(0.000035f, 0.0f, 0.00000008f, -1.0f, 1.0f);
 
-Vision vision(Serial);
+VisionLink vision(Serial, servos);
 
-// TCA9548A en Wire1 (SDA1=17/SCL1=16), confirmado en hardware con
-// vlx_single_test.cpp. Frente (UL/UR) para POOL, atras (LL/LR) para POOLSGOBACK.
-TCA9548A i2cMux(0x70, Wire1);
 ToF tofLeft(Pins::kToFchFL, i2cMux, ToFType::L1X);
 ToF tofRight(Pins::kToFchFR, i2cMux, ToFType::L1X);
 ToF tofBackLeft(Pins::kToFchBL, i2cMux, ToFType::L1X);

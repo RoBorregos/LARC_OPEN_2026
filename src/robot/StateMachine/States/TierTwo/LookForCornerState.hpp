@@ -13,14 +13,17 @@ public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
+        beansRequestMs = 0;
         cornerCorrFiltered = 0.0f;
     }
 
-    void update(uint32_t now, bool cornerLEFTDetected, bool onLine, bool& transitionToBeans) {
+    void update(uint32_t now, bool cornerLEFTDetected, bool onLine,
+                bool& transitionToBeans, bool& transitionToStop) {
         using namespace StateCommon;
         transitionToBeans = false;
+        transitionToStop = false;
 
-        static constexpr uint32_t kCornerStopMs = 8200; //Para que vision empiece
+        static constexpr uint32_t kBeansRetryMs = 1000; // re-send START_BEANS while waiting
         static constexpr uint32_t kSoftStartMs  = 500;
 
         switch (action_stage) {
@@ -41,13 +44,28 @@ public:
                 break;
             }
 
-            // ── Stage 1: Stop por kCornerStopMs (esperando a vision) ──────────
+            // ── Stage 1: Stop hasta que la Orin reporte BEANS corriendo ───────
+            // A startup fault ends the run instead of alternating STOP and
+            // START_BEANS forever.
             case 1: {
                 LARC.stop();
 
-                if ((now - action_start_time) >= kCornerStopMs) {
+                if (vision.hasError()) {
+                    Serial.println(F("[SM] BEANS vision failed; stopping run"));
+                    vision.resetGuards();
+                    vision.stop();
+                    transitionToStop = true;
+                    return;
+                }
+
+                if (vision.inBeansPhase() && vision.isBeansRunning()) {
                     action_stage = 2;
                     action_start_time = now;
+                } else if (beansRequestMs == 0 || (now - beansRequestMs) >= kBeansRetryMs) {
+                    beansRequestMs = now;
+                    vision.resetGuards();
+                    vision.startBeans();
+                    Serial.println(F("[SM] waiting for fresh BEANS vision"));
                 }
                 break;
             }
@@ -67,5 +85,6 @@ public:
 private:
     int action_stage = 0;
     uint32_t action_start_time = 0;
+    uint32_t beansRequestMs = 0;
     float cornerCorrFiltered = 0.0f;
 };

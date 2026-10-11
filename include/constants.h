@@ -11,6 +11,7 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include "pins.h" // servo channels referenced by ServoConfig::kCalib
 
 namespace Constants
 {
@@ -115,60 +116,90 @@ namespace Constants
         static constexpr uint16_t kDebounceCount = 3; // Number of consecutive readings to confirm state change
     } // namespace IRCalibration
 
-    namespace ServoAngles
+    namespace ServoConfig
     {
-       // ── Startup ramp ────────────────────────────────────────
-        // Speed (deg/s) for the blocking ramp in begin()
-        static constexpr float kStartupSpeed = 70.0f;
+        enum ServoIndex : uint8_t
+        {
+            INTAKE_UPPER = 0,
+            INTAKE_LOWER = 1,
+            SEPARATOR    = 2,
+            BENEFIT_1    = 3,
+            BENEFIT_2    = 4,
+            SERVO_COUNT  = 5
+        };
 
-        // Where attach() physically puts each servo (measure per servo)
-        static constexpr uint8_t kMechStartIntakeUpper = 154;
-        static constexpr uint8_t kMechStartIntakeLower = 160;
-        static constexpr uint8_t kMechStartSeparator   = 90;
-        static constexpr uint8_t kMechStartBenefit     = 90;
-        static constexpr uint8_t kMechStartHolder      = 90;
+        // PCA9685 timing
+        // Generic boards often run the oscillator at 26-27 MHz, not 25.
+        static constexpr uint32_t kPcaOscillatorHz = 25000000;
+        static constexpr float    kServoPwmFreqHz  = 50.0f;
+        struct ServoCalib
+        {
+            uint8_t  channel;
+            uint16_t minPulseUs;
+            uint16_t maxPulseUs;
+            uint8_t  minAngleDeg;
+            uint8_t  maxAngleDeg;
+        };
 
-        // Servo positions
-        static constexpr uint8_t kIntakeUpperHome   = 50;
-        static constexpr uint8_t kIntakeUpperDeploy = 85;
+        // PROVISIONAL (missing mechanical tests)
+        // test/servos/02_pca9685_channel_test.cpp before trusting them.
+        static constexpr ServoCalib kCalib[SERVO_COUNT] = {
+            { Pins::Servos::kIntakeUpperCh, 500, 2500, 85, 137 }, // INTAKE_UPPER
+            { Pins::Servos::kIntakeLowerCh, 500, 2500, 65, 168 }, // INTAKE_LOWER
+            { Pins::Servos::kSeparatorCh,   500, 2500, 58, 149 }, // SEPARATOR
+            { Pins::Servos::kBenefit1Ch,    500, 2500, 0, 150 }, // BENEFIT_1
+            { Pins::Servos::kBenefit2Ch,    500, 2500, 10, 160 }  // BENEFIT_2
+        };
 
-        static constexpr uint8_t kIntakeLowerHome   = 50;
-        static constexpr uint8_t kIntakeLowerDeploy = 80;
+        // Positions (deg) 
+        static constexpr uint8_t kIntakeUpperHome   = 97;
+        static constexpr uint8_t kIntakeUpperDeploy = 133;
 
-        static constexpr uint8_t kSeparatorCenter = 70;
-        static constexpr uint8_t kSeparatorLeft   = 100;
-        static constexpr uint8_t kSeparatorRight  = 120;
+        static constexpr uint8_t kIntakeLowerHome   = 69;
+        static constexpr uint8_t kIntakeLowerDeploy = 110;
 
-        static constexpr uint8_t kBenefitRed    = 70;
-        static constexpr uint8_t kBenefitCenter = 90;
-        static constexpr uint8_t kBenefitBlue   = 110;
+        static constexpr uint8_t kSeparatorNeutral  = 108;
+        static constexpr uint8_t kSeparatorLeft     = 72; // mature
+        static constexpr uint8_t kSeparatorRight    = 142; // overmature
 
-        static constexpr uint8_t kHolderHold    = 70;
-        static constexpr uint8_t kHolderRelease = 50;
+        static constexpr uint8_t kBenefit1Closed    = 153;
+        static constexpr uint8_t kBenefit1Open      = 67;
+        static constexpr uint8_t kBenefit2Closed    = 24;
+        static constexpr uint8_t kBenefit2Open      = 107;
 
-        // ── Busy time (ms) — isBusy() returns true for this long after a move
-        static constexpr uint32_t kIntakeUpperMoveMs = 200;
-        static constexpr uint32_t kIntakeLowerMoveMs = 200;
-        static constexpr uint32_t kSeparatorMoveMs   = 50;
-        static constexpr uint32_t kBenefitMoveMs     = 50;
-        static constexpr uint32_t kHolderMoveMs      = 50;
+        // Time for benefit doors to stay open before closing automatically (ms)
+        static constexpr uint32_t kBenefitOpenMs = 2500;
 
-        // ── Detach time (ms) — PWM cut after this long with no movement
-        static constexpr uint32_t kIntakeUpperDetachMs = 10000;
-        static constexpr uint32_t kIntakeLowerDetachMs = 10000;
-        static constexpr uint32_t kSeparatorDetachMs   = 50;
-        static constexpr uint32_t kBenefitDetachMs     = 50;
-        static constexpr uint32_t kHolderDetachMs      = 50;
+        // BENEFITS routine: how long the robot stays stopped at a box (ms).
+        // The door opens kBenefitOpenMs of it.
+        static constexpr uint32_t kBenefitStopMs = 3000;
+        static_assert(kBenefitStopMs > kBenefitOpenMs, "kBenefitStopMs must be longer than kBenefitOpenMs");
 
-        // Debounce / hold (used by separatorUpdate / intakeUpdate) ──
-        // Separator: consecutive calls needed before actually moving
-        static constexpr uint8_t  kSepConfirm = 2;
-        // Separator: ms of no detection before returning to center
-        static constexpr uint32_t kSepClearMs = 300;
-        // Intakes: ms to hold deployed after last detection
-        static constexpr uint32_t kIntakeHoldMs = 100;
+        // BENEFITS routine: the same box colour must be seen this long while
+        // stopped before the door opens (ms).
+        static constexpr uint32_t kBenefitConfirmMs = 300;
 
-    } // namespace ServoAngles
+        // BENEFITS routine: after a stop, the box must have FULLY left the
+        // camera (no ROI sees it) this long while driving before the robot may
+        // stop again (ms). Must be shorter than the gap between two boxes.
+        static constexpr uint32_t kBenefitRearmMs = 400;
+
+        // BENEFITS routine: the box must stay centred this long while driving
+        // before the robot stops (ms). Filters a one-frame CENTER at the edge.
+        static constexpr uint32_t kBenefitApproachMs = 100;
+    } // namespace ServoConfig
+
+    namespace VisionConfig
+    {
+        // How many consecutive, fully valid, non-duplicate
+        // frames must carry the SAME (phase, payload) before the Teensy
+        // acts on it. 
+        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 1; // (unchanged, good readings but not fully tested)
+
+        // No valid new frame for this long, then every actuator goes safe 
+        static constexpr uint32_t kLinkTimeoutMs = 500;
+        static constexpr uint32_t kSerialBaud = 115200;
+    } // namespace VisionConfig
 
     namespace ToFConfig
     {
