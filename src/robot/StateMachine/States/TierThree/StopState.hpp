@@ -13,5 +13,7 @@ public:
 
     void update() {
         LARC.stop();
+        vision.closeBenefit();
+        vision.stop(); // sent once (guarded); the Orin goes IDLE
     }
 };

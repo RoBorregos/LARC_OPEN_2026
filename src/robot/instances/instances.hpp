@@ -16,8 +16,8 @@
 //Drive
 #include "subsystem/Drive/Drive.hpp"
 #include "PIDController.hpp"
-// Vision
-#include "Vision.hpp"
+// Vision (protocol v2 link to the Orin; drives the servos)
+#include "VisionLink.hpp"
 // VLX
 #include "TCA9548A/TCA9548A.h"
 // Odometry
@@ -38,7 +38,7 @@ extern QTR qtrRear;
 
 extern PIDController linePID;
 
-extern Vision vision;
+extern VisionLink vision;
 
 extern ToF tofLeft;
 extern ToF tofRight;

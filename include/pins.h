@@ -78,6 +78,61 @@ namespace Pins
     static constexpr uint8_t kToFchBL = 3; // LL -- Back Left
     static constexpr uint8_t kToFchBR = 4; // LR -- Back Right
 
+    // =========================================================
+    // I2C MUX + SERVO BOARD (PCA9685 behind the TCA9548A)
+    // =========================================================
+    namespace I2cMux
+    {
+        constexpr uint8_t kAddress = 0x70; // A0-A2 to GND
+        constexpr uint8_t kBus     = 1;    // 0 = Wire, 1 = Wire1 (SDA 17 / SCL 16), 2 = Wire2
+    } // namespace I2cMux
+    namespace Servos
+    {
+        // The PCA9685 board  
+        constexpr uint8_t kPcaI2cAddress = 0x40; // A0-A5 jumpers open
+        constexpr uint8_t kI2cBus        = 1;   // 0 = Wire, 1 = Wire1, 2 = Wire2
+        constexpr uint8_t kI2cSda        = 17;  // SDA1
+        constexpr uint8_t kI2cScl        = 16;   // SCL1
+        constexpr uint8_t kOePin         = 255;  // OE (active LOW); 255 = not wired
+
+        // TCA9548A channel the PCA9685 is plugged into (0-7).
+        // 255 = PCA9685 wired straight to the bus, no multiplexer.
+        constexpr uint8_t kTcaChannel    = 1;
+
+        static_assert(kTcaChannel <= 7 || kTcaChannel == 255,
+                      "Pins::Servos::kTcaChannel must be 0-7, or 255 for no mux");
+        static_assert(kTcaChannel == 255 || kI2cBus == I2cMux::kBus,
+                      "Pins::Servos: PCA9685 is behind the TCA9548A, so kI2cBus must equal I2cMux::kBus");
+
+        static_assert((kI2cBus == 0 && kI2cSda == 18 && kI2cScl == 19) ||
+                      (kI2cBus == 1 && kI2cSda == 17 && kI2cScl == 16) ||
+                      (kI2cBus == 2 && kI2cSda == 25 && kI2cScl == 24),
+                      "Pins::Servos: kI2cBus does not match kI2cSda/kI2cScl");
+
+        // (PROVISIONAL (missing full test of all servos)
+        constexpr uint8_t kIntakeUpperCh = 12;
+        constexpr uint8_t kIntakeLowerCh = 8;
+        constexpr uint8_t kSeparatorCh   = 4;
+        constexpr uint8_t kBenefit1Ch    = 15;
+        constexpr uint8_t kBenefit2Ch    = 0;
+
+        constexpr uint8_t kChannels[] = {
+            kIntakeUpperCh, kIntakeLowerCh, kSeparatorCh, kBenefit1Ch, kBenefit2Ch
+        };
+
+        constexpr bool channelsValid(uint8_t i = 0, uint8_t j = 1)
+        {
+            return i >= sizeof(kChannels)       ? true
+                 : kChannels[i] > 15            ? false
+                 : j >= sizeof(kChannels)       ? channelsValid(i + 1, i + 2)
+                 : kChannels[i] == kChannels[j] ? false
+                                                : channelsValid(i, j + 1);
+        }
+        static_assert(channelsValid(),
+                      "Pins::Servos: a channel is > 15 or two servos share one");
+    } // namespace Servos
+
+
     // SERVOS
     constexpr uint8_t kServoPin1 = 13; // SERVO1 -- mismo net que "INT" (BNO), CONFIRMAR
     constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- OJO: pin 3 ahora es IN2_M5 (elevator), no usar
