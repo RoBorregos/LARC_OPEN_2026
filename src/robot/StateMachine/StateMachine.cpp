@@ -69,7 +69,7 @@ void LARCStateMachine::begin()
     vision.begin();
     vision.requestStatus();
 
-    // UL/UR (frente) para POOL, LL/LR (atras) para POOLSGOBACK
+    // UL/UR (Upper Right/Left) para POOL, LL/LR (atras) para POOLSGOBACK
     ToF* tofs[] = {&tofLeft, &tofRight, &tofBackLeft, &tofBackRight};
     const char* tofNames[] = {"tofLeft (UL)", "tofRight (UR)", "tofBackLeft (LL)", "tofBackRight (LR)"};
     for (uint8_t i = 0; i < 4; i++)
