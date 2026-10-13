@@ -114,6 +114,9 @@ namespace Constants
         {
             static constexpr uint32_t kInitBackMs = 500;
             static constexpr uint32_t kInitLeftMs = 500;
+            // Until the first pool is seen, keep backing up with the rear ToFs this long
+            // before giving up (the pools are far from the BEANS corner).
+            static constexpr uint32_t kFirstPoolTimeoutMs = 4500;
         } // namespace PoolsGoBack
 
         namespace LookForLineBackwards

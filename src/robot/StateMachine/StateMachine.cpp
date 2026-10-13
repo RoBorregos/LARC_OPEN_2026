@@ -107,14 +107,14 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(false); // true = imprime, false = no imprime
+    debugPrint(true); // true = imprime, false = no imprime
 
     switch (currentState)
     {
     case STATES::START:
     {
         bool transitionToPool = false;
-        startState_.update(now, transitionToPool);
+        startState_.update(now, p.obstacle, p.tofReady, transitionToPool);
         if (transitionToPool)
             setState(STATES::POOL);
         break;
@@ -286,6 +286,9 @@ void LARCStateMachine::debugPrint(bool enabled)
     Serial.print(F("LARCStateMachine"));
 
     Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
+    Serial.print(F(" Target:")); Serial.print(LARC.getTargetYaw() * 180.0f / PI, 1);
+    Serial.print(F(" Err:"));
+    Serial.print(atan2f(sinf(LARC.getTargetYaw() - LARC.getYaw()), cosf(LARC.getTargetYaw() - LARC.getYaw())) * 180.0f / PI, 1);
 
     // Estado actual
     Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState);
@@ -342,13 +345,21 @@ void LARCStateMachine::settleImu()
     LARC.holdYaw(false);
     LARC.stop();
 
+    const uint32_t start    = millis();
+    const float    startYaw = LARC.getYaw();
     YawSettle settle;
-    settle.reset(millis(), LARC.getYaw());
+    settle.reset(start, startYaw);
     while (!settle.update(millis(), LARC.getYaw(), Constants::StateMachine::ImuSettle::kMinMs))
     {
         LARC.update();
         delay(5);
     }
+
+    // Diagnostic: a settle that always hits kMaxMs means the yaw drifts while standing still.
+    const uint32_t elapsed = millis() - start;
+    Serial.printf("[IMU] settle %lu ms%s, yaw moved %.2f deg\n", (unsigned long)elapsed,
+                  elapsed >= Constants::StateMachine::ImuSettle::kMaxMs ? " (TIMEOUT)" : "",
+                  (LARC.getYaw() - startYaw) * 180.0f / PI);
 }
 
 void LARCStateMachine::updateControl()

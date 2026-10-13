@@ -20,7 +20,7 @@ public:
         LARC.holdYaw(false);
     }
 
-    void update(uint32_t now, bool& transitionToPool) {
+    void update(uint32_t now, bool obstacle, bool tofReady, bool& transitionToPool) {
         using namespace StateCommon;
         namespace cfg = Constants::StateMachine::Start;
         transitionToPool = false;
@@ -62,11 +62,13 @@ public:
                 break;
 
             // ── Stage 5: Avanzar y transicionar a POOL ───────────────────────
+            // IRs are ignored for kStartIgnoreTimeMs (start square lines), the ToFs are not:
+            // a pool ahead goes straight to POOL.
             case 5:
                 setElevator(kElevatorStop);
                 LARC.forward(cfg::kForwardSpeed);
 
-                if ((now - action_start_time) >= kStartIgnoreTimeMs) {
+                if ((tofReady && obstacle) || (now - action_start_time) >= kStartIgnoreTimeMs) {
                     transitionToPool = true;
                 }
                 break;

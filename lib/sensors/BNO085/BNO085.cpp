@@ -30,6 +30,7 @@ static constexpr uint8_t  kBeginAttempts       = 5;
 static constexpr uint32_t kBeginRetryDelayMs   = 300;
 static constexpr uint32_t kResetStartupDelayMs = 500;
 static constexpr uint32_t kStallTimeoutMs      = 1500;
+static constexpr uint8_t  kMaxEventsPerUpdate  = 8; // drain the queue so the yaw is never stale
 
 // Without RST physically wired, a manual reset can't actually un-wedge the
 // chip -- retrying forever here would hang the whole robot (BNO085::update()
@@ -90,11 +91,12 @@ bool BNO085::enableReports()
         return false;
     }
 
-    if (!bno.enableReport(SH2_LINEAR_ACCELERATION, REPORT_PERIOD_US))
-    {
-        Serial.println("Failed to enable LINEAR_ACCELERATION report");
-        return false;
-    }
+    // Linear acceleration is not used: enabling it halved the yaw events read per update.
+
+    // Dynamic calibration is lost on every reset; the gyro one removes the zero-rate
+    // offset while the robot stands still, which otherwise makes the yaw drift.
+    if (sh2_setCalConfig(SH2_CAL_ACCEL | SH2_CAL_GYRO | SH2_CAL_MAG) != SH2_OK)
+        Serial.println("BNO085: failed to enable dynamic calibration");
 
     return true;
 }
@@ -181,7 +183,14 @@ void BNO085::update()
     }
 
     sh2_SensorValue_t val;
-    if (!bno.getSensorEvent(&val))
+    bool gotEvent = false;
+    for (uint8_t i = 0; i < kMaxEventsPerUpdate && bno.getSensorEvent(&val); ++i)
+    {
+        gotEvent = true;
+        handleEvent(val);
+    }
+
+    if (!gotEvent)
     {
         // The chip occasionally stops sending reports without the bus itself
         // going down -- nothing ever overwrites the last decoded value, so
@@ -195,7 +204,10 @@ void BNO085::update()
     }
 
     lastValidMs_ = millis();
+}
 
+void BNO085::handleEvent(const sh2_SensorValue_t &val)
+{
     if (val.sensorId == SH2_GAME_ROTATION_VECTOR)
     {
         float qw = val.un.gameRotationVector.real;
