@@ -69,10 +69,10 @@ namespace Constants
         static constexpr uint8_t kSeparatorLeft     = 72; // mature
         static constexpr uint8_t kSeparatorRight    = 142; // overmature
 
-        static constexpr uint8_t kBenefit1Closed    = 153;
-        static constexpr uint8_t kBenefit1Open      = 67;
-        static constexpr uint8_t kBenefit2Closed    = 24;
-        static constexpr uint8_t kBenefit2Open      = 107;
+        static constexpr uint8_t kBenefit2Closed    = 153;
+        static constexpr uint8_t kBenefit2Open      = 67;
+        static constexpr uint8_t kBenefit1Closed    = 24;
+        static constexpr uint8_t kBenefit1Open      = 107;
 
         // Time for benefit doors to stay open before closing automatically (ms)
         static constexpr uint32_t kBenefitOpenMs = 2500;

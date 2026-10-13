@@ -2,7 +2,7 @@
  * @file SensorConfig.h
  * @author Ximena Patricia García Magdaleno
  *
- * @brief Sensor constants: QTR, line follower, IR, ultrasonic, ToF and Perception.
+ * @brief Sensor constants: QTR, IR, ultrasonic, ToF and Perception.
  */
 
 #pragma once
@@ -22,8 +22,8 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-             {66, 67, 68, 67, 75, 83, 72},          // On white
-             {827, 869, 863, 863, 872, 880, 856}}; // black (up and DOWN)
+             {70, 71, 67, 68, 69, 73, 68},          // On white
+             {872, 869, 840, 860, 888, 856, 856}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
               {68, 68, 78, 263, 256, 176},
@@ -45,19 +45,6 @@ namespace Constants
         constexpr uint16_t kLearnMaxBand      = 200; // idem para el max
         constexpr uint16_t kMinSpan           = 300; // rango minimo max-min; si no se cumple, el sensor no se actualiza
     } // namespace QTRCalibration
-
-    namespace LineFollower
-    {
-        constexpr int kSetpoint = 2900;//2700; // center of 0-6000 range (el ultimo no se esta tomndo otherwise 0-7000)
-        // change to 4000, 2000, etc. as needed
-
-        // linePID (instances.cpp)
-        constexpr float kKp     = 0.000035f;
-        constexpr float kKi     = 0.0f;
-        constexpr float kKd     = 0.00000008f;
-        constexpr float kOutMin = -1.0f;
-        constexpr float kOutMax = 1.0f;
-    } // namespace LineFollower
 
     namespace IRCalibration
     {

@@ -79,6 +79,6 @@ private:
             return;
         elevatorCmd_ = cmd;
         elevator.ElevatorPosition(cmd);
-        Serial.println(cmd == kElevatorUp ? "[elevator] UP" : (cmd == kElevatorDown ? "[elevator] DOWN" : "[elevator] STOP"));
+        // Serial.println(cmd == kElevatorUp ? "[elevator] UP" : (cmd == kElevatorDown ? "[elevator] DOWN" : "[elevator] STOP"));
     }
 };

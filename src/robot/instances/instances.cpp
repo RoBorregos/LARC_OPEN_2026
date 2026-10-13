@@ -23,8 +23,6 @@ Ultrasonic us2(Pins::kDistanceSensors[1][0], Pins::kDistanceSensors[1][1]);
 QTR qtrFront(Pins::kQtrFrontFirstCh, mux);
 QTR qtrRear(Pins::kQtrRearFirstCh, mux, Pins::kQtrRearCount);
 
-namespace LF = Constants::LineFollower;
-PIDController linePID(LF::kKp, LF::kKi, LF::kKd, LF::kOutMin, LF::kOutMax);
 
 VisionLink vision(Serial, servos);
 

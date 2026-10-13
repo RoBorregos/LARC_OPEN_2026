@@ -68,8 +68,8 @@ private:
         noObstacleStartMs = 0;
         poolStateStartMs = millis();
 
-        Serial.print(F("Pool substate -> "));
-        Serial.println(subStateName(currentSubState));
+        // Serial.print(F("Pool substate -> "));
+        // Serial.println(subStateName(currentSubState));
     }
 
     void handleForward(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected,

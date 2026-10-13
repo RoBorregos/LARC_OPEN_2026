@@ -19,7 +19,6 @@ struct PerceptionSnapshot
     // Front QTR
     int   linePos = 0;
     bool  onLine  = false;
-    float vx      = 0.0f;
 
     // ToF (mm)
     bool tofReady     = false;

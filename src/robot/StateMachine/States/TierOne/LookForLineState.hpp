@@ -79,13 +79,13 @@ public:
 
             if (irRecent) {
                 correcting_ = false;
-                Serial.println("[LOOKFORLINE] QTR ON + IR -> LOOKFORCORNER");
+                // Serial.println("[LOOKFORLINE] QTR ON + IR -> LOOKFORCORNER");
                 LARC.stop();
                 transitionToCorner = true;
                 return;
             }
             if ((now - qtrOnMs_) > cfg::kIrConfirmMs) {
-                Serial.println("[LOOKFORLINE] QTR ON without IR -> ignored");
+                // Serial.println("[LOOKFORLINE] QTR ON without IR -> ignored");
                 tracker_.reset();
                 qtrOnMs_ = 0;
             }

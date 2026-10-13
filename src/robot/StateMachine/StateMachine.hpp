@@ -35,6 +35,9 @@ enum class STATES
     STOP                  // FINISH ALL TASKS      :D          !!! Ends in right corner
 };
 
+// State the robot starts in after begin(). Change it to test a single state.
+static constexpr STATES kInitialState = STATES::LOOKFORLINE;
+
 class LARCStateMachine
 {
 public:
@@ -45,7 +48,7 @@ public:
     void updateControl();
 
 private:
-    STATES currentState = STATES::START;
+    STATES currentState = kInitialState;
 
     uint32_t state_start_time = 0;
 

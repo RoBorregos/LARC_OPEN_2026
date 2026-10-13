@@ -37,7 +37,7 @@ public:
         if (vision.hasError()) {
             LARC.stop();
             vision.closeBenefit();
-            Serial.println(F("[SM] BENEFITS vision failed; stopping run"));
+            // Serial.println(F("[SM] BENEFITS vision failed; stopping run"));
             vision.resetGuards();
             vision.stop();
             transitionToStop = true;
@@ -53,7 +53,7 @@ public:
                 vision.resetGuards();
                 vision.startBenefits();
                 benefitRequestMs = now;
-                Serial.println(F("[SM] waiting for fresh BENEFITS vision"));
+                // Serial.println(F("[SM] waiting for fresh BENEFITS vision"));
             }
             return;
         }

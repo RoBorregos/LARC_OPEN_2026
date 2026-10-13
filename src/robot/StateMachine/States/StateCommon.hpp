@@ -20,7 +20,7 @@ namespace StateCommon
     {
         if (!onLine)
             return 0.0f;
-        const float error = kCornerSetpoint - qtrFront.getPosition();
+        const float error = kQtrFrontSetpoint - qtrFront.getPosition();
         return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
     }
 
@@ -29,10 +29,10 @@ namespace StateCommon
     {
         if (!qtrRear.onLine())
             return 0.0f;
-        // Rear has fewer sensors: rescale to the front 0..kQtrPosMax range.
-        const int   rearPosMax      = (qtrRear.size() - 1) * 1000;
-        const float mirroredRearPos = (float)(rearPosMax - qtrRear.getPosition()) * kQtrPosMax / rearPosMax;
-        const float error = kCornerSetpoint - mirroredRearPos;
+        // Mirrored sign; rear has fewer sensors, so the error is rescaled to the
+        // front 0..kQtrPosMax range to share kCornerKp.
+        const int   rearPosMax = (qtrRear.size() - 1) * 1000;
+        const float error = ((float)qtrRear.getPosition() - kQtrRearSetpoint) * kQtrPosMax / rearPosMax;
         return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
     }
 }

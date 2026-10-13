@@ -49,7 +49,7 @@ public:
                 LARC.stop();
 
                 if (vision.hasError()) {
-                    Serial.println(F("[SM] BEANS vision failed; stopping run"));
+                    // Serial.println(F("[SM] BEANS vision failed; stopping run"));
                     vision.resetGuards();
                     vision.stop();
                     transitionToStop = true;
@@ -63,7 +63,7 @@ public:
                     beansRequestMs = now;
                     vision.resetGuards();
                     vision.startBeans();
-                    Serial.println(F("[SM] waiting for fresh BEANS vision"));
+                    // Serial.println(F("[SM] waiting for fresh BEANS vision"));
                 }
                 break;
             }

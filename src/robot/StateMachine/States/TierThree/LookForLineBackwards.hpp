@@ -29,7 +29,7 @@ public:
 
         if (tracker_.update() == QtrEntryTracker::Phase::ON) {
             correcting_ = false;
-            Serial.println("[LOOKFORLINEBACKWARDS] QTR ON -> BENEFITSSTARTCORNER");
+            // Serial.println("[LOOKFORLINEBACKWARDS] QTR ON -> BENEFITSSTARTCORNER");
             LARC.stop();
             transitionToBenefitsStartCorner = true;
             return;
