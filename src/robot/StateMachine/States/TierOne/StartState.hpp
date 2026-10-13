@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
 #include "../StateCommon.hpp"
+#include "../YawSettle.hpp"
 
 class StartState {
 public:
@@ -14,6 +15,9 @@ public:
         action_stage = 0;
         action_start_time = millis();
         elevatorCmd_ = -1;
+        // The elevator can brown out the BNO085 and its yaw drifts for a while after:
+        // no yaw hold until the robot is about to drive, so it cannot rotate in place.
+        LARC.holdYaw(false);
     }
 
     void update(uint32_t now, bool& transitionToPool) {
@@ -40,16 +44,18 @@ public:
                     if ((now - action_start_time) >= cfg::kElevatorUpMs) {
                         // Finishes going up - elevetor goes to "stop" state
                         action_start_time = now;
+                        yawSettle_.reset(now, LARC.getYaw());
                         action_stage = 4;
                     }
                 }
                 break;
 
-            // ── Stage 4: Elevador stop 1500 ms ───────────────────────────────
+            // ── Stage 4: Elevador stop, wait for a stable yaw, then latch it ──
             case 4:
                 setElevator(kElevatorStop);
                 LARC.stop();
-                if ((now - action_start_time) >= cfg::kElevatorStopMs) {
+                if (yawSettle_.update(now, LARC.getYaw(), cfg::kElevatorStopMs)) {
+                    LARC.holdYaw(true);
                     action_start_time = now;
                     action_stage = 5;
                 }
@@ -72,6 +78,7 @@ private:
     uint32_t action_start_time = 0;
     bool lastLimitPressed = false;
     int  elevatorCmd_ = -1;
+    YawSettle yawSettle_;
 
     void setElevator(int cmd) {
         using namespace StateCommon;
@@ -79,6 +86,6 @@ private:
             return;
         elevatorCmd_ = cmd;
         elevator.ElevatorPosition(cmd);
-        // Serial.println(cmd == kElevatorUp ? "[elevator] UP" : (cmd == kElevatorDown ? "[elevator] DOWN" : "[elevator] STOP"));
+        //Serial.println(cmd == kElevatorUp ? "[elevator] UP" : (cmd == kElevatorDown ? "[elevator] DOWN" : "[elevator] STOP"));
     }
 };

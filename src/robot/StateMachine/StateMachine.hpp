@@ -6,6 +6,7 @@
 #include "pins.h"
 #include "robot/instances/instances.hpp"
 #include "robot/Perception/Perception.hpp"
+#include "States/YawSettle.hpp"
 
 // State machine (states) files...
 #include "States/TierOne/StartState.hpp"
@@ -36,7 +37,7 @@ enum class STATES
 };
 
 // State the robot starts in after begin(). Change it to test a single state.
-static constexpr STATES kInitialState = STATES::LOOKFORLINE;
+static constexpr STATES kInitialState = STATES::START;
 
 class LARCStateMachine
 {
@@ -75,6 +76,8 @@ private:
     void setState(STATES newState);
     void beginState(STATES state);
     void startStateTime();
+    // Keeps the robot still until the BNO085 yaw is stable, before latching the yaw target.
+    void settleImu();
 
     // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
     void debugPrint(bool enabled);

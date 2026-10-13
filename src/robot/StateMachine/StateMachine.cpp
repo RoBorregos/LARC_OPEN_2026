@@ -88,6 +88,11 @@ void LARCStateMachine::begin()
     qtrRear.useDefaultCalibration(1);
 
     LARC.begin();
+    // Drive maps the UR encoder onto the limit switch pins and enables INPUT_PULLUP there;
+    // the switches have external pull-ups, so restore INPUT or released can read as pressed.
+    pinMode(Pins::kLimitSwitch, INPUT);
+    pinMode(Pins::kLimitSwitch2, INPUT);
+    settleImu();
     LARC.holdYaw(true);
 
     beginState(currentState);
@@ -278,16 +283,16 @@ void LARCStateMachine::debugPrint(bool enabled)
 
     const PerceptionSnapshot &p = perception_.get();
 
-    // Serial.print(F("LARCStateMachine"));
+    //Serial.print(F("LARCStateMachine"));
 
-    // Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
+    //Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
 
     // Estado actual
-    // Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState);
-    // Serial.print(F(" PS:"));
-    // Serial.print(currentState == STATES::POOLSGOBACK ? (int)poolsGoBackState_.getSubState()
-                                                     // : (int)poolState_.getSubState());
-    // Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
+    //Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState);
+    //Serial.print(F(" PS:"));
+    //Serial.print(currentState == STATES::POOLSGOBACK ? (int)poolsGoBackState_.getSubState()
+    //                                                 : (int)poolState_.getSubState());
+    //Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
 
     // ToF en mm (-1 = sin lectura valida)
     auto printTof = [](const __FlashStringHelper* label, const ToF& tof)
@@ -297,10 +302,10 @@ void LARCStateMachine::debugPrint(bool enabled)
         // Serial.print(F("mm"));
     };
     // Serial.print(F(" ❤ ToF❤ |"));
-    printTof(F(" UR:"), tofRight);
-    printTof(F(" UL:"), tofLeft);
-    printTof(F(" LL:"), tofBackLeft);
-    printTof(F(" LR:"), tofBackRight);
+    //printTof(F(" UR:"), tofRight);
+    //printTof(F(" UL:"), tofLeft);
+    //printTof(F(" LL:"), tofBackLeft);
+    //printTof(F(" LR:"), tofBackRight);
 
     // IR
     // Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(p.FL);
@@ -326,10 +331,24 @@ void LARCStateMachine::debugPrint(bool enabled)
         // Serial.print(normLabel);
         // for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(norm[i]); Serial.print(','); }
     };
-    printRawNorm(F(" | raw:"), F(" norm:"), qtrFront);
-    printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
+    //printRawNorm(F(" | raw:"), F(" norm:"), qtrFront);
+    //printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
 
-    // Serial.println();
+    //Serial.println();
+}
+
+void LARCStateMachine::settleImu()
+{
+    LARC.holdYaw(false);
+    LARC.stop();
+
+    YawSettle settle;
+    settle.reset(millis(), LARC.getYaw());
+    while (!settle.update(millis(), LARC.getYaw(), Constants::StateMachine::ImuSettle::kMinMs))
+    {
+        LARC.update();
+        delay(5);
+    }
 }
 
 void LARCStateMachine::updateControl()

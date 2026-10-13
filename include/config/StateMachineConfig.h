@@ -74,7 +74,7 @@ namespace Constants
         namespace Start
         {
             static constexpr uint32_t kElevatorUpMs   = 9000;
-            static constexpr uint32_t kElevatorStopMs = 700;
+            static constexpr uint32_t kElevatorStopMs = 700;  // minimum stop before driving; also waits for a stable yaw
             static constexpr float    kForwardSpeed   = 0.28f;
         } // namespace Start
 
@@ -135,6 +135,15 @@ namespace Constants
             static constexpr uint32_t kVisionRetryMs = 1000; // re-send START_BENEFITS while waiting
             static constexpr uint32_t kCornerStopMs  = 1000;
         } // namespace Benefits
+
+        // Robot stays still in begin() until the BNO085 yaw stops moving, then latches the yaw target.
+        namespace ImuSettle
+        {
+            static constexpr uint32_t kMinMs          = 1500; // always wait at least this long
+            static constexpr uint32_t kMaxMs          = 4000; // give up waiting for stability after this
+            static constexpr uint32_t kStableWindowMs = 500;  // yaw must stay within kStableDeg this long
+            static constexpr float    kStableDeg      = 0.3f;
+        } // namespace ImuSettle
 
         namespace Debug
         {
