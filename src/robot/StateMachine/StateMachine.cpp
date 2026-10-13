@@ -273,7 +273,7 @@ void LARCStateMachine::debugPrint(bool enabled)
 
     const uint32_t now = millis();
     static uint32_t debugPrintMs = 0;
-    if ((now - debugPrintMs) < 100)
+    if ((now - debugPrintMs) < Constants::StateMachine::Debug::kPrintPeriodMs)
         return;
     debugPrintMs = now;
 

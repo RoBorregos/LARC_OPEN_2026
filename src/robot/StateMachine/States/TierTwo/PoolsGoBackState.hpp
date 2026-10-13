@@ -24,10 +24,8 @@ public:
     void update(uint32_t now, bool rearObstacle, bool leftDetected, bool rightDetected,
                 bool tofReady, bool& transitionToLookForLineBackwards) {
         using namespace StateCommon;
+        namespace cfg = Constants::StateMachine::PoolsGoBack;
         transitionToLookForLineBackwards = false;
-
-        static constexpr uint32_t kInitBackMs = 500;
-        static constexpr uint32_t kInitLeftMs = 500;
 
         // ── Stage 0: retroceder kInitBackMs ─────────────────────────────
         if (action_stage == 0) {
@@ -36,7 +34,7 @@ public:
 
             LARC.backward(kVelocity);
 
-            if ((now - action_start_time) >= kInitBackMs) {
+            if ((now - action_start_time) >= cfg::kInitBackMs) {
                 action_stage = 1;
                 action_start_time = now;
             }
@@ -47,7 +45,7 @@ public:
         if (action_stage == 1) {
             LARC.left(kVelocity);
 
-            if ((now - action_start_time) >= kInitLeftMs) {
+            if ((now - action_start_time) >= cfg::kInitLeftMs) {
                 action_stage = 2;
                 action_start_time = 0;
             }
@@ -126,11 +124,11 @@ private:
         const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidLeftMm) ||
                                   (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidLeftMm);
         if (tooCloseRear) {
-            LARC.forward(0.30f);
+            LARC.forward(kManeuverSpeed);
             return;
         }
 
-        LARC.left(0.30f);
+        LARC.left(kManeuverSpeed);
 
         if (leftDetected) {
             if (sideDetectStartMs == 0)
@@ -164,11 +162,11 @@ private:
         const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidRightMm) ||
                                   (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidRightMm);
         if (tooCloseRear) {
-            LARC.forward(0.30f);
+            LARC.forward(kManeuverSpeed);
             return;
         }
 
-        LARC.right(0.30f);
+        LARC.right(kManeuverSpeed);
 
         if (rightDetected) {
             if (sideDetectStartMs == 0)

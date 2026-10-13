@@ -24,6 +24,7 @@ public:
     // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
     void update(uint32_t now, bool FL, bool FR, bool BL, bool BR,
                 bool& transitionToBenefitsStartCorner) {
+        namespace cfg = Constants::StateMachine::LookForLineBackwards;
         transitionToBenefitsStartCorner = false;
 
         if (tracker_.update() == QtrEntryTracker::Phase::ON) {
@@ -35,7 +36,7 @@ public:
         }
 
         if (correcting_) {
-            if ((now - correctionStart_) < kBorderCorrectMs) {
+            if ((now - correctionStart_) < cfg::kBorderCorrectMs) {
                 if (correctionDir_ < 0)
                     LARC.left(kSpeed);
                 else
@@ -66,24 +67,12 @@ public:
     }
 
 private:
-    static constexpr float    kSpeed           = 0.30f;
-    static constexpr uint32_t kBorderCorrectMs = 150;
+    static constexpr float kSpeed = Constants::StateMachine::Common::kManeuverSpeed;
 
-    // qtrRear: C8..C13 (indices 0..5), the line enters through C8 when going backwards.
     // Floor already reads norm ~470 on qtrRear, so thresholds sit above it.
     static QtrEntryTracker::Config trackerCfg() {
-        return {
-            /*entryAtHighIndex*/ false,
-            /*onThreshold*/      Constants::QTRCalibration::kBinaryThreshold,
-            /*offThreshold*/     Constants::QTRCalibration::kBinaryThreshold - 80,
-            /*entryMaxProgress*/ 1.0f,
-            /*centerProgress*/   2.5f,
-            /*centerTolerance*/  0.75f,
-            /*maxRegress*/       0.6f,
-            /*confirmReads*/     2,
-            /*onReads*/          3,
-            /*lostReads*/        5,
-        };
+        namespace cfg = Constants::StateMachine::LookForLineBackwards;
+        return QtrEntryTracker::makeConfig(cfg::kEntryAtHighIndex, cfg::kCenterProgress);
     }
 
     QtrEntryTracker tracker_{qtrRear, trackerCfg()};

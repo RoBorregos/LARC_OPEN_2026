@@ -21,10 +21,8 @@ public:
                 bool& transitionToBeans, bool& transitionToStop) {
         using namespace StateCommon;
         transitionToBeans = false;
+        namespace cfg = Constants::StateMachine::LookForCorner;
         transitionToStop = false;
-
-        static constexpr uint32_t kBeansRetryMs = 1000; // re-send START_BEANS while waiting
-        static constexpr uint32_t kSoftStartMs  = 500;
 
         switch (action_stage) {
             // ── Stage 0: Buscar esquina LEFT con corrección de línea ────────────
@@ -61,7 +59,7 @@ public:
                 if (vision.inBeansPhase() && vision.isBeansRunning()) {
                     action_stage = 2;
                     action_start_time = now;
-                } else if (beansRequestMs == 0 || (now - beansRequestMs) >= kBeansRetryMs) {
+                } else if (beansRequestMs == 0 || (now - beansRequestMs) >= cfg::kBeansRetryMs) {
                     beansRequestMs = now;
                     vision.resetGuards();
                     vision.startBeans();
@@ -74,7 +72,7 @@ public:
             case 2: {
                 LARC.stop();
 
-                if ((now - action_start_time) >= kSoftStartMs) {
+                if ((now - action_start_time) >= cfg::kSoftStartMs) {
                     transitionToBeans = true;
                 }
                 break;

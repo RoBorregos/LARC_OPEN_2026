@@ -80,15 +80,12 @@ private:
         static uint32_t lineCorrectionStartMs  = 0;
         static int8_t   lineCorrectionDir      = 0;
 
-        static constexpr uint32_t kLineCorrectionMs = 120;
-        static constexpr float    kNormalSpeed = 0.30f;
-
         if (lineCorrectionActive) {
-            if ((now - lineCorrectionStartMs) < kLineCorrectionMs) {
+            if ((now - lineCorrectionStartMs) < Constants::StateMachine::Pool::kLineCorrectionMs) {
                 if (lineCorrectionDir < 0)
-                    LARC.left(kNormalSpeed);
+                    LARC.left(kManeuverSpeed);
                 else
-                    LARC.right(kNormalSpeed);
+                    LARC.right(kManeuverSpeed);
                 return;
             }
             lineCorrectionActive  = false;
@@ -115,17 +112,17 @@ private:
             lineCorrectionActive  = true;
             lineCorrectionStartMs = now;
             lineCorrectionDir     = -1;
-            LARC.left(kNormalSpeed);
+            LARC.left(kManeuverSpeed);
             return;
         } else if (leftDetected) {
             lineCorrectionActive  = true;
             lineCorrectionStartMs = now;
             lineCorrectionDir     = +1;
-            LARC.right(kNormalSpeed);
+            LARC.right(kManeuverSpeed);
             return;
         }
 
-        LARC.forward(kNormalSpeed);
+        LARC.forward(kManeuverSpeed);
 
         if ((now - noObstacleStartMs) >= kNoObstacleToCornerMs) {
             transitionToLookForLine = true;
@@ -142,13 +139,13 @@ private:
                               (tofRight.isValid() && distR < kTooCloseAvoidLeftMm);
 
         if (tooClose) {
-            LARC.backward(0.30f);
+            LARC.backward(kManeuverSpeed);
             return;
         }
 
-        LARC.left(0.30f);
+        LARC.left(kManeuverSpeed);
 
-        const bool justEntered = (now - poolStateStartMs) < 150;
+        const bool justEntered = (now - poolStateStartMs) < Constants::StateMachine::Pool::kJustEnteredLeftMs;
         // Both sides at once means a line crossing the robot, not the left border.
         const bool borderReached = leftDetected && !rightDetected && !justEntered;
 
@@ -168,13 +165,13 @@ private:
                               (tofRight.isValid() && distR < kTooCloseAvoidRightMm);
 
         if (tooClose) {
-            LARC.backward(0.30f);
+            LARC.backward(kManeuverSpeed);
             return;
         }
 
-        LARC.right(0.30f);
+        LARC.right(kManeuverSpeed);
 
-        const bool justEntered = (now - poolStateStartMs) < 100;
+        const bool justEntered = (now - poolStateStartMs) < Constants::StateMachine::Pool::kJustEnteredRightMs;
         const bool borderReached = rightDetected && !leftDetected && !justEntered;
 
         if (handleBorder(now, obstacle, borderReached, PoolSubState::AVOID_LEFT))

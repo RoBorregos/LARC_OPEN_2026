@@ -40,7 +40,7 @@ public:
             // ── Stage 1: Stop por 1000 ms antes de transicionar ──────────
             case 1: {
                 LARC.stop();
-                if ((now - action_start_time) >= 1000) {
+                if ((now - action_start_time) >= Constants::StateMachine::BenefitsStartCorner::kCornerStopMs) {
                     transitionToBenefits = true;
                 }
                 break;

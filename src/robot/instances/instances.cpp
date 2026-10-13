@@ -1,5 +1,6 @@
 #include "instances.hpp"
 #include "pins.h"
+#include "constants.h"
 
 // TCA9548A en Wire1 (SDA1=17/SCL1=16), confirmado en hardware con
 // vlx_single_test.cpp. Frente (UL/UR) para POOL, atras (LL/LR) para POOLSGOBACK.
@@ -22,7 +23,8 @@ Ultrasonic us2(Pins::kDistanceSensors[1][0], Pins::kDistanceSensors[1][1]);
 QTR qtrFront(Pins::kQtrFrontFirstCh, mux);
 QTR qtrRear(Pins::kQtrRearFirstCh, mux, Pins::kQtrRearCount);
 
-PIDController linePID(0.000035f, 0.0f, 0.00000008f, -1.0f, 1.0f);
+namespace LF = Constants::LineFollower;
+PIDController linePID(LF::kKp, LF::kKi, LF::kKd, LF::kOutMin, LF::kOutMax);
 
 VisionLink vision(Serial, servos);
 

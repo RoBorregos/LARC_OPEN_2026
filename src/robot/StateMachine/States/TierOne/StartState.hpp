@@ -18,6 +18,7 @@ public:
 
     void update(uint32_t now, bool& transitionToPool) {
         using namespace StateCommon;
+        namespace cfg = Constants::StateMachine::Start;
         transitionToPool = false;
 
         vision.stop();
@@ -36,7 +37,7 @@ public:
                 } else {
                     setElevator(kElevatorUp);
 
-                    if ((now - action_start_time) >= 9000) {
+                    if ((now - action_start_time) >= cfg::kElevatorUpMs) {
                         // Finishes going up - elevetor goes to "stop" state
                         action_start_time = now;
                         action_stage = 4;
@@ -48,7 +49,7 @@ public:
             case 4:
                 setElevator(kElevatorStop);
                 LARC.stop();
-                if ((now - action_start_time) >= 700) {
+                if ((now - action_start_time) >= cfg::kElevatorStopMs) {
                     action_start_time = now;
                     action_stage = 5;
                 }
@@ -57,7 +58,7 @@ public:
             // ── Stage 5: Avanzar y transicionar a POOL ───────────────────────
             case 5:
                 setElevator(kElevatorStop);
-                LARC.forward(0.28f);
+                LARC.forward(cfg::kForwardSpeed);
 
                 if ((now - action_start_time) >= kStartIgnoreTimeMs) {
                     transitionToPool = true;

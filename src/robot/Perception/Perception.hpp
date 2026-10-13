@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "constants.h"
 #include "robot/instances/instances.hpp"
 
 struct PerceptionSnapshot
@@ -29,8 +30,8 @@ struct PerceptionSnapshot
 class Perception
 {
 public:
-    static constexpr uint16_t kTofMaxRangeMm      = 1000;
-    static constexpr uint16_t kObstacleDistanceMm = 215;
+    static constexpr uint16_t kTofMaxRangeMm      = Constants::PerceptionConfig::kTofMaxRangeMm;
+    static constexpr uint16_t kObstacleDistanceMm = Constants::PerceptionConfig::kObstacleDistanceMm;
 
     void update(uint32_t now);
 
@@ -39,8 +40,8 @@ public:
 private:
     struct ObstacleLatch
     {
-        static constexpr uint32_t kReleaseMs = 400;
-        static constexpr uint32_t kConfirmMs = 0;
+        static constexpr uint32_t kReleaseMs = Constants::PerceptionConfig::kObstacleReleaseMs;
+        static constexpr uint32_t kConfirmMs = Constants::PerceptionConfig::kObstacleConfirmMs;
 
         bool     latched       = false;
         uint32_t clearStartMs  = 0;
@@ -49,7 +50,7 @@ private:
         bool update(uint32_t now, bool seenNow);
     };
 
-    static constexpr uint32_t kTofWarmupMs = 500;
+    static constexpr uint32_t kTofWarmupMs = Constants::PerceptionConfig::kTofWarmupMs;
 
     PerceptionSnapshot snap_;
     uint32_t tofReadyTimestamp_ = 0;
