@@ -107,7 +107,7 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(true); // true = imprime, false = no imprime
+    debugPrint(false); // true = imprime, false = no imprime
 
     switch (currentState)
     {
@@ -283,42 +283,42 @@ void LARCStateMachine::debugPrint(bool enabled)
 
     const PerceptionSnapshot &p = perception_.get();
 
-    //Serial.print(F("LARCStateMachine"));
+    Serial.print(F("LARCStateMachine"));
 
-    //Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
+    Serial.print(F(" ❤ Yaw❤ | Deg:")); Serial.print(LARC.getYaw() * 180.0f / PI, 1);
 
     // Estado actual
-    //Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState);
-    //Serial.print(F(" PS:"));
-    //Serial.print(currentState == STATES::POOLSGOBACK ? (int)poolsGoBackState_.getSubState()
-    //                                                 : (int)poolState_.getSubState());
-    //Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
+    Serial.print(F(" ❤ State❤ | ST:")); Serial.print((int)currentState);
+    Serial.print(F(" PS:"));
+    Serial.print(currentState == STATES::POOLSGOBACK ? (int)poolsGoBackState_.getSubState()
+                                                     : (int)poolState_.getSubState());
+    Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
 
     // ToF en mm (-1 = sin lectura valida)
     auto printTof = [](const __FlashStringHelper* label, const ToF& tof)
     {
-        // Serial.print(label);
-        // Serial.print(tof.isValid() ? (int)tof.getDistanceMm() : -1);
-        // Serial.print(F("mm"));
+        Serial.print(label);
+        Serial.print(tof.isValid() ? (int)tof.getDistanceMm() : -1);
+        Serial.print(F("mm"));
     };
-    // Serial.print(F(" ❤ ToF❤ |"));
-    //printTof(F(" UR:"), tofRight);
-    //printTof(F(" UL:"), tofLeft);
-    //printTof(F(" LL:"), tofBackLeft);
-    //printTof(F(" LR:"), tofBackRight);
+    Serial.print(F(" ❤ ToF❤ |"));
+    printTof(F(" UR:"), tofRight);
+    printTof(F(" UL:"), tofLeft);
+    printTof(F(" LL:"), tofBackLeft);
+    printTof(F(" LR:"), tofBackRight);
 
     // IR
-    // Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(p.FL);
-    // Serial.print(F(" FR:")); Serial.print(p.FR);
-    // Serial.print(F(" BL:")); Serial.print(p.BL);
-    // Serial.print(F(" BR:")); Serial.print(p.BR);
+     Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(p.FL);
+     Serial.print(F(" FR:")); Serial.print(p.FR);
+     Serial.print(F(" BL:")); Serial.print(p.BL);
+     Serial.print(F(" BR:")); Serial.print(p.BR);
 
     // Línea (lPos sirve para saber el valor del centro del qtr)
-    // Serial.print(F(" ❤ qtr| onLine:")); Serial.print(p.onLine);
-    // Serial.print(F(" lPos:")); Serial.print(p.linePos);
+    Serial.print(F(" ❤ qtr| onLine:")); Serial.print(p.onLine);
+    Serial.print(F(" lPos:")); Serial.print(p.linePos);
 
-    // Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine(Constants::QTRCalibration::kBinaryThreshold));
-    // Serial.print(F(" lPos:")); Serial.print(qtrRear.getPosition());
+    Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine(Constants::QTRCalibration::kBinaryThreshold));
+    Serial.print(F(" lPos:")); Serial.print(qtrRear.getPosition());
 
     auto printRawNorm = [](const __FlashStringHelper* rawLabel,
                            const __FlashStringHelper* normLabel,
@@ -326,15 +326,15 @@ void LARCStateMachine::debugPrint(bool enabled)
     {
         const uint16_t* raw  = qtr.getRaw();
         const uint16_t* norm = qtr.getNorm();
-        // Serial.print(rawLabel);
-        // for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(raw[i]); Serial.print(','); }
-        // Serial.print(normLabel);
-        // for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(norm[i]); Serial.print(','); }
+         Serial.print(rawLabel);
+         for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(raw[i]); Serial.print(','); }
+         Serial.print(normLabel);
+        for (uint8_t i = 0; i < qtr.size(); i++) { Serial.print(norm[i]); Serial.print(','); }
     };
-    //printRawNorm(F(" | raw:"), F(" norm:"), qtrFront);
-    //printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
+    printRawNorm(F(" | raw:"), F(" norm:"), qtrFront);
+    printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
 
-    //Serial.println();
+    Serial.println();
 }
 
 void LARCStateMachine::settleImu()
