@@ -22,12 +22,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-             {70, 71, 67, 68, 69, 73, 68},          // On white
-             {872, 869, 840, 860, 888, 856, 856}}; // black (up and DOWN)
+             {65, 64, 62, 69, 76, 73, 69},          // On white
+             {877, 880, 832, 857, 888, 896, 871}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-              {68, 68, 78, 263, 256, 176},
-            {824, 865, 888, 938, 892, 904}};
+              {73, 76, 106, 167, 250, 166},
+            {842, 880, 918, 946, 897, 897}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
