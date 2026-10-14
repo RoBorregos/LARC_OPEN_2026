@@ -6,7 +6,8 @@
 
 namespace
 {
-    static constexpr STATES kInitialState = STATES::START;
+    static constexpr STATES kInitialState = STATES::LOOKFORLINE;
+    static constexpr bool kVisionEnabled = true; // false = sin vision: servos en safe, sin comunicacion con la Orin
 
     const __FlashStringHelper *mainStateName(STATES state)
     {
@@ -66,6 +67,7 @@ void LARCStateMachine::begin()
     // Servos after the bus and mux are up; vision.begin() parks them safe.
     servos.begin();
     Serial.print("servos (PCA9685) init: "); Serial.println(servos.driverOk() ? "OK" : "FAIL");
+    vision.setEnabled(kVisionEnabled);
     vision.begin();
     vision.requestStatus();
 
@@ -103,7 +105,7 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(true); // true = imprime, false = no imprime
+    debugPrint(false); // true = imprime, false = no imprime
 
     switch (currentState)
     {
