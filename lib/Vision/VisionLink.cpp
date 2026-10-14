@@ -66,6 +66,12 @@ void VisionLink::update()
 {
     const uint32_t now = millis();
 
+    if (!_enabled)
+    {
+        _servos.update(now);
+        return;
+    }
+
     // Consume everything that arrived since the last loop
     while (_serial.available())
     {
@@ -117,6 +123,7 @@ void VisionLink::update()
 
 void VisionLink::startBeans()
 {
+    if (!_enabled) return;
     if (!_beansSent)
     {
         _serial.write(VisionProto::kCmdStartBeans);
@@ -126,6 +133,7 @@ void VisionLink::startBeans()
 
 void VisionLink::startBenefits()
 {
+    if (!_enabled) return;
     if (!_benefitsSent)
     {
         _serial.write(VisionProto::kCmdStartBenefits);
@@ -135,6 +143,7 @@ void VisionLink::startBenefits()
 
 void VisionLink::stop()
 {
+    if (!_enabled) return;
     if (!_stopSent)
     {
         _serial.write(VisionProto::kCmdStop);
@@ -144,6 +153,7 @@ void VisionLink::stop()
 
 void VisionLink::requestStatus()
 {
+    if (!_enabled) return;
     _serial.write(VisionProto::kCmdStatus);
 }
 
@@ -191,12 +201,12 @@ bool VisionLink::isOrinReady() const
 
 bool VisionLink::isBeansRunning() const
 {
-    return (_status & VisionProto::kStatusBeansRunning) != 0;
+    return !_enabled || (_status & VisionProto::kStatusBeansRunning) != 0;
 }
 
 bool VisionLink::isBenefitsRunning() const
 {
-    return (_status & VisionProto::kStatusBenefitsRunning) != 0;
+    return !_enabled || (_status & VisionProto::kStatusBenefitsRunning) != 0;
 }
 
 void VisionLink::clearErrors()
