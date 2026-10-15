@@ -58,7 +58,7 @@ SERIAL_DEVICE = os.environ.get("LARC_TEENSY_DEV") or None
 AUTOSTART_PHASE = os.environ.get("LARC_AUTOSTART_PHASE", "").strip().lower() or None
 
 # Tuning
-LOOP_HZ = 100 # how often we recompute the command
+LOOP_HZ = 80 # how often we recompute the command
 # Only affects the wait for the first report; normal stale limits stay unchanged.
 STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "15"))
 if not 0 < STARTUP_GRACE_SEC <= 180:
@@ -70,7 +70,7 @@ LINK_RETRY_SEC = 2.0
 STALE_MS = {"intake": 500, "separator": 500, "benefits": 800}
 
 # How long the separator holds a side after the last hit for that side.
-SEPARATOR_HOLD_MS = 100
+SEPARATOR_HOLD_MS = 65
 
 # Semantic mapping — the only place these meanings are written down
 INTAKE_UPPER_BIT = 0x01
