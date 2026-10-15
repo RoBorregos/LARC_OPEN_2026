@@ -130,7 +130,7 @@ void Drive::update() {
     }
 
     // 4) Debug 10 Hz
-    if (now - lastPrint_ >= kPrintMs) {
+    if (kDriveDebugPrint && now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
         Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f omega:%.4f err:%.4f\n",
             ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw),
@@ -375,7 +375,7 @@ void Drive::updateNoBNO() {
 
     omni_.MoveXYW(vxCmd_, vyCmd_, 0.0f);
 
-    if (now - lastPrint_ >= kPrintMs) {
+    if (kDriveDebugPrint && now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
         Serial.print("odoX: "); Serial.print(odoX, 4);
         Serial.print("  odoY: "); Serial.println(odoY, 4);

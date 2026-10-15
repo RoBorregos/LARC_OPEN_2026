@@ -153,6 +153,7 @@ private:
     //  Timing 
     static constexpr uint32_t kControlMs = 10;
     static constexpr uint32_t kPrintMs   = 100;
+    static constexpr bool     kDriveDebugPrint = false; // true = imprime x/y/yaw y odoX/odoY
     uint32_t lastControl_ = 0;
     uint32_t lastPrint_   = 0;
 
