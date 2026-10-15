@@ -39,11 +39,23 @@ from model_runtime.shared import SharedModelWorker
 import vision_protocol as vp
 from teensy_link import TeensyLink, find_teensy
 
+# Vision switches. Change these two values.
+# USE_MODEL       True  = YOLO model scripts (orin_vision_model.py, separator_model.py)
+#                 False = OpenCV scripts (orin_vision.py, separator_vision.py)
+# GREEN_LIFT_MODE True  = intake servos lift only when a green ball is in their ROI
+#                 False = intake servos lift for every ball in intake_pick_classes
+#                 GREEN_LIFT_MODE has an effect only when USE_MODEL is True.
+# The env variables LARC_INTAKE_PY / LARC_SEPARATOR_PY / LARC_GREEN_LIFT override these.
+USE_MODEL = True
+GREEN_LIFT_MODE = False
+
+os.environ.setdefault("LARC_GREEN_LIFT", "1" if GREEN_LIFT_MODE else "0")
+
 SCRIPTS = {
     "intake":    Path(os.environ.get("LARC_INTAKE_PY",
-                                     REPO / "main_vision" / "orin_vision_model.py")),
+                                     REPO / "main_vision" / ("orin_vision_model.py" if USE_MODEL else "orin_vision.py"))),
     "separator": Path(os.environ.get("LARC_SEPARATOR_PY",
-                                     REPO / "separator" / "separator_model.py")),
+                                     REPO / "separator" / ("separator_model.py" if USE_MODEL else "separator_vision.py"))),
     "benefits":  Path(os.environ.get("LARC_BENEFITS_PY",
                                      REPO / "benefits" / "benefits.py")),
 }
@@ -60,7 +72,8 @@ AUTOSTART_PHASE = os.environ.get("LARC_AUTOSTART_PHASE", "").strip().lower() or 
 # Tuning
 LOOP_HZ = 80 # how often we recompute the command
 # Only affects the wait for the first report; normal stale limits stay unchanged.
-STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "15"))
+# The model needs a long warm-up before its first report.
+STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "120" if USE_MODEL else "15"))
 if not 0 < STARTUP_GRACE_SEC <= 180:
     raise ValueError("LARC_STARTUP_GRACE_SEC must be greater than 0 and at most 180")
 HEALTH_CHECK_SEC = 2.0
