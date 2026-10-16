@@ -160,7 +160,7 @@ namespace Constants
 
         static constexpr uint8_t kSeparatorNeutral  = 108;
         static constexpr uint8_t kSeparatorLeft     = 57; // mature
-        static constexpr uint8_t kSeparatorRight    = 142; // overmature
+        static constexpr uint8_t kSeparatorRight    = 148; // overmature
 
         static constexpr uint8_t kBenefit2Closed    = 153;
         static constexpr uint8_t kBenefit2Open      = 67;
