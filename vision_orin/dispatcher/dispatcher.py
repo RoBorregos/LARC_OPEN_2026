@@ -1,497 +1,634 @@
 #!/usr/bin/env python3
 """
-dispatcher.py — Multi-phase vision dispatcher (v5)
-Purpose of this code : Own the serial link to the Teensy and, on command,
-                       launch/stop the right vision scripts per phase. It merges
-                       the VISION bitfields the scripts print and forwards one
-                       combined byte to the Teensy. All servo / actuation logic
-                       lives on the Teensy; this process only moves data.
-Serial  : /dev/ttyTeensy @ 115200  (this process is the ONLY serial owner)
-Runs on : the Orin
-Ctrl+C  : stop (kills scripts, closes serial)
+dispatcher.py — the Orin's one long running process (protocol v2)
 
-Protocol
-    Scripts print tagged lines to stdout:
-        VISION:05    to merge bits, send combined byte to the Teensy
-    The vision byte is a bitfield (0x00-0x0F):
-        bit 0 = beanTop     bit 1 = beanBottom
-        bit 2 = warmBall    bit 3 = coolBall
-    Each script owns its own bits (orin_vision: 0-1, separator: 2-3), so the
-    dispatcher merges them and one script can't clobber the other's bits.
-    Scripts MUST print VISION:00 every frame when nothing is detected, not only
-    when something IS detected — otherwise bits stay stuck.
-    Box data (benefits phase) uses a header byte: VISION:FE:02
+Purpose : Own the serial link to the Teensy, start and stop the vision
+          scripts for the phase the Teensy asks for, turn what they print
+          into protocol-v2 command frames, and keep that stream alive so the
+          Teensy's watchdog stays happy. No servo logic lives here.
+Link    : link/teensy_link.py (the only serial owner)
+Runs on : the Orin, normally as a systemd service
+Logs    : stdout -> journald.  journalctl -u larc-dispatcher -f
+Stop    : Ctrl+C or systemctl stop — both park the robot in IDLE first
 
-Phases
-    BEANS    to orin_vision.py + separator_vision.py
-    BENEFITS to benefits.py
-
-Teensy to Orin:
-    0xA0 = START BEANS     0xA1 = STOP ALL
-    0xA2 = STATUS          0xA3 = START BENEFITS
-
-Orin to Teensy:
-    0xB0 = ready   0xB1 = starting   0xB2 = beans running
-    0xB3 = stopped 0xB4 = benefits running
-    0xE0-0xEF = errors (+ 1 byte error code)
-    0x00-0x0F = vision bitfield (single byte, no header)
-    0xFE + 1 byte = box type (benefits phase)
+Script contract
+    intake     VISION:XX        bit 0 = intake upper, bit 1 = intake lower
+    separator  VISION:FD:WW:CC  WW = warm hit, CC = cool hit (00 or 01)
+    benefits   VISION:FE:XX:VV  XX 00 none, 01 red, 02 blue (only when centred)
+                                VV 01 when any ROI sees a box (optional, else 00)
 """
 
-import serial as pyserial
-import subprocess
-import threading
-import time
-import sys
+from __future__ import annotations
+
+import argparse
 import os
 import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
 
-# - Config
-SERIAL_PORT = '/dev/ttyTeensy'
-SERIAL_BAUD = 115200
+# vision_orin/link is a sibling of this directory.
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "link"))
+sys.path.insert(0, str(REPO))
+from model_runtime.shared import SharedModelWorker
 
-# - Scripts
+import vision_protocol as vp
+from teensy_link import TeensyLink, find_teensy
+
+# Vision switches. Change these two values.
+# USE_MODEL       True  = YOLO model scripts (orin_vision_model.py, separator_model.py)
+#                 False = OpenCV scripts (orin_vision.py, separator_vision.py)
+# GREEN_LIFT_MODE True  = intake servos lift only when a green ball is in their ROI
+#                 False = intake servos lift for every ball in intake_pick_classes
+#                 GREEN_LIFT_MODE has an effect only when USE_MODEL is True.
+# The env variables LARC_INTAKE_PY / LARC_SEPARATOR_PY / LARC_GREEN_LIFT override these.
+USE_MODEL = True
+GREEN_LIFT_MODE = False
+
+os.environ.setdefault("LARC_GREEN_LIFT", "1" if GREEN_LIFT_MODE else "0")
+
 SCRIPTS = {
-    'orin_vision':  '/home/maximo/orin_vision.py',
-    'separator':    '/home/maximo/separator_vision.py',
-    'benefits':     '/home/maximo/benefits.py',
+    "intake":    Path(os.environ.get("LARC_INTAKE_PY",
+                                     REPO / "main_vision" / ("orin_vision_model.py" if USE_MODEL else "orin_vision.py"))),
+    "separator": Path(os.environ.get("LARC_SEPARATOR_PY",
+                                     REPO / "separator" / ("separator_model.py" if USE_MODEL else "separator_vision.py"))),
+    "benefits":  Path(os.environ.get("LARC_BENEFITS_PY",
+                                     REPO / "benefits" / "benefits.py")),
 }
-
-DEBUG_MODE = False
-DEBUG_PHASE = 'beans'
-
-WORK_DIR = '/home/maximo'
 
 PHASES = {
-    'beans':    ['orin_vision', 'separator'],
-    'benefits': ['benefits'],
+    "beans":    ["intake", "separator"],
+    "benefits": ["benefits"],
 }
 
-STARTUP_GRACE_SEC   = 5
-HEALTH_CHECK_SEC    = 2
-RECONNECT_DELAY_SEC = 2
+SERIAL_DEVICE = os.environ.get("LARC_TEENSY_DEV") or None
 
-# - Protocol
-CMD_START_BEANS    = 0xA0
-CMD_STOP           = 0xA1
-CMD_STATUS         = 0xA2
-CMD_START_BENEFITS = 0xA3
+AUTOSTART_PHASE = os.environ.get("LARC_AUTOSTART_PHASE", "").strip().lower() or None
 
-ACK_READY    = 0xB0
-ACK_STARTING = 0xB1
-ACK_RUNNING  = 0xB2
-ACK_STOPPED  = 0xB3
-ACK_BENEFITS = 0xB4
+# Tuning
+LOOP_HZ = 80 # how often we recompute the command
+# Only affects the wait for the first report; normal stale limits stay unchanged.
+# The model needs a long warm-up before its first report.
+STARTUP_GRACE_SEC = float(os.environ.get("LARC_STARTUP_GRACE_SEC", "120" if USE_MODEL else "15"))
+if not 0 < STARTUP_GRACE_SEC <= 180:
+    raise ValueError("LARC_STARTUP_GRACE_SEC must be greater than 0 and at most 180")
+HEALTH_CHECK_SEC = 2.0
+LINK_RETRY_SEC = 2.0
 
-ERR_ORIN_VISION = 0xE0
-ERR_SEPARATOR   = 0xE1
-ERR_BOTH_BEANS  = 0xE2
-ERR_CAMERA      = 0xE3
-ERR_BENEFITS    = 0xE4
-ERR_UNKNOWN     = 0xEF
+# A source that has not printed for this long stops counting.
+STALE_MS = {"intake": 500, "separator": 500, "benefits": 800}
 
-ECODE_EXIT   = 0x01
-ECODE_EXCEPT = 0x02
-ECODE_NOCAM  = 0x04
+# How long the separator holds a side after the last hit for that side.
+SEPARATOR_HOLD_MS = 65
 
-ERR_MAP = {
-    'orin_vision': ERR_ORIN_VISION,
-    'separator':   ERR_SEPARATOR,
-    'benefits':    ERR_BENEFITS,
+# Semantic mapping — the only place these meanings are written down
+INTAKE_UPPER_BIT = 0x01
+INTAKE_LOWER_BIT = 0x02
+
+WARM_IS = vp.SEP_LEFT # warm ball - separator LEFT  (mature)
+COOL_IS = vp.SEP_RIGHT # cool ball - separator RIGHT (overmature)
+
+BOX_NONE, BOX_RED, BOX_BLUE = 0, 1, 2
+BOX_DOOR = {BOX_RED: 1, BOX_BLUE: 0}   # box type - which door opens
+BOX_NAMES = {BOX_NONE: "NONE", BOX_RED: "RED", BOX_BLUE: "BLUE"}
+
+FAULT_BIT = {
+    "intake":    vp.STATUS_MAIN_FAULT, # critical on the Teensy
+    "separator": vp.STATUS_SEPARATOR_FAULT,
+    "benefits":  vp.STATUS_BENEFITS_FAULT,
 }
 
-# - State
-_procs = {}
-_outputs = {}
-_phase = None
-_lock = threading.Lock()
-_ser = None
-_ser_lock = threading.Lock()
-
-MAX_OUTPUT_LINES = 100
-
-# Matches vision data lines: VISION:05 or VISION:FE:02
-VISION_PATTERN = re.compile(r'^VISION:([0-9A-Fa-f:]+)$')
-
-# - Shared vision state
-_vision_state = 0
-_vision_lock = threading.Lock()
-
-# Each script owns specific bits — only those bits update when that script sends.
-VISION_MASKS = {
-    'orin_vision': 0x03,  # bits 0-1 (beanTop, beanBottom)
-    'separator':   0x0C,  # bits 2-3 (warmBall, coolBall)
-}
+VISION_LINE = re.compile(r"^VISION:([0-9A-Fa-f:]+)\s*$")
+MAX_KEPT_LINES = 40
 
 
-def log(msg):
-    ts = time.strftime('%H:%M:%S')
-    print(f"[{ts}] {msg}", flush=True)
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
 
 
-# - Serial
-def open_serial():
-    global _ser
-    while True:
+def now_ms() -> int:
+    return int(time.monotonic() * 1000)
+
+
+# What the vision scripts are currently telling us
+class VisionState:
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+        self.intake_upper = False
+        self.intake_lower = False
+        self.intake_ms = 0
+
+        self.sep_side = vp.SEP_NEUTRAL
+        self.sep_until_ms = 0
+        self.separator_ms = 0
+
+        self.box = BOX_NONE
+        self.box_visible = False
+        self.box_ms = 0
+
+        self.reports = {} # actual reports only; startup grace is not readiness
+        self.stale = set() # sources that have gone quiet
+
+    def feed(self, source: str, payload: str) -> bool:
         try:
-            s = pyserial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=0.1)
-            time.sleep(0.5)
-            s.reset_input_buffer()
-            s.reset_output_buffer()
-            with _ser_lock:
-                _ser = s
-            log(f"Serial opened: {SERIAL_PORT} @ {SERIAL_BAUD}")
-            return s
-        except Exception as e:
-            log(f"Serial open failed: {e} -- retrying in {RECONNECT_DELAY_SEC}s...")
-            time.sleep(RECONNECT_DELAY_SEC)
+            fields = [int(part, 16) for part in payload.split(":")]
+        except ValueError:
+            return False
+        if not fields:
+            return False
+
+        stamp = now_ms()
+        with self._lock:
+            if source == "intake" and len(fields) == 1:
+                self.intake_upper = bool(fields[0] & INTAKE_UPPER_BIT)
+                self.intake_lower = bool(fields[0] & INTAKE_LOWER_BIT)
+                self.intake_ms = stamp
+                self.reports[source] = stamp
+                return True
+
+            if source == "separator" and len(fields) == 3 and fields[0] == 0xFD:
+                warm, cool = bool(fields[1]), bool(fields[2])
+                if warm != cool:
+                    self.sep_side = WARM_IS if warm else COOL_IS
+                    self.sep_until_ms = stamp + SEPARATOR_HOLD_MS
+                self.separator_ms = stamp
+                self.reports[source] = stamp
+                return True
+
+            if source == "benefits" and len(fields) in (2, 3) and fields[0] == 0xFE:
+                self.box = fields[1]
+                self.box_visible = len(fields) == 3 and bool(fields[2])
+                self.box_ms = stamp
+                self.reports[source] = stamp
+                return True
+
+        return False
+
+    def invalidate(self, source):
+        with self._lock:
+            self.reports.pop(source, None)
+            # Outputs go safe now, but timestamps are kept: errors neither
+            # extend the deadline nor fault at once. A single bad frame must
+            # not latch a fault on the Teensy; STALE_MS decides that.
+            if source == 'intake':
+                self.intake_upper = self.intake_lower = False
+            elif source == 'separator':
+                self.sep_side = vp.SEP_NEUTRAL
+                self.sep_until_ms = 0
+
+    def note_launched(self, sources) -> None:
+        stamp = now_ms()
+        with self._lock:
+            for source in sources:
+                offset = int(STARTUP_GRACE_SEC * 1000)
+                if source == "intake":
+                    self.intake_ms = stamp + offset
+                elif source == "separator":
+                    self.separator_ms = stamp + offset
+                elif source == "benefits":
+                    self.box_ms = stamp + offset
+            self.stale -= set(sources)
+
+    def reset(self) -> None:
+        with self._lock:
+            self.intake_upper = self.intake_lower = False
+            self.sep_side = vp.SEP_NEUTRAL
+            self.sep_until_ms = 0
+            self.box = BOX_NONE
+            self.box_visible = False
+            self.stale.clear()
+            self.reports.clear()
+
+    def ready(self, sources):
+        stamp = now_ms()
+        with self._lock:
+            return all(source in self.reports and
+                       stamp - self.reports[source] <= STALE_MS[source]
+                       for source in sources)
+
+    # called from the main loop
+    def beans_command(self):
+        stamp = now_ms()
+        with self._lock:
+            stale = set()
+
+            if stamp - self.intake_ms > STALE_MS["intake"]:
+                stale.add("intake")
+                upper = lower = False
+            else:
+                upper, lower = self.intake_upper, self.intake_lower
+
+            if stamp - self.separator_ms > STALE_MS["separator"]:
+                stale.add("separator")
+                separator = vp.SEP_NEUTRAL
+            else:
+                separator = (self.sep_side if stamp < self.sep_until_ms
+                             else vp.SEP_NEUTRAL)
+
+            self.stale = stale
+            return upper, lower, separator, stale
+
+    def benefits_command(self):
+        stamp = now_ms()
+        with self._lock:
+            stale = set()
+            if stamp - self.box_ms > STALE_MS["benefits"]:
+                stale.add("benefits")
+                self.stale = stale
+                return False, False, False, stale
+
+            # Held while benefits.py sees the box centred. The Teensy decides
+            # when to open (openBenefit()); timed doors re-arm on their own.
+            # visible: any part of a box in view, so the Teensy can tell
+            # "box sliding out" from "box gone".
+            door = BOX_DOOR.get(self.box)
+            self.stale = stale
+            return door == 0, door == 1, self.box_visible, stale
 
 
-def send(*data_bytes):
-    """Thread-safe serial send."""
-    with _ser_lock:
-        if _ser is None:
-            return
-        try:
-            _ser.write(bytes(data_bytes))
-        except Exception as e:
-            log(f"Serial send error: {e}")
+# Child processes
+class ScriptRunner:
 
+    def __init__(self, state: VisionState) -> None:
+        self.state = state
+        self.procs = {}
+        self.tails = {}
+        self.phase = None
+        self._lock = threading.Lock()
+        self.model_roles = [name for name in ('intake', 'separator')
+                            if SCRIPTS[name].name in ('orin_vision_model.py', 'separator_model.py')]
+        self.model = (SharedModelWorker(self.model_roles, state.feed, state.invalidate, log)
+                      if self.model_roles else None)
+        self._model_death_reported = False
 
-def serial_read(n=1):
-    """Thread-safe serial read. Re-raises on disconnect for main() to handle."""
-    with _ser_lock:
-        if _ser is None:
-            return b''
-        try:
-            return _ser.read(n)
-        except (pyserial.SerialException, OSError):
-            raise
+    def prepare(self):
+        if self.model:
+            self.model.start()
 
+    def close(self):
+        self.stop(quiet=True)
+        if self.model:
+            self.model.close()
 
-def forward_vision_bytes(hex_str, script_name):
-    """Merge a script's bits into the shared vision state and send the combined byte."""
-    global _vision_state
-    try:
-        data = bytes(int(b, 16) for b in hex_str.split(':'))
-
-        # Multi-byte (box data etc.) — forward as-is
-        if len(data) > 1:
-            with _ser_lock:
-                if _ser:
-                    _ser.write(data)
-            return
-
-        # Single byte — merge only this script's bits into the shared state
-        mask = VISION_MASKS.get(script_name, 0x0F)
-        with _vision_lock:
-            _vision_state = (_vision_state & ~mask) | (data[0] & mask)
-            combined = _vision_state
-
-        with _ser_lock:
-            if _ser:
-                _ser.write(bytes([combined]))
-
-    except Exception as e:
-        log(f"[Forward] Error: {e}")
-
-
-# - Output capture (with vision forwarding)
-def _capture_output(proc, name):
-    """Read a script's stdout, log it, and forward VISION: lines to the Teensy."""
-    try:
-        for line in proc.stdout:
-            text = line.strip()
+    def _reader(self, proc, name: str) -> None:
+        for raw in proc.stdout:
+            text = raw.rstrip()
             if not text:
                 continue
-
-            m = VISION_PATTERN.match(text)
-            if m:
-                forward_vision_bytes(m.group(1), name)
-                continue  # don't log every vision frame
-
-            # Regular output — store and log
-            with _lock:
-                if name not in _outputs:
-                    _outputs[name] = []
-                _outputs[name].append(text)
-                if len(_outputs[name]) > MAX_OUTPUT_LINES:
-                    _outputs[name] = _outputs[name][-MAX_OUTPUT_LINES:]
+            match = VISION_LINE.match(text)
+            if match:
+                if not self.state.feed(name, match.group(1)):
+                    log(f"[{name}] unparsable vision line: {text}")
+                continue
+            with self._lock:
+                tail = self.tails.setdefault(name, [])
+                tail.append(text)
+                del tail[:-MAX_KEPT_LINES]
             log(f"[{name}] {text}")
-    except Exception:
-        pass
 
+    def tail(self, name: str, count: int = 8):
+        with self._lock:
+            return list(self.tails.get(name, []))[-count:]
 
-def get_last_output(name, n=10):
-    with _lock:
-        return _outputs.get(name, [])[-n:]
+    def start(self, phase: str) -> bool:
+        self.stop(quiet=True)
 
+        names = PHASES.get(phase)
+        if not names:
+            log(f"[ERROR] unknown phase '{phase}'")
+            return False
 
-# - Launch / kill
-def kill_all(quiet=False):
-    """
-    Kill all running vision scripts and reset the shared vision state.
+        missing = [n for n in names if n not in self.model_roles and not SCRIPTS[n].exists()]
+        if missing:
+            for name in missing:
+                log(f"[ERROR] script missing: {name} -> {SCRIPTS[name]}")
+            return False
 
-    quiet=True: don't send ACK_STOPPED to the Teensy (internal transitions).
-    """
-    global _phase, _vision_state
-
-    for name, proc in list(_procs.items()):
-        if proc and proc.poll() is None:
-            log(f"  Killing {name} PID={proc.pid}")
+        self.state.note_launched(names)
+        log(f"launching phase '{phase}': {names} (first-report grace {STARTUP_GRACE_SEC:g}s)")
+        for name in names:
+            if name in self.model_roles:
+                continue
+            path = SCRIPTS[name]
             try:
-                proc.terminate()
-                proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            log(f"  {name} stopped (rc={proc.returncode})")
-    _procs.clear()
-    _phase = None
-    _vision_state = 0
+                proc = subprocess.Popen(
+                    [sys.executable, "-u", str(path)],
+                    cwd=str(path.parent), # so it finds its *_config.json
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+            except Exception as exc:
+                log(f"[ERROR] could not launch {name}: {exc}")
+                self.stop(quiet=True)
+                return False
 
-    if not quiet:
-        send(ACK_STOPPED)
-        log("All scripts stopped")
+            self.procs[name] = proc
+            self.tails[name] = []
+            threading.Thread(target=self._reader, args=(proc, name),
+                             name=f"read-{name}", daemon=True).start()
+            log(f"  {name} pid={proc.pid}  ({path})")
+
+        self.phase = phase
+        if phase == 'beans' and self.model:
+            self.prepare()
+            if not self.model.alive():
+                log(f'[ERROR] shared model worker unavailable: {self.model.error or "worker exited without an error message"}')
+                self.stop(quiet=True)
+                return False
+            self.model.activate()
+        return True
+
+    def stop(self, quiet: bool = False) -> None:
+        if self.model:
+            self.model.deactivate()
+        for name, proc in list(self.procs.items()):
+            if proc and proc.poll() is None:
+                if not quiet:
+                    log(f"  stopping {name} pid={proc.pid}")
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+        self.procs.clear()
+        self.phase = None
+        self.state.reset()
+
+    def alive(self):
+        names = [n for n, p in self.procs.items() if p and p.poll() is None]
+        if self.phase == 'beans' and self.model and self.model.alive():
+            names.extend(self.model_roles)
+        return names
+
+    def reap(self):
+        dead = []
+        if (self.phase == 'beans' and self.model and not self.model.alive()
+                and not self._model_death_reported):
+            self._model_death_reported = True
+            dead.extend(self.model_roles)
+            for role in self.model_roles:
+                self.state.invalidate(role)
+            log(f'[HEALTH] shared model worker exited: {self.model.error or "no error message"}')
+        for name, proc in list(self.procs.items()):
+            if proc and proc.poll() is not None:
+                log(f"[HEALTH] {name} exited (rc={proc.returncode})")
+                for line in self.tail(name, 10):
+                    log(f"    | {line}")
+                dead.append(name)
+                del self.procs[name]
+        return dead
 
 
-def launch_phase(phase_name):
-    global _phase
+# Main
+class Dispatcher:
+    def __init__(self, args) -> None:
+        self.args = args
+        self.state = VisionState()
+        self.runner = ScriptRunner(self.state)
+        self.link = None
+        self.running = True
+        self._last_reported = None
+        self._stale_reported = set()
+        self._warned_missing = False
+        self._ready_reported = None
+        self._last_wait_log = 0.0
 
-    if _procs:
-        log(f"Stopping current phase ({_phase}) before starting {phase_name}")
-        kill_all(quiet=True)
+    def stop(self, *_signal) -> None:
+        self.running = False
 
-    script_names = PHASES.get(phase_name)
-    if not script_names:
-        log(f"[ERROR] Unknown phase: {phase_name}")
-        send(ERR_UNKNOWN, ECODE_EXCEPT)
-        return
+    # -- link
+    def connect(self) -> None:
+        while self.running and self.link is None:
+            try:
+                self.link = TeensyLink(device=SERIAL_DEVICE)
+                self._warned_missing = False
+                log(f"serial open: {self.link.device} @ {vp.BAUD}")
+                self.link.set_ready(True)
+                log("dispatcher ready — waiting for the Teensy to ask for a phase")
+            except Exception as exc:
+                if not self._warned_missing:
+                    log(f"serial not available ({exc})")
+                    log(f"waiting for a Teensy — retrying every {LINK_RETRY_SEC}s, "
+                        f"quietly from here")
+                    self._warned_missing = True
+                time.sleep(LINK_RETRY_SEC)
 
-    send(ACK_STARTING)
-    log(f"Launching phase: {phase_name} -- scripts: {script_names}")
-
-    for name in script_names:
-        path = SCRIPTS.get(name)
-        if not path or not os.path.exists(path):
-            log(f"[ERROR] Script not found: {name} to {path}")
-            send(ERR_MAP.get(name, ERR_UNKNOWN), ECODE_EXCEPT)
-            return
-
-    for name in script_names:
-        path = SCRIPTS[name]
+    def drop_link(self, reason: str) -> None:
+        log(f"[serial] lost: {reason}")
+        self.runner.stop(quiet=True)
         try:
-            proc = subprocess.Popen(
-                ['python3', '-u', path],
-                cwd=WORK_DIR,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            _procs[name] = proc
-            _outputs[name] = []
-            t = threading.Thread(target=_capture_output, args=(proc, name), daemon=True)
-            t.start()
-            log(f"  {name} PID={proc.pid} ({path})")
-        except Exception as e:
-            log(f"[ERROR] Failed to launch {name}: {e}")
-            send(ERR_MAP.get(name, ERR_UNKNOWN), ECODE_EXCEPT)
-            kill_all(quiet=True)
-            return
-
-    log(f"Waiting {STARTUP_GRACE_SEC}s for startup...")
-    time.sleep(STARTUP_GRACE_SEC)
-
-    failed = []
-    for name in script_names:
-        proc = _procs.get(name)
-        if proc and proc.poll() is not None:
-            rc = proc.returncode
-            log(f"[ERROR] {name} exited during startup (rc={rc})")
-            last = ' '.join(get_last_output(name, 5)).lower()
-            if 'cannot open camera' in last or 'cannot open /dev/video' in last:
-                send(ERR_MAP.get(name, ERR_UNKNOWN), ECODE_NOCAM)
-            else:
-                send(ERR_MAP.get(name, ERR_UNKNOWN), ECODE_EXIT)
-            failed.append(name)
-
-    if failed:
-        for name in failed:
-            for line in get_last_output(name, 10):
-                log(f"    | {line}")
-            if name in _procs:
-                del _procs[name]
-
-    alive = [n for n, p in _procs.items() if p and p.poll() is None]
-    if alive:
-        _phase = phase_name
-        ack = ACK_BENEFITS if phase_name == 'benefits' else ACK_RUNNING
-        send(ack)
-        log(f"Phase {phase_name}: running with {alive} (failed: {failed or 'none'})")
-    else:
-        log(f"Phase {phase_name}: ALL scripts failed — nothing running")
-        kill_all(quiet=True)
-
-
-# - Health check
-def check_health():
-    if not _phase:
-        return
-
-    crashed = []
-    for name, proc in list(_procs.items()):
-        if proc and proc.poll() is not None:
-            rc = proc.returncode
-            log(f"[HEALTH] {name} exited unexpectedly (rc={rc})")
-            for line in get_last_output(name, 10):
-                log(f"    | {line}")
-            crashed.append(name)
-
-    if not crashed:
-        return
-
-    # Report errors to the Teensy
-    if _phase == 'beans':
-        for name in crashed:
-            send(ERR_MAP.get(name, ERR_UNKNOWN), ECODE_EXIT)
-    elif _phase == 'benefits':
-        send(ERR_BENEFITS, ECODE_EXIT)
-
-    # Remove dead processes but keep alive ones running
-    for name in crashed:
-        if name in _procs:
-            del _procs[name]
-
-    # Only kill everything if ALL scripts are dead
-    alive = [n for n, p in _procs.items() if p and p.poll() is None]
-    if not alive:
-        log("[HEALTH] All scripts dead — phase over")
-        kill_all(quiet=True)
-    else:
-        log(f"[HEALTH] Still running: {alive}")
-
-
-def report_status():
-    log(f"== STATUS REPORT ==")
-    log(f"  Phase: {_phase or 'IDLE'}")
-
-    if not _phase:
-        send(ACK_STOPPED)
-        log(f"  No scripts running")
-        import glob
-        videos = sorted(glob.glob('/dev/video*'))
-        log(f"  Video devices: {videos}")
-        try:
-            result = subprocess.run(['lsusb'], capture_output=True, text=True, timeout=3)
-            for line in result.stdout.splitlines():
-                log(f"  USB: {line}")
+            if self.link:
+                self.link.close()
         except Exception:
             pass
-        log(f"== END STATUS ==")
-        return
+        self.link = None
 
-    all_ok = True
-    for name, proc in _procs.items():
-        alive = proc and proc.poll() is None
-        status = "RUNNING" if alive else f"DEAD (rc={proc.returncode if proc else '?'})"
-        pid = proc.pid if proc else "?"
-        log(f"  {name}: {status} (PID={pid})")
-        for line in get_last_output(name, 3):
-            log(f"    | {line}")
-        if not alive:
-            all_ok = False
+    def handle_messages(self) -> None:
+        for line in self.link.take_messages():
+            log(f"[teensy] {line}")
 
-    if all_ok:
-        ack = ACK_BENEFITS if _phase == 'benefits' else ACK_RUNNING
-        send(ack)
-    else:
-        send(ERR_UNKNOWN, ECODE_EXIT)
-    log(f"== END STATUS ==")
+    # -- requests from the Teensy
+    def handle_requests(self) -> None:
+        for request in self.link.take_requests():
+            name = vp.CMD_NAMES.get(request, f"0x{request:02X}")
+            log(f">> Teensy requests {name}")
+            if request == vp.CMD_START_BEANS:
+                self.enter("beans")
+            elif request == vp.CMD_START_BENEFITS:
+                self.enter("benefits")
+            elif request == vp.CMD_STOP:
+                self.enter(None)
+            elif request == vp.CMD_STATUS:
+                self.report_status()
 
+    def enter(self, phase) -> None:
+        if phase == self.runner.phase:
+            log(f"already in phase '{phase}' — nothing to do")
+            return
 
-# - Main
-def main():
-    global _ser
+        # Park the link before the scripts change under it.
+        self.link.set_idle()
+        self.link.set_beans_running(False)
+        self.link.set_benefits_running(False)
 
-    log("Vision Dispatcher v5 starting...")
-    log("Scripts configured:")
-    for name, path in SCRIPTS.items():
-        exists = "OK" if os.path.exists(path) else "MISSING"
-        log(f"  {name}: {path} [{exists}]")
-    log("Phases:")
-    for phase, scripts in PHASES.items():
-        log(f"  {phase}: {scripts}")
+        self._stale_reported.clear()
+        self._last_reported = None
+        self._ready_reported = None
+        self._last_wait_log = 0.0
+        for mask in FAULT_BIT.values():
+            self.link.set_fault(mask, False)
 
-    ser = None
+        if phase is None:
+            self.runner.stop()
+            log("phase -> IDLE")
+            return
 
-    try:
-        if DEBUG_MODE:
-            log(f"=== DEBUG MODE — no Teensy, auto-starting '{DEBUG_PHASE}' ===")
-            launch_phase(DEBUG_PHASE)
-            while True:
-                time.sleep(HEALTH_CHECK_SEC)
-                check_health()
+        if not self.runner.start(phase):
+            self.link.set_fault(FAULT_BIT.get(phase, vp.STATUS_MAIN_FAULT), True)
+            return
+
+        if phase == "beans":
+            self.link.set_phase_beans()
+            # RUNNING is asserted only after fresh reports from both workers.
         else:
-            while True:
-                if ser is None:
-                    ser = open_serial()         # blocks until connected
-                    send(ACK_READY)
-                    log("Dispatcher ready -- waiting for Teensy commands")
-                    last_health = time.time()
+            self.link.set_phase_benefits()
+            # RUNNING is asserted only after the first benefits report.
+        log(f"phase -> {phase.upper()}")
+
+    # pushing the command
+    def push_command(self) -> None:
+        phase = self.runner.phase
+        if phase == "beans":
+            upper, lower, separator, stale = self.state.beans_command()
+            self.link.set_beans(upper, lower, separator)
+            summary = (f"BEANS upper={int(upper)} lower={int(lower)} "
+                       f"sep={vp.SEP_NAMES[separator]}")
+        elif phase == "benefits":
+            door1, door2, visible, stale = self.state.benefits_command()
+            self.link.set_benefits(door1, door2, visible)
+            summary = f"BENEFITS door1={int(door1)} door2={int(door2)} visible={int(visible)}"
+        else:
+            return
+
+        ready = (self.state.ready(PHASES[phase]) and
+                 all(name in self.runner.alive() for name in PHASES[phase]))
+        self.link.set_beans_running(phase == "beans" and ready)
+        self.link.set_benefits_running(phase == "benefits" and ready)
+        if ready != self._ready_reported:
+            log(f"[VISION READY] {phase.upper()}={int(ready)} (fresh reports required)")
+            self._ready_reported = ready
+        if not ready and time.monotonic() - self._last_wait_log >= 2:
+            waiting = [n for n in PHASES[phase] if not self.state.ready([n])]
+            log(f"[WAITING] {phase}: no fresh report from {waiting}")
+            self._last_wait_log = time.monotonic()
+
+        for source in stale - self._stale_reported:
+            log(f"[STALE] {source} stopped reporting — its outputs are now safe")
+            self.link.set_fault(FAULT_BIT[source], True)
+        for source in self._stale_reported - stale:
+            log(f"[STALE] {source} is reporting again")
+            self.link.set_fault(FAULT_BIT[source], False)
+        self._stale_reported = set(stale)
+
+        if summary != self._last_reported:
+            log(summary)
+            self._last_reported = summary
+
+    # health
+    def check_health(self) -> None:
+        if not self.runner.phase:
+            return
+        dead = self.runner.reap()
+        if not dead:
+            return
+        for name in dead:
+            self.link.set_fault(FAULT_BIT[name], True)
+        if not self.runner.alive():
+            log("[HEALTH] every script for this phase is dead — going IDLE")
+            self.enter(None)
+
+    def report_status(self) -> None:
+        log("== STATUS ==")
+        log(f"  phase        {self.runner.phase or 'IDLE'}")
+        log(f"  serial       {self.link.device}")
+        log(f"  status byte  0x{self.link.status:02X}")
+        if self.runner.model:
+            log(f"  model error  {self.runner.model.error or 'none'}")
+        if self.runner.phase:
+            for name in PHASES[self.runner.phase]:
+                proc = self.runner.procs.get(name)
+                alive = name in self.runner.alive()
+                log(f"  {name:<10}  {'RUNNING' if alive else 'DEAD'}"
+                    f"  worker={'shared-model' if name in self.runner.model_roles else (proc.pid if proc else '-')}")
+                for line in self.runner.tail(name, 3):
+                    log(f"      | {line}")
+        else:
+            import glob
+            log(f"  video nodes  {sorted(glob.glob('/dev/video*'))}")
+        log("== END STATUS ==")
+
+    # -- run --
+    def run(self) -> int:
+        log("LARC vision dispatcher (protocol v2) starting")
+        log(f"  repo         {REPO}")
+        for name, path in SCRIPTS.items():
+            if name in self.runner.model_roles:
+                log(f"  {name:<10}  shared persistent model (no camera subprocess)")
+            else:
+                log(f"  {name:<10}  {path}  [{'OK' if path.exists() else 'MISSING'}]")
+        log(f"  teensy       {SERIAL_DEVICE or find_teensy() or 'not found yet'}")
+
+        signal.signal(signal.SIGTERM, self.stop)
+        signal.signal(signal.SIGINT, self.stop)
+
+        period = 1.0 / LOOP_HZ
+        last_health = time.monotonic()
+
+        try:
+            self.runner.prepare()
+            while self.running:
+                if self.link is None:
+                    self.connect()
+                    if self.link is None:
+                        break
+                    phase = self.args.phase or AUTOSTART_PHASE
+                    if phase:
+                        source = "--phase" if self.args.phase else "LARC_AUTOSTART_PHASE"
+                        log(f"{source}={phase}: starting it now without waiting "
+                            f"for the Teensy to ask")
+                        self.enter(phase)
+                if not self.link.healthy:
+                    self.drop_link(str(self.link.error or "transmit thread stopped"))
+                    time.sleep(LINK_RETRY_SEC)
+                    continue
 
                 try:
-                    data = serial_read(1)
-                    if data:
-                        cmd = data[0]
-                        if cmd == CMD_START_BEANS:
-                            log(">> CMD: START BEANS")
-                            launch_phase('beans')
-                        elif cmd == CMD_STOP:
-                            log(">> CMD: STOP")
-                            kill_all()  # Teensy is resetting the round
-                        elif cmd == CMD_STATUS:
-                            log(">> CMD: STATUS")
-                            report_status()
-                        elif cmd == CMD_START_BENEFITS:
-                            log(">> CMD: START BENEFITS")
-                            launch_phase('benefits')
-                        else:
-                            log(f">> Unknown byte: 0x{cmd:02X}")
+                    self.handle_messages()
+                    self.handle_requests()
+                    self.push_command()
 
-                    now = time.time()
+                    now = time.monotonic()
                     if now - last_health >= HEALTH_CHECK_SEC:
-                        check_health()
+                        self.check_health()
                         last_health = now
+                except OSError as exc:
+                    self.drop_link(str(exc))
+                    time.sleep(LINK_RETRY_SEC)
+                    continue
 
-                except (pyserial.SerialException, OSError) as e:
-                    log(f"[Serial] Disconnected: {e}")
-                    log("[Serial] Killing scripts and reconnecting...")
-                    kill_all(quiet=True)
-                    with _ser_lock:
-                        try:
-                            if _ser:
-                                _ser.close()
-                        except Exception:
-                            pass
-                        _ser = None
-                    ser = None
-                    time.sleep(RECONNECT_DELAY_SEC)
+                time.sleep(period)
 
-    except KeyboardInterrupt:
-        log("Dispatcher shutting down...")
-    finally:
-        kill_all(quiet=True)
-        with _ser_lock:
-            if _ser:
+        finally:
+            log("shutting down — parking the robot")
+            self.runner.stop(quiet=True)
+            if self.link:
                 try:
-                    _ser.close()
+                    self.link.set_idle()
+                    self.link.close() # sends IDLE frames, then closes
                 except Exception:
                     pass
-                _ser = None
+            self.runner.close()
+            log("dispatcher exited")
+        return 0
 
-        log("Dispatcher exited.")
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="LARC Orin vision dispatcher (protocol v2).")
+    parser.add_argument("--phase", choices=sorted(PHASES),
+                        help="start this phase immediately instead of waiting "
+                             "for the Teensy to ask (bench testing)")
+    return Dispatcher(parser.parse_args()).run()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
