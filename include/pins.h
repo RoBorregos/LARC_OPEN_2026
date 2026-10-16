@@ -29,8 +29,8 @@ namespace Pins
     };
 
     constexpr uint8_t kElevator[2] = {
-        4, // IN1_M5
-        3  // IN2_M5
+        16, // IN1_M5
+        17  // IN2_M5
     };
 
     // ENCODERS
@@ -79,30 +79,30 @@ namespace Pins
     static constexpr uint8_t kToFchBR = 4; // LR -- Back Right
 
     // =========================================================
-    // I2C MUX + SERVO BOARD (PCA9685 behind the TCA9548A)
+    // I2C MUX + SERVO BOARD (TCA9548A and PCA9685 sharing Wire, SDA 18 / SCL 19)
     // =========================================================
     namespace I2cMux
     {
         constexpr uint8_t kAddress = 0x70; // A0-A2 to GND
-        constexpr uint8_t kBus     = 1;    // 0 = Wire, 1 = Wire1 (SDA 17 / SCL 16), 2 = Wire2
+        constexpr uint8_t kBus     = 0;    // 0 = Wire (SDA 18 / SCL 19), 1 = Wire1, 2 = Wire2
     } // namespace I2cMux
     namespace Servos
     {
         // The PCA9685 board  
         constexpr uint8_t kPcaI2cAddress = 0x40; // A0-A5 jumpers open
-        constexpr uint8_t kI2cBus        = 1;   // 0 = Wire, 1 = Wire1, 2 = Wire2
-        constexpr uint8_t kI2cSda        = 17;  // SDA1
-        constexpr uint8_t kI2cScl        = 16;   // SCL1
+        constexpr uint8_t kI2cBus        = 0;   // 0 = Wire, 1 = Wire1, 2 = Wire2
+        constexpr uint8_t kI2cSda        = 18;  // SDA
+        constexpr uint8_t kI2cScl        = 19;  // SCL
         constexpr uint8_t kOePin         = 255;  // OE (active LOW); 255 = not wired
 
         // TCA9548A channel the PCA9685 is plugged into (0-7).
         // 255 = PCA9685 wired straight to the bus, no multiplexer.
-        constexpr uint8_t kTcaChannel    = 1;
+        constexpr uint8_t kTcaChannel    = 255;
 
         static_assert(kTcaChannel <= 7 || kTcaChannel == 255,
                       "Pins::Servos::kTcaChannel must be 0-7, or 255 for no mux");
-        static_assert(kTcaChannel == 255 || kI2cBus == I2cMux::kBus,
-                      "Pins::Servos: PCA9685 is behind the TCA9548A, so kI2cBus must equal I2cMux::kBus");
+        static_assert(kI2cBus == I2cMux::kBus,
+                      "Pins::Servos: PCA9685 shares the TCA9548A bus, so kI2cBus must equal I2cMux::kBus");
 
         static_assert((kI2cBus == 0 && kI2cSda == 18 && kI2cScl == 19) ||
                       (kI2cBus == 1 && kI2cSda == 17 && kI2cScl == 16) ||
@@ -135,8 +135,8 @@ namespace Pins
 
     // SERVOS
     constexpr uint8_t kServoPin1 = 13; // SERVO1 -- mismo net que "INT" (BNO), CONFIRMAR
-    constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- OJO: pin 3 ahora es IN2_M5 (elevator), no usar
-    constexpr uint8_t kServoPin3 = 4;  // SERVO3 -- OJO: pin 4 ahora es IN1_M5 (elevator), no usar
+    constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- free (IN2_M5 moved to 17)
+    constexpr uint8_t kServoPin3 = 4;  // SERVO3 -- free (IN1_M5 moved to 16)
     constexpr uint8_t kServoPin4 = 5;  // SERVO4
     constexpr uint8_t kServoPin5 = 2;  // SERVO5 -- mismo net que "RST" (BNO), CONFIRMAR
     // kServoPin6: placeholder, pin no identificado en el esquematico

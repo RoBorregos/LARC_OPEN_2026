@@ -5,7 +5,7 @@
  *        segundo mux 74HC4067 (Pins::kMuxSig2 / net SIG_A1, pin 22 segun
  *        esquematico) donde esta conectado el QTR que se esta probando.
  *
- *        ToF: FR/FL/BL/BR = canales 0/2/3/4 del TCA9548A en Wire1 (ver pins.h).
+ *        ToF: FR/FL/BL/BR = canales 0/2/3/4 del TCA9548A en Wire (ver pins.h).
  *        Solo el canal 3 (BR) tiene un VLX confirmado conectado por ahora
  *        -- los otros 3 son placeholders y van a reportar FAIL de init
  *        hasta que se conecten.
@@ -24,9 +24,10 @@
 #include "pins.h"
 #include "mux.h"
 #include "TCA9548A/TCA9548A.h"
+#include "PCA9685.hpp"
 #include "tof/tof.hpp"
 
-TCA9548A i2cMux(0x70, Wire1);
+TCA9548A i2cMux(Pins::I2cMux::kAddress, PCA9685::busFromIndex(Pins::I2cMux::kBus));
 
 // ToF (VLX) -- FR/FL/BL/BR por posicion fisica (ver pins.h kToFch*).
 // Solo BR (canal 3) confirmado conectado; FR/FL/BL son placeholders.
@@ -99,9 +100,9 @@ void setup()
     Serial.println("  VLX + QTR TEST (sin motores/BNO)");
     Serial.println("================================");
 
-    // ToF (VLX) via TCA9548A on Wire1 (SDA1=17/SCL1=16), same as instances.cpp
-    Wire1.begin();
-    Wire1.setClock(100000);
+    // ToF (VLX) via TCA9548A on Pins::I2cMux::kBus (Wire, SDA=18/SCL=19), same as instances.cpp
+    i2cMux.wire().begin();
+    i2cMux.wire().setClock(100000);
     Serial.print("i2cMux init: "); Serial.println(i2cMux.begin() ? "OK" : "FAIL");
 
     for (uint8_t i = 0; i < NUM_TOF; i++)

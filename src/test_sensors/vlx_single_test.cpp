@@ -1,10 +1,10 @@
 /**
  * @file vlx_single_test.cpp
  * @brief Diagnostico standalone (sin motores/BNO/IR/RTOS) de dos ToF (VLX,
- *        VL53L1X) conectados detras del TCA9548A, en el bus I2C1 (Wire1,
- *        SDA1=17/SCL1=16), canales 3 y 4 del mux.
+ *        VL53L1X) conectados detras del TCA9548A, en el bus I2C0 (Wire,
+ *        SDA=18/SCL=19, Pins::I2cMux::kBus), canales 3 y 4 del mux.
  *
- *        La seleccion de canal usa Wire1 directo (tcaSelect), sin pasar
+ *        La seleccion de canal usa el bus directo (tcaSelect), sin pasar
  *        por la clase TCA9548A -- confirmado funcionando en hardware real
  *        con este patron. Usa Adafruit_VL53L1X (no la clase ToF de
  *        lib/sensors/tof, que usa la libreria Pololu y no expone forma
@@ -17,7 +17,11 @@
 #include <Wire.h>
 #include <Adafruit_VL53L1X.h>
 
-constexpr uint8_t kTcaAddress = 0x70;
+#include "pins.h"
+#include "PCA9685.hpp"
+
+constexpr uint8_t kTcaAddress = Pins::I2cMux::kAddress;
+TwoWire& tofBus = PCA9685::busFromIndex(Pins::I2cMux::kBus); // Wire, SDA=18/SCL=19
 
 Adafruit_VL53L1X vlx3 = Adafruit_VL53L1X();
 Adafruit_VL53L1X vlx4 = Adafruit_VL53L1X();
@@ -29,9 +33,9 @@ void tcaSelect(uint8_t channel)
 {
     if (channel > 7) return;
 
-    Wire1.beginTransmission(kTcaAddress);
-    Wire1.write(1 << channel);
-    Wire1.endTransmission();
+    tofBus.beginTransmission(kTcaAddress);
+    tofBus.write(1 << channel);
+    tofBus.endTransmission();
 
     delay(5);
 }
@@ -98,8 +102,8 @@ void setup()
     Serial.begin(115200);
     delay(1000);
 
-    Wire1.begin();
-    Wire1.setClock(100000);
+    tofBus.begin();
+    tofBus.setClock(100000);
 
     Serial.println("=== TCA9548A + Adafruit VL53L1X (canales 3 y 4) ===");
 
@@ -114,7 +118,7 @@ void setup()
 
     tcaSelect(0); // 3 VL53 
 
-    if (!vlx3.begin(0x29, &Wire1))
+    if (!vlx3.begin(0x29, &tofBus))
     {
         Serial.println("ERROR inicializando VL53L1X canal 3");
     }
@@ -133,7 +137,7 @@ void setup()
     // =========================
     tcaSelect(2);
 
-    if (!vlx4.begin(0x29, &Wire1))
+    if (!vlx4.begin(0x29, &tofBus))
     {
         Serial.println("ERROR inicializando VL53L1X canal 4");
     }
