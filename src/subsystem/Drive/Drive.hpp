@@ -53,6 +53,8 @@ public:
     void  setTargetYaw(float yawRad);
     float getYaw() const;
     float getTargetYaw() const { return targetYaw_; }
+    bool  imuOk() const { return bno_.hasValidYaw(); }
+    void  setImuVerbose(bool verbose) { bno_.setVerbose(verbose); }
 
     //  Omega manual 
     void setManualOmega(float omegaRadS);

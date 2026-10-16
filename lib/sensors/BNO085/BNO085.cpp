@@ -83,11 +83,17 @@ bool BNO085::tryAddress(uint8_t address)
     return false;
 }
 
+void BNO085::log(const char *msg) const
+{
+    if (verbose_)
+        Serial.println(msg);
+}
+
 bool BNO085::enableReports()
 {
     if (!bno.enableReport(SH2_GAME_ROTATION_VECTOR, REPORT_PERIOD_US)) // no magnetometer: motors bend its heading
     {
-        Serial.println("Failed to enable GAME_ROTATION_VECTOR report");
+        log("Failed to enable GAME_ROTATION_VECTOR report");
         return false;
     }
 
@@ -96,14 +102,14 @@ bool BNO085::enableReports()
     // Dynamic calibration is lost on every reset; the gyro one removes the zero-rate
     // offset while the robot stands still, which otherwise makes the yaw drift.
     if (sh2_setCalConfig(SH2_CAL_ACCEL | SH2_CAL_GYRO | SH2_CAL_MAG) != SH2_OK)
-        Serial.println("BNO085: failed to enable dynamic calibration");
+        log("BNO085: failed to enable dynamic calibration");
 
     return true;
 }
 
 bool BNO085::begin()
 {
-    Serial.println("BEGIN >>>> BNO085 <<<<");
+    log("BEGIN >>>> BNO085 <<<<");
 
     Wire2.begin();
     Wire2.setClock(kI2cFrequency);
@@ -117,18 +123,18 @@ bool BNO085::begin()
 
         if (!connected)
         {
-            Serial.println("Failed to BEGIN >>>> BNO085 <<<< (0x4A/0x4B), resetting and retrying...");
+            log("Failed to BEGIN >>>> BNO085 <<<< (0x4A/0x4B), resetting and retrying...");
             manualReset();
         }
     }
 
     if (!connected)
     {
-        Serial.println(">>>> BNO085 <<<< giving up (chip not responding on 0x4A/0x4B after several reset cycles)");
+        log(">>>> BNO085 <<<< giving up (chip not responding on 0x4A/0x4B after several reset cycles)");
         return false;
     }
 
-    Serial.println(">>>> BNO085 <<<< BEGINED successfully");
+    log(">>>> BNO085 <<<< BEGINED successfully");
 
     if (!enableReports())
         return false;
@@ -145,7 +151,7 @@ bool BNO085::begin()
 
 void BNO085::recover()
 {
-    Serial.println("BNO085: stalled, forcing reset+reinit");
+    log("BNO085: stalled, forcing reset+reinit");
 
     bool connected = false;
     manualReset();
@@ -158,7 +164,7 @@ void BNO085::recover()
 
     if (!connected)
     {
-        Serial.println("BNO085: lost for good (no RST wired to un-wedge it) -- giving up, yaw stays frozen");
+        log("BNO085: lost for good (no RST wired to un-wedge it) -- giving up, yaw stays frozen");
         initialized = false;
         return;
     }
@@ -176,7 +182,7 @@ void BNO085::update()
     // A brownout (e.g. the elevator motor reversing) resets the chip and disables its reports.
     if (bno.wasReset())
     {
-        Serial.println("BNO085: chip reset, re-enabling reports");
+        log("BNO085: chip reset, re-enabling reports");
         enableReports();
         reanchorYaw_ = true;
         lastValidMs_ = millis();
