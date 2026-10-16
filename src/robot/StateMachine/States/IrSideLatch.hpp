@@ -5,10 +5,11 @@
 */
 #pragma once
 #include <Arduino.h>
+#include "constants.h"
 
 struct IrSideLatch {
-    static constexpr uint32_t kLatchTimeoutMs = 800;
-    static constexpr uint32_t kLatchIrOffMs   = 150;
+    static constexpr uint32_t kLatchTimeoutMs = Constants::StateMachine::IrLatch::kLatchTimeoutMs;
+    static constexpr uint32_t kLatchIrOffMs   = Constants::StateMachine::IrLatch::kLatchIrOffMs;
 
     bool     latched    = false;
     bool     firstFront = false;

@@ -20,9 +20,8 @@ public:
                 bool& transitionToPoolsGoBack, bool& transitionToStop) {
         using namespace StateCommon;
         transitionToPoolsGoBack = false;
+        namespace cfg = Constants::StateMachine::Beans;
         transitionToStop = false;
-
-        static constexpr uint32_t kLostLineTimeoutMs = 1200;
 
         // Check critical error from vision
         if (vision.hasCriticalError()) {
@@ -54,9 +53,9 @@ public:
                     if (action_start_time == 0)
                         action_start_time = now;
 
-                    LARC.backward(0.30f);
+                    LARC.backward(kManeuverSpeed);
 
-                    if ((now - action_start_time) >= kLostLineTimeoutMs)
+                    if ((now - action_start_time) >= cfg::kLostLineTimeoutMs)
                     {
                         vision.stop();
                         transitionToPoolsGoBack = true;
@@ -77,7 +76,7 @@ public:
             // ── Stage 1: Stop por 1000 ms después de detectar RIGHT ────────
             case 1: {
                 LARC.stop();
-                if ((now - action_start_time) >= 1000) {
+                if ((now - action_start_time) >= cfg::kCornerStopMs) {
                     action_start_time = 0;
                     transitionToPoolsGoBack = true;
                 }

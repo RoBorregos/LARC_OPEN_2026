@@ -60,6 +60,7 @@ private:
 
     uint32_t lastValidMs_ = 0;
 
+    void handleEvent(const sh2_SensorValue_t &val);
     void quaternionToEuler(float qw, float qx, float qy, float qz,
                            float &yaw, float &pitch, float &roll) const;
 

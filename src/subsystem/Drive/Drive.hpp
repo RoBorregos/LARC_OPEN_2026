@@ -52,6 +52,7 @@ public:
     void  holdYaw(bool enable);
     void  setTargetYaw(float yawRad);
     float getYaw() const;
+    float getTargetYaw() const { return targetYaw_; }
 
     //  Omega manual 
     void setManualOmega(float omegaRadS);

@@ -1,7 +1,7 @@
 /*
 *@author:  Ximena Patricia García Magdaleno
 * StateCommon.hpp
-* Shared constants and QTR corrections for the States (based on DriveStateMachineTest)
+* Shared QTR corrections for the States (constants in config/StateMachineConfig.h)
 */
 #pragma once
 #include <Arduino.h>
@@ -10,41 +10,17 @@
 
 namespace StateCommon
 {
-    static constexpr float kVelocity = 0.25f;
-    static constexpr float kBaseSpeed = Constants::PID::kcurrentVelocity;
-
-    static constexpr float kCornerSetpoint = 2900.0f;
-    static constexpr float kCornerKp = 0.00012f;
-    static constexpr float kCornerCorrMax = 0.20f;
-    static constexpr float kCornerCorrAlpha = 0.15f;
+    using namespace Constants::StateMachine::Common;
+    using namespace Constants::StateMachine::Elevator;
 
     static constexpr int kQtrPosMax = (QTR::N - 1) * 1000; // 6000 (indice 6 * 1000)
-    static constexpr float kRearCorrAlpha = 0.15f;
-
-    static constexpr uint32_t kStartIgnoreTimeMs = 4500;    // Time to ignore IR's at the START point
-    static constexpr uint32_t kClearDelayMs = 500;         // Tiempo de mantener esquivando Time to change again to Forward HandlePool
-    static constexpr uint32_t kNoObstacleToCornerMs = 1000; // WithoutPools, before changing to LookForLineStateTime without obstacle to go forward and LOOKFORLINE
-
-    static constexpr uint32_t kMinAvoidTimeMs = 250;
-    static constexpr uint32_t kSideDetectHoldMs = 80;
-    static constexpr uint16_t kTooCloseAvoidLeftMm  = 120;
-    static constexpr uint16_t kTooCloseAvoidRightMm = 100;
-
-    static constexpr bool kLimitSwitchConnected = true;
-    // External pull-ups: pressed reads HIGH (same as test_elevator). Flip to LOW if inverted.
-    static constexpr int  kLimitPressedLevel = HIGH;
-
-    // Elevator::ElevatorPosition() states, same as test_elevator
-    static constexpr int kElevatorStop = 0;
-    static constexpr int kElevatorUp   = 1;
-    static constexpr int kElevatorDown = 2;
 
     // qtrFront -> vx correction target (0 when the line is lost)
     inline float frontCornerCorrTarget(bool onLine)
     {
         if (!onLine)
             return 0.0f;
-        const float error = kCornerSetpoint - qtrFront.getPosition();
+        const float error = kQtrFrontSetpoint - qtrFront.getPosition();
         return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
     }
 
@@ -53,10 +29,10 @@ namespace StateCommon
     {
         if (!qtrRear.onLine())
             return 0.0f;
-        // Rear has fewer sensors: rescale to the front 0..kQtrPosMax range.
-        const int   rearPosMax      = (qtrRear.size() - 1) * 1000;
-        const float mirroredRearPos = (float)(rearPosMax - qtrRear.getPosition()) * kQtrPosMax / rearPosMax;
-        const float error = kCornerSetpoint - mirroredRearPos;
+        // Mirrored sign; rear has fewer sensors, so the error is rescaled to the
+        // front 0..kQtrPosMax range to share kCornerKp.
+        const int   rearPosMax = (qtrRear.size() - 1) * 1000;
+        const float error = ((float)qtrRear.getPosition() - kQtrRearSetpoint) * kQtrPosMax / rearPosMax;
         return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
     }
 }

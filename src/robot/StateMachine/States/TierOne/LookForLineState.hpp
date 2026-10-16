@@ -27,6 +27,7 @@ public:
 
     // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
     void update(uint32_t now, bool FL, bool FR, bool BL, bool BR, bool& transitionToCorner) {
+        namespace cfg = Constants::StateMachine::LookForLine;
         transitionToCorner = false;
 
         // ── Stage 0: retroceder 200 ms ────────────────────────────────────────
@@ -34,9 +35,9 @@ public:
             if (action_start_time == 0)
                 action_start_time = now;
 
-            LARC.backward(0.30f);
+            LARC.backward(kSpeed);
 
-            if ((now - action_start_time) >= 200) {
+            if ((now - action_start_time) >= cfg::kBackupMs) {
                 action_stage = 1;
                 action_start_time = now;
             }
@@ -45,9 +46,9 @@ public:
 
         // ── Stage 1: retroceder 200 ms más ────────────────────────────────────
         if (action_stage == 1) {
-            LARC.backward(0.30f);
+            LARC.backward(kSpeed);
 
-            if ((now - action_start_time) >= 200) {
+            if ((now - action_start_time) >= cfg::kBackupMs) {
                 action_stage = 2;
                 action_start_time = now;
             }
@@ -56,9 +57,9 @@ public:
 
         // ── Stage 2: avanzar 300 ms ───────────────────────────────────────────
         if (action_stage == 2) {
-            LARC.forward(0.30f);
+            LARC.forward(kSpeed);
 
-            if ((now - action_start_time) >= 300) {
+            if ((now - action_start_time) >= cfg::kForwardMs) {
                 action_stage = 3;
                 action_start_time = now;
             }
@@ -70,7 +71,7 @@ public:
         // Dark patches that only the QTR sees are discarded.
         if (FL || FR)
             lastFrontIrMs_ = now;
-        const bool irRecent = lastFrontIrMs_ != 0 && (now - lastFrontIrMs_) <= kIrConfirmMs;
+        const bool irRecent = lastFrontIrMs_ != 0 && (now - lastFrontIrMs_) <= cfg::kIrConfirmMs;
 
         if (tracker_.update() == QtrEntryTracker::Phase::ON) {
             if (qtrOnMs_ == 0)
@@ -78,20 +79,20 @@ public:
 
             if (irRecent) {
                 correcting_ = false;
-                Serial.println("[LOOKFORLINE] QTR ON + IR -> LOOKFORCORNER");
+                // Serial.println("[LOOKFORLINE] QTR ON + IR -> LOOKFORCORNER");
                 LARC.stop();
                 transitionToCorner = true;
                 return;
             }
-            if ((now - qtrOnMs_) > kIrConfirmMs) {
-                Serial.println("[LOOKFORLINE] QTR ON without IR -> ignored");
+            if ((now - qtrOnMs_) > cfg::kIrConfirmMs) {
+                // Serial.println("[LOOKFORLINE] QTR ON without IR -> ignored");
                 tracker_.reset();
                 qtrOnMs_ = 0;
             }
         }
 
         if (correcting_) {
-            if ((now - correctionStart_) < kBorderCorrectMs) {
+            if ((now - correctionStart_) < cfg::kBorderCorrectMs) {
                 if (correctionDir_ < 0)
                     LARC.left(kSpeed);
                 else
@@ -122,27 +123,11 @@ public:
     }
 
 private:
-    static constexpr float    kSpeed           = 0.30f;
-    static constexpr uint32_t kBorderCorrectMs = 150;
-    static constexpr uint32_t kIrConfirmMs     = 400;
-
-    // qtrFront: C0..C6 (indices 0..6), C6 is the frontmost sensor.
-    // Set to false if the line enters through C0 when going forward.
-    static constexpr bool kEntryAtHighIndex = true;
+    static constexpr float kSpeed = Constants::StateMachine::Common::kManeuverSpeed;
 
     static QtrEntryTracker::Config trackerCfg() {
-        return {
-            /*entryAtHighIndex*/ kEntryAtHighIndex,
-            /*onThreshold*/      Constants::QTRCalibration::kBinaryThreshold,
-            /*offThreshold*/     Constants::QTRCalibration::kBinaryThreshold - 80,
-            /*entryMaxProgress*/ 1.0f,
-            /*centerProgress*/   3.0f,
-            /*centerTolerance*/  0.75f,
-            /*maxRegress*/       0.6f,
-            /*confirmReads*/     2,
-            /*onReads*/          3,
-            /*lostReads*/        5,
-        };
+        namespace cfg = Constants::StateMachine::LookForLine;
+        return QtrEntryTracker::makeConfig(cfg::kEntryAtHighIndex, cfg::kCenterProgress);
     }
 
     int action_stage = 0;

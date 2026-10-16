@@ -28,6 +28,7 @@ public:
     void update(uint32_t now, bool cornerRIGHTDetected, bool& transitionToStop) {
         using namespace StateCommon;
         using namespace Constants::ServoConfig;
+        namespace cfg = Constants::StateMachine::Benefits;
         transitionToStop = false;
 
         // Doors open only through openBenefit(); the stream just reports the box.
@@ -36,7 +37,7 @@ public:
         if (vision.hasError()) {
             LARC.stop();
             vision.closeBenefit();
-            Serial.println(F("[SM] BENEFITS vision failed; stopping run"));
+            // Serial.println(F("[SM] BENEFITS vision failed; stopping run"));
             vision.resetGuards();
             vision.stop();
             transitionToStop = true;
@@ -48,11 +49,11 @@ public:
         if (!vision.inBenefitsPhase() || !vision.isBenefitsRunning()) {
             LARC.stop();
             benefitCentredMs = now;
-            if (benefitRequestMs == 0 || (now - benefitRequestMs) >= 1000) {
+            if (benefitRequestMs == 0 || (now - benefitRequestMs) >= cfg::kVisionRetryMs) {
                 vision.resetGuards();
                 vision.startBenefits();
                 benefitRequestMs = now;
-                Serial.println(F("[SM] waiting for fresh BENEFITS vision"));
+                // Serial.println(F("[SM] waiting for fresh BENEFITS vision"));
             }
             return;
         }
@@ -116,7 +117,7 @@ public:
             case 2: {
                 LARC.stop();
 
-                if ((now - action_start_time) >= 1000) {
+                if ((now - action_start_time) >= cfg::kCornerStopMs) {
                     transitionToStop = true;
                 }
                 break;

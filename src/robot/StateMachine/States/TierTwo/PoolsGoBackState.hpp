@@ -19,15 +19,21 @@ public:
         noObstacleStartMs = 0;
         sideDetectStartMs = 0;
         poolStateStartMs = 0;
+        poolSeen = false;
     }
 
     void update(uint32_t now, bool rearObstacle, bool leftDetected, bool rightDetected,
                 bool tofReady, bool& transitionToLookForLineBackwards) {
         using namespace StateCommon;
+        namespace cfg = Constants::StateMachine::PoolsGoBack;
         transitionToLookForLineBackwards = false;
 
-        static constexpr uint32_t kInitBackMs = 500;
-        static constexpr uint32_t kInitLeftMs = 500;
+        // A pool behind during the initial maneuver: start avoiding right away.
+        if (action_stage < 2 && tofReady && rearObstacle) {
+            action_stage = 2;
+            action_start_time = 0;
+            setSubState(PoolSubState::AVOID_LEFT);
+        }
 
         // ── Stage 0: retroceder kInitBackMs ─────────────────────────────
         if (action_stage == 0) {
@@ -36,7 +42,7 @@ public:
 
             LARC.backward(kVelocity);
 
-            if ((now - action_start_time) >= kInitBackMs) {
+            if ((now - action_start_time) >= cfg::kInitBackMs) {
                 action_stage = 1;
                 action_start_time = now;
             }
@@ -47,7 +53,7 @@ public:
         if (action_stage == 1) {
             LARC.left(kVelocity);
 
-            if ((now - action_start_time) >= kInitLeftMs) {
+            if ((now - action_start_time) >= cfg::kInitLeftMs) {
                 action_stage = 2;
                 action_start_time = 0;
             }
@@ -81,6 +87,7 @@ private:
     uint32_t noObstacleStartMs = 0;
     uint32_t sideDetectStartMs = 0;
     uint32_t poolStateStartMs = 0;
+    bool     poolSeen = false; // a pool was avoided in this state
 
     void setSubState(PoolSubState newState) {
         if (currentSubState == newState) return;
@@ -89,9 +96,11 @@ private:
         sideDetectStartMs = 0;
         noObstacleStartMs = 0;
         poolStateStartMs = millis();
+        if (newState != PoolSubState::FORWARD)
+            poolSeen = true;
 
-        Serial.print(F("Pool substate -> "));
-        Serial.println(PoolState::subStateName(currentSubState));
+        // Serial.print(F("Pool substate -> "));
+        // Serial.println(PoolState::subStateName(currentSubState));
     }
 
     void handleForward(uint32_t now, bool rearObstacle, bool tofReady,
@@ -115,7 +124,9 @@ private:
         if (noObstacleStartMs == 0)
             noObstacleStartMs = now;
 
-        if ((now - noObstacleStartMs) >= kNoObstacleToCornerMs) {
+        const uint32_t exitMs = poolSeen ? kNoObstacleToCornerMs
+                                         : Constants::StateMachine::PoolsGoBack::kFirstPoolTimeoutMs;
+        if ((now - noObstacleStartMs) >= exitMs) {
             transitionToLookForLineBackwards = true;
         }
     }
@@ -126,11 +137,11 @@ private:
         const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidLeftMm) ||
                                   (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidLeftMm);
         if (tooCloseRear) {
-            LARC.forward(0.30f);
+            LARC.forward(kManeuverSpeed);
             return;
         }
 
-        LARC.left(0.30f);
+        LARC.left(kManeuverSpeed);
 
         if (leftDetected) {
             if (sideDetectStartMs == 0)
@@ -164,11 +175,11 @@ private:
         const bool tooCloseRear = (tofBackLeft.isValid()  && tofBackLeft.getDistanceMm()  < kTooCloseAvoidRightMm) ||
                                   (tofBackRight.isValid() && tofBackRight.getDistanceMm() < kTooCloseAvoidRightMm);
         if (tooCloseRear) {
-            LARC.forward(0.30f);
+            LARC.forward(kManeuverSpeed);
             return;
         }
 
-        LARC.right(0.30f);
+        LARC.right(kManeuverSpeed);
 
         if (rightDetected) {
             if (sideDetectStartMs == 0)
