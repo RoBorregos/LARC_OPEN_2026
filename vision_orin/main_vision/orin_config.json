@@ -1,8 +1,6 @@
 {
   "_config": "orin_config.json",
   "_purpose": "HSV + geometry thresholds for the bean sorter vision pipeline (orin_vision.py / orin_vision_debug.py).",
-  "_note": "Coordinates and sizes are stored at full ZED resolution (1344x376); the scripts scale them down 2x at runtime.",
-  "_workflow": "Tune on a PC with orin_vision_debug.py until beans are picked cleanly, save, then copy this file onto the Orin.",
   "_fields": {
     "s_min": "min HSV saturation for a pixel to count as a bean candidate",
     "v_dark": "pixels darker than this value also count as candidates",
@@ -25,15 +23,15 @@
   "bg_v_min": 0,
   "area_min": 961,
   "area_max": 5247,
-  "rad_min": 31,
+  "rad_min": 10,
   "rad_max": 125,
   "circ_min": 66,
   "circ_max": 99,
   "morph_k": 9,
   "morph_iter": 3,
-  "det_cy_l": 286,
-  "det_cy_r": 379,
-  "det_thick": 97,
-  "trigger_x": 103,
-  "trig_y2": 376
+  "det_cy_l": 332,
+  "det_cy_r": 409,
+  "det_thick": 88,
+  "trigger_x": 112,
+  "trig_y2": 299
 }

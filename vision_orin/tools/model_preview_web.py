@@ -39,7 +39,7 @@ def benefits_result(frame, cfg, captured_at):
     started = time.monotonic()
     result = analyze(frame, cfg)
     image = frame.copy()
-    for label, (x1,y1,x2,y2) in zip('LCR', result['boxes']):
+    for label, (x1,y1,x2,y2) in zip('LCR' * len(result['boxes']), result['boxes']):
         cv2.rectangle(image, (x1,y1), (x2,y2), (255,255,255), 2)
         cv2.putText(image, label, (x1,max(18,y1-6)), cv2.FONT_HERSHEY_SIMPLEX, .6, (255,255,255), 2)
     message = f"VISION:FE:{result['box']:02X}"

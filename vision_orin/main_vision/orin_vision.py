@@ -1,28 +1,42 @@
 #!/usr/bin/env python3
 """
-orin_vision.py — Headless bean sorter (vision to serial)
-Purpose of this code : Run the bean-detection vision loop on the Orin at full
-                       camera resolution and emit what it sees as VISION tags on
-                       stdout. The dispatcher forwards those bytes to the Teensy,
-                       which owns all servo / actuation logic. This file only
-                       looks and reports — it drives no hardware.
-Camera  : /dev/video_zed  (V4L2, ZED 1344x376, processed at full resolution)
-Config  : orin_config.json
-Output  : VISION:XX bitfield lines on stdout  (bit 0 = right bean, bit 1 = left bean)
-Ctrl+C  : stop
+orin_vision.py — headless bean detector (intake)
 
-Deploy vs debug
-    orin_vision.py       to this file: headless, emits VISION tags, no display.
-    orin_vision_debug.py to preview version: opens windows to tune the config on a PC.
-    Tune with the debug tool, then copy orin_config.json onto the Orin.
+Purpose : Run the bean-detection loop at full camera resolution and emit what
+          it sees as VISION tags on stdout. The dispatcher forwards them to
+          the Teensy, which owns all actuation. This file drives no hardware.
+Camera  : role "intake" in ../cameras.json (ZED 2, matched by VID:PID)
+Config  : orin_config.json
+Output  : VISION:XX on stdout (bit 0 = right bean, bit 1 = left bean)
+Debug   : orin_vision_debug.py — same pipeline with preview windows and
+          trackbars. Tune there, then copy orin_config.json onto the Orin.
+Stop    : Ctrl+C
 """
 
 import cv2
 import numpy as np
 import sys, json, os, time
 
-# - Constants
+# Camera selection
+# The camera is chosen by IDENTITY (serial / VID:PID) out of cameras.json,
+# never by /dev/video number — those get reshuffled on every boot. See
+# ../link/camera_select.py and ../cameras.json.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "..", "link"))
+from camera_select import open_role, CameraNotFound
+
+
+#Constants
 CONFIG_FILE = "orin_config.json"
+
+# Autocalibration (photometric only). Off with --no-autocalib, or
+# "autocalib": false in the config. CALIB_EVERY throttles how often a
+# frame is handed to the calibrator thread; the published config is still
+# read every single frame.
+USE_AUTOCALIB = "--no-autocalib" not in sys.argv
+CALIB_HZ = 8.0
+CALIB_EVERY = 3
+# Kept for reference only — the real size comes from ../cameras.json.
 FRAME_W     = 1344
 FRAME_H     = 376
 
@@ -32,9 +46,6 @@ def load_cfg() -> dict:
         sys.exit(f"[ERROR] {CONFIG_FILE} not found — run the debug tool first and press S.")
     with open(CONFIG_FILE) as f:
         raw = json.load(f)
-
-    # Full resolution: config values are used directly (no downscale).
-    # area keeps the legacy x10 tuning multiplier from the original config.
     return dict(
         s_min      = raw['s_min'],
         v_dark     = raw['v_dark'],
@@ -57,7 +68,7 @@ def load_cfg() -> dict:
         trig_y2    = raw['trig_y2'],
     )
 
-# - Kalman ghost tracker
+# Kalman ghost tracker
 GHOST_FRAMES = 0
 
 def _make_kalman():
@@ -101,7 +112,7 @@ def check_trigger(contour_data, cfg, side):
             return True
     return False
 
-# - Vision pipeline
+# Vision pipeline
 def build_mask(half, cfg):
     hsv      = cv2.cvtColor(half, cv2.COLOR_BGR2HSV)
     raw_cand = ((hsv[:,:,1] >= cfg['s_min']) | (hsv[:,:,2] < cfg['v_dark'])).astype(np.uint8) * 255
@@ -138,17 +149,32 @@ def main():
     cfg = load_cfg()
     print(f"[Config] loaded {CONFIG_FILE} (full resolution)", file=sys.stderr)
 
-    cap = cv2.VideoCapture("/dev/video_zed", cv2.CAP_V4L2)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  FRAME_W)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_H)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    if not cap.isOpened():
-        sys.exit("[ERROR] Cannot open /dev/video_zed")
+    try:
+        cap, cam = open_role("intake")
+    except CameraNotFound as exc:
+        sys.exit(f"[ERROR] intake camera: {exc}")
 
     actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     half_w   = actual_w // 2
-    print(f"[Camera] /dev/video_zed  {actual_w}x{actual_h}  half={half_w}x{actual_h}", file=sys.stderr)
+    print(f"[Camera] {cam.device}  {cam.describe()}", file=sys.stderr)
+    print(f"[Camera] {actual_w}x{actual_h}  half={half_w}x{actual_h}", file=sys.stderr)
+
+    # autocalibration
+    # Photometric only: s_min, v_dark and the background band.
+    calib = None
+    if USE_AUTOCALIB and cfg.get("autocalib", True):
+        try:
+            from intake_autocalib import IntakeCalibrator, load_seed
+            seed, note = load_seed(cfg)
+            calib = IntakeCalibrator(cfg, seed=seed, hz=CALIB_HZ).start()
+            print(f"[Calib] on at {CALIB_HZ:.0f} Hz — {note}", file=sys.stderr)
+        except Exception as exc:
+            print(f"[Calib] disabled — {exc}", file=sys.stderr)
+            calib = None
+    else:
+        print("[Calib] off", file=sys.stderr)
+
     print("[Running] Ctrl+C to stop", file=sys.stderr)
 
     frame_count = 0
@@ -163,6 +189,11 @@ def main():
             if not ret or frame is None:
                 continue
             t_read = time.monotonic()
+
+            if calib is not None:
+                cfg = calib.current
+                if frame_count % CALIB_EVERY == 0:
+                    calib.offer(frame.copy())
 
             # Process each half at full resolution
             halves = [
@@ -184,8 +215,6 @@ def main():
             # Serial output: single-byte bitfield the dispatcher forwards to the Teensy.
             bitfield = (int(hits['right']) & 1) | ((int(hits['left']) & 1) << 1)
             print(f"VISION:{bitfield:02X}", flush=True)
-
-            # FPS logging on stderr so it never mixes with VISION output
             frame_count += 1
             now = time.time()
             if now - t_last >= 1.0:
@@ -199,6 +228,8 @@ def main():
                       f"L:{hit_counts['left']:4d}  R:{hit_counts['right']:4d}  |  "
                       f"read:{read_ms:.0f} proc:{proc_ms:.0f} total:{total_ms:.0f}ms",
                       file=sys.stderr)
+                if calib is not None:
+                    print("  " + calib.status(), file=sys.stderr)
                 t_last = now
 
     except KeyboardInterrupt:
@@ -206,6 +237,8 @@ def main():
         print(f"\n[Stopped]  {frame_count} frames in {elapsed:.1f}s  "
               f"avg {frame_count/elapsed:.1f} fps", file=sys.stderr)
     finally:
+        if calib is not None:
+            calib.stop()
         cap.release()
 
 if __name__ == "__main__":

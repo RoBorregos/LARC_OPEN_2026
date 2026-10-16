@@ -7,3 +7,14 @@
 .DS_Store
 **/.DS_Store
 **/Notations/*.md
+
+# Python (Orin)
+.venv*/
+__pycache__/
+*.pyc
+
+# Recorded camera frames for model training
+vision_orin/dataset/
+
+# Config backups written by model_preview_web
+*.before-model-preview

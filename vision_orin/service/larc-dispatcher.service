@@ -26,7 +26,7 @@ Group=orin
 SupplementaryGroups=dialout video
 
 WorkingDirectory=/home/orin/LARC_OPEN_2026/vision_orin
-ExecStart=/home/orin/LARC_OPEN_2026/vision_orin/.venv-model/bin/python -u /home/orin/LARC_OPEN_2026/vision_orin/tools/run_vision.py --backend model
+ExecStart=/home/orin/LARC_OPEN_2026/vision_orin/.venv-model/bin/python -u /home/orin/LARC_OPEN_2026/vision_orin/tools/run_vision.py
 
 Environment=PYTHONUNBUFFERED=1
 # Uncomment to override where the dispatcher looks for things:

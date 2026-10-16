@@ -959,13 +959,6 @@ def main() -> int:
         except Exception as exc:                        # noqa: BLE001
             print(f"[cam] {role:<10} UNAVAILABLE — {type(exc).__name__}: {exc}")
             continue
-        # Two roles on one device would record one camera twice under two names.
-        taken = next((r for r, c in cams.items() if c.info.device == info.device), None)
-        if taken:
-            cap.release()
-            print(f"[cam] {role:<10} SKIPPED — {info.device} is already '{taken}'. "
-                  f"Pass --device {role}=N to pick another camera.")
-            continue
         cam = Camera(role, cap, info, settings)
         cams[role] = cam
         print(f"[cam] {role:<10} {cam.identity()['device']}  {cam.width}x{cam.height}  "
@@ -974,6 +967,15 @@ def main() -> int:
     if not cams:
         print("[fatal] no camera opened. Try --list, then --device role=N.")
         return 1
+
+    # Two roles that landed on the same device would record one camera twice.
+    seen = {}
+    for role, cam in cams.items():
+        dev = cam.identity()["device"]
+        if dev in seen:
+            print(f"[warn] '{role}' and '{seen[dev]}' opened the SAME device {dev}. "
+                  f"Pass --device to separate them, or --roles to drop one.")
+        seen[dev] = role
 
     session = Session(Path(args.out).expanduser().resolve(), args.session,
                       args.photo_format, args.codec, args.segment_min * 60)
