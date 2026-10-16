@@ -57,11 +57,10 @@ void LARCStateMachine::begin()
     pinMode(limitSwitch, INPUT);
     elevator.begin();
 
-    Wire.begin();
-    Wire.setClock(400000);
-
-    Wire1.begin();
-    Wire1.setClock(100000);
+    // TCA9548A + PCA9685 share Wire (18/19); 100 kHz as validated with the ToFs.
+    TwoWire& i2cBus = PCA9685::busFromIndex(Pins::I2cMux::kBus);
+    i2cBus.begin();
+    i2cBus.setClock(100000);
     Serial.print("i2cMux init: "); Serial.println(i2cMux.begin() ? "OK" : "FAIL");
 
     // Servos after the bus and mux are up; vision.begin() parks them safe.
@@ -105,7 +104,7 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(false); // true = imprime, false = no imprime
+    debugPrint(true); // true = imprime, false = no imprime
 
     switch (currentState)
     {
@@ -291,6 +290,7 @@ void LARCStateMachine::debugPrint(bool enabled)
     Serial.print(currentState == STATES::POOLSGOBACK ? (int)poolsGoBackState_.getSubState()
                                                      : (int)poolState_.getSubState());
     Serial.print(F(" LSW:")); Serial.print(digitalRead(limitSwitch));
+    Serial.print(F(" LSW2:")); Serial.print(digitalRead(Pins::kLimitSwitch2));
 
     // ToF en mm (-1 = sin lectura valida)
     auto printTof = [](const __FlashStringHelper* label, const ToF& tof)
