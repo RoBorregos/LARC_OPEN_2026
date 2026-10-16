@@ -2,10 +2,12 @@
 """
 benefits.py — box colour + alignment detector (benefits phase)
 
-Purpose : Watch three small ROIs (left, centre, right) during the benefits
-          phase. When all three see the same colour the box is centred and
-          its colour is reported; anything less reports NONE, so the
-          Teensy only stops at a box it is lined up with.
+Purpose : Watch a matrix of small ROIs during the benefits phase. Each row
+          has three ROIs (left, centre, right). Row 0 is at the p1/p2/p3
+          points; each next row is row_gap px lower. When all three ROIs
+          of ONE row see the same colour, the box is centred and its colour
+          is reported; anything less reports NONE, so the Teensy only stops
+          at a box it is lined up with.
 Camera  : role "benefits" in ../cameras.json (C920 serial 0E9612EF, MJPG)
 Config  : benefits_config.json
 Output  : VISION:FE:XX lines on stdout (00 none, 01 red, 02 blue).
@@ -43,6 +45,8 @@ DEFAULT_CFG = dict(
     p2_x=320, p2_y=240,
     p3_x=420, p3_y=240,
     roi_size=16,
+    rows=1,         # number of L/C/R rows (1 = old single-row detector)
+    row_gap=40,     # px between rows, positive = rows go down from p1..p3
     red_h_lo1=0,    red_h_hi1=10,
     red_h_lo2=170,  red_h_hi2=180,
     red_s_min=80,   red_v_min=80,
@@ -88,11 +92,12 @@ def masks_for(bgr, cfg):
 
 def roi_boxes(cfg, width, height):
     half = max(1, cfg['roi_size'] // 2)
-    boxes = []
-    for p in POINTS:
-        cx = max(half, min(cfg[f'{p}_x'], width - half))
-        cy = max(half, min(cfg[f'{p}_y'], height - half))
-        boxes.append((cx - half, cy - half, cx + half, cy + half))
+    boxes = []  # row-major: row 0 L, C, R, row 1 L, C, R, ...
+    for row in range(max(1, cfg['rows'])):
+        for p in POINTS:
+            cx = max(half, min(cfg[f'{p}_x'], width - half))
+            cy = max(half, min(cfg[f'{p}_y'] + row * cfg['row_gap'], height - half))
+            boxes.append((cx - half, cy - half, cx + half, cy + half))
     return boxes
 
 def roi_colour(red_pct, blue_pct, cfg):
@@ -120,20 +125,28 @@ def analyze(frame, cfg):
         colours.append(roi_colour(red_pct, blue_pct, cfg))
         pcts.append((red_pct, blue_pct))
 
-    left, centre, right = colours
-    if left == centre == right != BOX_NONE:
-        align = "CENTER"
-    elif left == centre == right == BOX_NONE:
-        align = "NONE"
-    elif left != BOX_NONE and right == BOX_NONE:
-        align = "LEFT"
-    elif right != BOX_NONE and left == BOX_NONE:
-        align = "RIGHT"
-    else:
-        align = "MIXED"
+    row_aligns = [row_align(*colours[i:i + 3]) for i in range(0, len(colours), 3)]
+    # The first centred row gives the box. Else log the first row that sees something.
+    box, align = BOX_NONE, "NONE"
+    for i, a in enumerate(row_aligns):
+        if a == "CENTER":
+            box, align = colours[i * 3], a
+            break
+        if align == "NONE":
+            align = a
+    return dict(box=box, align=align, row_aligns=row_aligns,
+                colours=colours, pcts=pcts, boxes=boxes)
 
-    box = left if align == "CENTER" else BOX_NONE
-    return dict(box=box, align=align, colours=colours, pcts=pcts, boxes=boxes)
+def row_align(left, centre, right):
+    if left == centre == right != BOX_NONE:
+        return "CENTER"
+    if left == centre == right == BOX_NONE:
+        return "NONE"
+    if left != BOX_NONE and right == BOX_NONE:
+        return "LEFT"
+    if right != BOX_NONE and left == BOX_NONE:
+        return "RIGHT"
+    return "MIXED"
 
 # - Main
 def main():
@@ -171,9 +184,11 @@ def main():
             now = time.time()
             if now - t_last >= 1.0:
                 fps = frame_count / (now - t0)
-                rois = " ".join(BOX_NAMES[c][0] if c else "-" for c in result['colours'])
+                c = result['colours']
+                rois = " | ".join("".join(BOX_NAMES[x][0] if x else "-" for x in c[i:i + 3])
+                                  for i in range(0, len(c), 3))
                 print(f"[FPS] {fps:5.1f}  |  Box: {BOX_NAMES[box_type]:4s}  |  "
-                      f"align: {result['align']:6s}  L/C/R: {rois}")
+                      f"align: {result['align']:6s}  rows L/C/R: {rois}")
                 t_last = now
 
             if result['align'] != last_align:

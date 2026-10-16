@@ -1,6 +1,6 @@
 {
   "_config": "benefits_config.json",
-  "_purpose": "Three ROIs + HSV thresholds for the benefits-phase detector (benefits.py). A box is reported only when all three ROIs see the same colour.",
+  "_purpose": "Matrix of ROIs (rows of L/C/R) + HSV thresholds for benefits.py. A box is reported when all three ROIs of one row see the same colour.",
   "_note": "Coordinates are in the 640x480 C920 frame. Missing keys fall back to DEFAULT_CFG in benefits.py. Tune with tools/tune_beans_web.py.",
   "_fields": {
     "p1_x/p1_y": "centre of the LEFT ROI",
@@ -14,7 +14,9 @@
     "blue_s_min/blue_v_min": "min saturation/value for blue",
     "min_pct": "min percent of one ROI a colour must fill to count",
     "morph_k": "morphology kernel size (forced odd)",
-    "morph_iter": "morphology open/close iterations"
+    "morph_iter": "morphology open/close iterations",
+    "rows": "number of L/C/R rows; a box counts when ANY row sees one colour in all 3 ROIs",
+    "row_gap": "px between rows; rows go down from the p1/p2/p3 points (negative = up)"
   },
   "p1_x": 139,
   "p1_y": 267,
@@ -23,6 +25,8 @@
   "p3_x": 512,
   "p3_y": 274,
   "roi_size": 16,
+  "rows": 3,
+  "row_gap": 40,
   "red_h_lo1": 0,
   "red_h_hi1": 10,
   "red_h_lo2": 170,
