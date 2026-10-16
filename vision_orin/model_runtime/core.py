@@ -73,8 +73,13 @@ def decide(role, detections, cfg, shape, options, expected=None):
     out['detections'] = detections
     if role == 'intake':
         half = shape[1] // 2
+        # LARC_GREEN_LIFT=1 (set by dispatcher.py GREEN_LIFT_MODE): servos lift only for a green ball.
+        if os.environ.get('LARC_GREEN_LIFT') == '1':
+            pick = {'ball_green'}
+        else:
+            pick = set(options['intake_pick_classes'])
         for d in detections:
-            if d['name'] not in options['intake_pick_classes']:
+            if d['name'] not in pick:
                 continue
             cx,cy,r = d['circle']
             side = 0 if cx < half else 1

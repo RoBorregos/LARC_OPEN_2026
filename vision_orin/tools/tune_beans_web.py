@@ -124,7 +124,7 @@ BOX_BGR = {0: (150, 150, 150), 1: (40, 40, 230), 2: (230, 120, 30)}
 
 def view_benefits(frame, result, fps):
     out = frame.copy()
-    for label, colour, (x1, y1, x2, y2) in zip("LCR", result["colours"],
+    for label, colour, (x1, y1, x2, y2) in zip("LCR" * len(result["boxes"]), result["colours"],
                                                result["boxes"]):
         cv2.rectangle(out, (x1 - 2, y1 - 2), (x2 + 2, y2 + 2), (255, 255, 255), 2)
         cv2.rectangle(out, (x1 - 2, y1 - 24), (x1 + 16, y1 - 6), (0, 0, 0), -1)
@@ -875,6 +875,7 @@ def build_specs(intake, separator, benefits=None):
         BENEFITS_SPEC = [
             ["p1_x", w], ["p1_y", h], ["p2_x", w], ["p2_y", h],
             ["p3_x", w], ["p3_y", h], ["roi_size", 80],
+            ["rows", 8], ["row_gap", h // 2],
             ["red_h_lo1", 180], ["red_h_hi1", 180],
             ["red_h_lo2", 180], ["red_h_hi2", 180],
             ["red_s_min", 255], ["red_v_min", 255],
