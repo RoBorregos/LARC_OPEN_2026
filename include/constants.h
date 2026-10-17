@@ -60,14 +60,14 @@ namespace Constants
 
         // Positions (deg) 
         static constexpr uint8_t kIntakeUpperHome   = 97;
-        static constexpr uint8_t kIntakeUpperDeploy = 133;
+        static constexpr uint8_t kIntakeUpperDeploy = 143;
 
         static constexpr uint8_t kIntakeLowerHome   = 69;
         static constexpr uint8_t kIntakeLowerDeploy = 110;
 
-        static constexpr uint8_t kSeparatorNeutral  = 108;
-        static constexpr uint8_t kSeparatorLeft     = 60; // mature
-        static constexpr uint8_t kSeparatorRight    = 142; // overmature
+        static constexpr uint8_t kSeparatorNeutral  = 99;
+        static constexpr uint8_t kSeparatorLeft     = 57; // mature
+        static constexpr uint8_t kSeparatorRight    = 148; // overmature
 
         static constexpr uint8_t kBenefit2Closed    = 153;
         static constexpr uint8_t kBenefit2Open      = 67;
