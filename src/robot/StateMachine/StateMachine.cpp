@@ -103,7 +103,7 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(false); // true = imprime, false = no imprime
+    debugPrint(true); // true = imprime, false = no imprime
 
     switch (currentState)
     {

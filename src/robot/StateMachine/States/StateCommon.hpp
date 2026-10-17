@@ -21,7 +21,10 @@ namespace StateCommon
         if (!onLine)
             return 0.0f;
         const float error = kQtrFrontSetpoint - qtrFront.getPosition();
-        return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
+        // Shrinking the error by the deadband (instead of zeroing it) keeps the correction continuous.
+        const float shrunk = (error > 0.0f) ? max(error - kFrontCornerDeadband, 0.0f)
+                                            : min(error + kFrontCornerDeadband, 0.0f);
+        return constrain(shrunk * kFrontCornerKp, -kCornerCorrMax, kCornerCorrMax);
     }
 
     // qtrRear is wired mirrored to qtrFront
