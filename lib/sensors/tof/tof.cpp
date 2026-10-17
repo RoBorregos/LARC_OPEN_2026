@@ -32,7 +32,7 @@ ToF::ToF(uint8_t muxChannel, TCA9548A& mux, ToFType type)
 
 bool ToF::begin()
 {
-    // Detras del mux el sensor esta en el mismo bus que el TCA (Wire1 en
+    // Detras del mux el sensor esta en el mismo bus que el TCA (Wire en
     // el robot actual). Pololu (L0X) usa &Wire por default.
     sensorL0X.setBus(bus());
 

@@ -129,13 +129,6 @@ void Drive::update() {
     omni_.MoveXYW(vxCmd_, vyCmd_, -omega);
     }
 
-    // 4) Debug 10 Hz
-    if (now - lastPrint_ >= kPrintMs) {
-        lastPrint_ = now;
-        // Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f omega:%.4f err:%.4f\n",
-            // ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw),
-            // omega, yawPid_.getError());
-    }
 }
 
 //  updateOdometry — deltas from encoder → EKF

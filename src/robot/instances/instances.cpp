@@ -2,14 +2,13 @@
 #include "pins.h"
 #include "constants.h"
 
-// TCA9548A en Wire1 (SDA1=17/SCL1=16), confirmado en hardware con
-// vlx_single_test.cpp. Frente (UL/UR) para POOL, atras (LL/LR) para POOLSGOBACK.
-// Defined first: the PCA9685 servo board sits behind it too.
-TCA9548A i2cMux(0x70, Wire1);
+// TCA9548A on Pins::I2cMux::kBus (Wire, SDA=18/SCL=19). Front (UL/UR) for POOL,
+// rear (LL/LR) for POOLSGOBACK. The PCA9685 shares this bus directly (no mux channel).
+TCA9548A i2cMux(Pins::I2cMux::kAddress, PCA9685::busFromIndex(Pins::I2cMux::kBus));
 
 Drive LARC;
 Mux74HC4067 mux(Pins::kMuxSig2);
-ServoSystem servos(false, &i2cMux); // PCA9685 behind i2cMux, ch Pins::Servos::kTcaChannel
+ServoSystem servos(false, &i2cMux); // mux only used if Pins::Servos::kTcaChannel != 255
 Elevator elevator;
 
 // IR: L1 (FL) y L2 (FR) por GPIO directo, L3 (BL) y L4 (BR) por el mux

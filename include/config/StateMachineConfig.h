@@ -23,9 +23,11 @@ namespace Constants
             static constexpr float kManeuverSpeed = 0.30f; // backups, strafes and line corrections
 
             // Line center for each QTR, in that QTR's own lPos units (debug print).
-            static constexpr float kQtrFrontSetpoint = 2900.0f; // qtrFront: 0..6000
+            static constexpr float kQtrFrontSetpoint = 2587.0f; // qtrFront: 0..6000
             static constexpr float kQtrRearSetpoint  = 2583.3f; // qtrRear:  0..5000 (same as the old 2900 mirrored)
-            static constexpr float kCornerKp        = 0.00012f;
+            static constexpr float kCornerKp        = 0.00012f; // qtrRear
+            static constexpr float kFrontCornerKp   = 0.00008f; // qtrFront; lower than rear because it wobbled at 0.00012
+            static constexpr float kFrontCornerDeadband = 150.0f; // lPos error ignored around the setpoint
             static constexpr float kCornerCorrMax   = 0.20f;
             static constexpr float kCornerCorrAlpha = 0.15f;
             static constexpr float kRearCorrAlpha   = 0.15f;

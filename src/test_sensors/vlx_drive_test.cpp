@@ -1,6 +1,6 @@
 /**
  * @file vlx_drive_test.cpp
- * @brief Combina los 4 ToF (VL53L1X) detras del TCA9548A en Wire1 (canales
+ * @brief Combina los 4 ToF (VL53L1X) detras del TCA9548A en Wire (canales
  *        0/1/3/4, ver vlx_single_test.cpp -- que solo cubria 3 y 4) con la
  *        clase Drive completa: mientras cualquiera detecte algo mas cerca
  *        que kDetectMm, el robot se desplaza a la izquierda; en cuanto
@@ -18,12 +18,14 @@
 #include <Adafruit_VL53L1X.h>
 
 #include "pins.h"
+#include "PCA9685.hpp"
 #include "PIDController.hpp"
 #include "subsystem/Drive/Drive.hpp"
 
 Drive drive;
 
-constexpr uint8_t kTcaAddress = 0x70;
+constexpr uint8_t kTcaAddress = Pins::I2cMux::kAddress;
+TwoWire& tofBus = PCA9685::busFromIndex(Pins::I2cMux::kBus); // Wire, SDA=18/SCL=19
 constexpr int16_t kDetectMm   = 600;   // umbral de deteccion, ajustar en campo
 constexpr float   kRightSpeed = 0.35f; // velocidad lateral, ajustar en campo
 
@@ -53,9 +55,9 @@ void tcaSelect(uint8_t channel)
 {
     if (channel > 7) return;
 
-    Wire1.beginTransmission(kTcaAddress);
-    Wire1.write(1 << channel);
-    Wire1.endTransmission();
+    tofBus.beginTransmission(kTcaAddress);
+    tofBus.write(1 << channel);
+    tofBus.endTransmission();
 
     delay(5);
 }
@@ -65,8 +67,8 @@ void setup()
     Serial.begin(115200);
     delay(1000);
 
-    Wire1.begin();
-    Wire1.setClock(100000);
+    tofBus.begin();
+    tofBus.setClock(100000);
 
     Serial.println("=== Drive + VLX (canales 0/1/3/4 = FL/FR/BL/BR) ===");
 
@@ -75,7 +77,7 @@ void setup()
         ToFSlot& slot = tofs[i];
         tcaSelect(slot.channel);
 
-        if (!slot.sensor->begin(0x29, &Wire1))
+        if (!slot.sensor->begin(0x29, &tofBus))
         {
             Serial.printf("ERROR inicializando VL53L1X %s (canal %u)\n", slot.name, slot.channel);
             continue;

@@ -81,6 +81,15 @@ private:
 
     // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
     void debugPrint(bool enabled);
+    void printBootReport() const;
+
+    // Boot results, printed once by debugPrint(true).
+    bool     i2cMuxOk_          = false;
+    bool     servosOk_          = false;
+    bool     tofOk_[4]          = {};
+    uint32_t imuSettleMs_       = 0;
+    float    imuSettleYawDeg_   = 0.0f;
+    bool     bootReportPrinted_ = false;
 };
 
 #endif

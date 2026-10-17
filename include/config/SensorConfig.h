@@ -22,8 +22,8 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-             {65, 64, 62, 69, 76, 73, 69},          // On white
-             {877, 880, 832, 857, 888, 896, 871}}; // black (up and DOWN)
+             {69, 66, 66, 69, 93, 80, 76},          // On white
+             {859, 873, 853, 868, 884, 876, 874}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
               {73, 76, 106, 167, 250, 166},
