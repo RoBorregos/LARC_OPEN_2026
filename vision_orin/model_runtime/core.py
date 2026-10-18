@@ -87,6 +87,7 @@ def decide(role, detections, cfg, shape, options, expected=None):
             # Preserve center-in-x-strip + enclosing-circle/y-band rule.
             if x1 <= cx <= x2 and cy+r >= y1 and cy-r <= y2:
                 out['left' if side == 0 else 'right'] = True
+        if pick == {'ball_green'}: out['left'], out['right'] = not out['left'], not out['right']  # green lift: deploy (down) unless green is seen, green = home (up)
         out['message'] = f"VISION:{int(out['right']) | (int(out['left']) << 1):02X}"
     else:
         x1,y1,x2,y2 = boxes[0]
