@@ -52,6 +52,9 @@ public:
     void  holdYaw(bool enable);
     void  setTargetYaw(float yawRad);
     float getYaw() const;
+    float getTargetYaw() const { return targetYaw_; }
+    bool  imuOk() const { return bno_.hasValidYaw(); }
+    void  setImuVerbose(bool verbose) { bno_.setVerbose(verbose); }
 
     //  Omega manual 
     void setManualOmega(float omegaRadS);
@@ -153,7 +156,6 @@ private:
     //  Timing 
     static constexpr uint32_t kControlMs = 10;
     static constexpr uint32_t kPrintMs   = 100;
-    static constexpr bool     kDriveDebugPrint = false; // true = imprime x/y/yaw y odoX/odoY
     uint32_t lastControl_ = 0;
     uint32_t lastPrint_   = 0;
 

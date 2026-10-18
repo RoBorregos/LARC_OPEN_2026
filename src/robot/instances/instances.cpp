@@ -1,5 +1,6 @@
 #include "instances.hpp"
 #include "pins.h"
+#include "constants.h"
 
 // TCA9548A on Pins::I2cMux::kBus (Wire, SDA=18/SCL=19). Front (UL/UR) for POOL,
 // rear (LL/LR) for POOLSGOBACK. The PCA9685 shares this bus directly (no mux channel).
@@ -21,7 +22,6 @@ Ultrasonic us2(Pins::kDistanceSensors[1][0], Pins::kDistanceSensors[1][1]);
 QTR qtrFront(Pins::kQtrFrontFirstCh, mux);
 QTR qtrRear(Pins::kQtrRearFirstCh, mux, Pins::kQtrRearCount);
 
-PIDController linePID(0.000035f, 0.0f, 0.00000008f, -1.0f, 1.0f);
 
 VisionLink vision(Serial, servos);
 

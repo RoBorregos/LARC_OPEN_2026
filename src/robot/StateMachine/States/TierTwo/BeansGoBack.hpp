@@ -6,6 +6,7 @@
 #pragma once
 #include <Arduino.h>
 #include "robot/instances/instances.hpp"
+#include "../StateCommon.hpp"
 
 class BeansGoBackState {
 public:
@@ -14,6 +15,7 @@ public:
     }
 
     void update(bool BL, bool BR, bool FL) {
+        using namespace StateCommon;
         // No bajar el elevador ::
 
         switch (action_stage) {
@@ -21,7 +23,7 @@ public:
             case 0:
                 vision.stop();
                 vision.clearErrors();
-                elevator.ElevatorPosition(0); //zero for stop
+                elevator.ElevatorPosition(kElevatorStop);
 
                 if (BR || BL) {
                     LARC.stop();
@@ -29,12 +31,12 @@ public:
                     return;
                 }
 
-                LARC.backward(0.30f);
+                LARC.backward(kManeuverSpeed);
                 return;
 
             // ── Stage 1: LARC.left hasta encontrar FL ────────────────────────────
             case 1:
-                elevator.ElevatorPosition(0);
+                elevator.ElevatorPosition(kElevatorStop);
 
                 if (FL) {
                     LARC.stop();
@@ -42,12 +44,12 @@ public:
                     return;
                 }
 
-                LARC.left(0.30f);
+                LARC.left(kManeuverSpeed);
                 return;
 
             // ── Stage 2: detenido ─────────────────────────────────────────────────
             case 2:
-                elevator.ElevatorPosition(0);
+                elevator.ElevatorPosition(kElevatorStop);
                 LARC.stop();
                 return;
         }

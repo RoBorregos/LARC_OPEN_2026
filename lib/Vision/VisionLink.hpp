@@ -52,11 +52,6 @@ public:
     // safe state with both benefit doors closed.
     void begin();
 
-    // false = no vision at all: nothing is sent to or read from the Orin, the
-    // servos stay safe, and the status checks report "running, nothing seen"
-    // so the state machine can drive the full routine on its own.
-    void setEnabled(bool on) { _enabled = on; }
-
     /// Call every loop. Consumes serial, applies confirmed commands, runs
     /// the watchdog, services the benefit timers. Never blocks.
     void update();
@@ -106,8 +101,8 @@ public:
 
     // The phase the Teensy is currently acting on (not the requested one).
     VisionProto::Phase phase() const { return _appliedPhase; }
-    bool inBeansPhase()        const { return !_enabled || _appliedPhase == VisionProto::Phase::BEANS; }
-    bool inBenefitsPhase()     const { return !_enabled || _appliedPhase == VisionProto::Phase::BENEFITS; }
+    bool inBeansPhase()        const { return _appliedPhase == VisionProto::Phase::BEANS; }
+    bool inBenefitsPhase()     const { return _appliedPhase == VisionProto::Phase::BENEFITS; }
 
     // False once the watchdog has fired, true again on the next valid frame.
     bool isLinkUp() const { return _link.linkUp(); }
@@ -179,7 +174,6 @@ private:
     uint8_t _seenBenefit;
     bool    _boxVisible;
     bool    _benefitsOnRequest;
-    bool    _enabled = true;
 
     void _applySafetyImmediate(const VisionProto::Command &cmd);
 

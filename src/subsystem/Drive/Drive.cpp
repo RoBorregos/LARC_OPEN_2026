@@ -129,13 +129,6 @@ void Drive::update() {
     omni_.MoveXYW(vxCmd_, vyCmd_, -omega);
     }
 
-    // 4) Debug 10 Hz
-    if (kDriveDebugPrint && now - lastPrint_ >= kPrintMs) {
-        lastPrint_ = now;
-        Serial.printf("x:%.3f y:%.3f dist:%.3f yaw:%.1f omega:%.4f err:%.4f\n",
-            ekf_.getX(), ekf_.getY(), ekf_.getDist(), rad2deg(yaw),
-            omega, yawPid_.getError());
-    }
 }
 
 //  updateOdometry — deltas from encoder → EKF
@@ -322,13 +315,13 @@ float Drive::wrapAngle(float a) {
 //  testKinematics
 void Drive::testKinematics(float v, uint32_t T) {
     holdYaw(false);
-    Serial.println("Forward");  omni_.MoveXYW(+v,  0,  0); delay(T);
-    Serial.println("Backward"); omni_.MoveXYW(-v,  0,  0); delay(T);
-    Serial.println("Right");    omni_.MoveXYW( 0, +v,  0); delay(T);
-    Serial.println("Left");     omni_.MoveXYW( 0, -v,  0); delay(T);
-    Serial.println("Diag++");   omni_.MoveXYW(+v, +v,  0); delay(T);
-    Serial.println("Diag--");   omni_.MoveXYW(-v, -v,  0); delay(T);
-    Serial.println("Stop");     omni_.Stop();                delay(1200);
+    omni_.MoveXYW(+v,  0,  0); delay(T); // Serial.println("Forward");
+    omni_.MoveXYW(-v,  0,  0); delay(T); // Serial.println("Backward");
+    omni_.MoveXYW( 0, +v,  0); delay(T); // Serial.println("Right");
+    omni_.MoveXYW( 0, -v,  0); delay(T); // Serial.println("Left");
+    omni_.MoveXYW(+v, +v,  0); delay(T); // Serial.println("Diag++");
+    omni_.MoveXYW(-v, -v,  0); delay(T); // Serial.println("Diag--");
+    omni_.Stop();                delay(1200); // Serial.println("Stop");
 }
 
 //  beginNoBNO / updateNoBNO
@@ -375,10 +368,10 @@ void Drive::updateNoBNO() {
 
     omni_.MoveXYW(vxCmd_, vyCmd_, 0.0f);
 
-    if (kDriveDebugPrint && now - lastPrint_ >= kPrintMs) {
+    if (now - lastPrint_ >= kPrintMs) {
         lastPrint_ = now;
-        Serial.print("odoX: "); Serial.print(odoX, 4);
-        Serial.print("  odoY: "); Serial.println(odoY, 4);
+        // Serial.print("odoX: "); Serial.print(odoX, 4);
+        // Serial.print("  odoY: "); Serial.println(odoY, 4);
     }
 }
 

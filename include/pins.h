@@ -88,21 +88,16 @@ namespace Pins
     } // namespace I2cMux
     namespace Servos
     {
-        constexpr bool kUseI2cMux = false;
-
-        // Canal del TCA9548A, solo se usa cuando kUseI2cMux es true (0-7).
-        constexpr uint8_t kMuxChannel = 1;
-
         // The PCA9685 board  
         constexpr uint8_t kPcaI2cAddress = 0x40; // A0-A5 jumpers open
-        // New PCB: mux and PCA9685 share Wire, with or without the mux.
-        constexpr uint8_t kI2cBus        = I2cMux::kBus;
+        constexpr uint8_t kI2cBus        = 0;   // 0 = Wire, 1 = Wire1, 2 = Wire2
         constexpr uint8_t kI2cSda        = 18;  // SDA
         constexpr uint8_t kI2cScl        = 19;  // SCL
         constexpr uint8_t kOePin         = 255;  // OE (active LOW); 255 = not wired
 
+        // TCA9548A channel the PCA9685 is plugged into (0-7).
         // 255 = PCA9685 wired straight to the bus, no multiplexer.
-        constexpr uint8_t kTcaChannel    = kUseI2cMux ? kMuxChannel : 255;
+        constexpr uint8_t kTcaChannel    = 255;
 
         static_assert(kTcaChannel <= 7 || kTcaChannel == 255,
                       "Pins::Servos::kTcaChannel must be 0-7, or 255 for no mux");

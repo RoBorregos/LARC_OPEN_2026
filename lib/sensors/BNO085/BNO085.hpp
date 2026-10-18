@@ -30,6 +30,9 @@ public:
     float getPitch() const;
     bool  hasValidYaw() const { return initialized && !firstYawSample_; }
 
+    // Status messages (begin, resets, recovery) are only printed when verbose.
+    void setVerbose(bool verbose) { verbose_ = verbose; }
+
     std::tuple<float, float, float> getLinealAcceleration();
 
     void getAngular();
@@ -47,6 +50,9 @@ private:
     float linAccZ_ = 0.0f;
 
     bool initialized;
+    bool verbose_ = false;
+
+    void log(const char *msg) const;
 
     float wrapAngle(float angle) const;
 
@@ -60,6 +66,7 @@ private:
 
     uint32_t lastValidMs_ = 0;
 
+    void handleEvent(const sh2_SensorValue_t &val);
     void quaternionToEuler(float qw, float qx, float qy, float qz,
                            float &yaw, float &pitch, float &roll) const;
 

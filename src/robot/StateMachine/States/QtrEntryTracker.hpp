@@ -5,6 +5,7 @@
 */
 #pragma once
 #include <Arduino.h>
+#include "constants.h"
 #include "robot/instances/instances.hpp"
 
 class QtrEntryTracker {
@@ -23,6 +24,23 @@ public:
         uint8_t  onReads;            // consecutive reads inside the center window
         uint8_t  lostReads;          // consecutive reads without signal -> IDLE
     };
+
+    // Shared thresholds from Constants::StateMachine::QtrTracker; only entry side and center differ per state.
+    static Config makeConfig(bool entryAtHighIndex, float centerProgress) {
+        namespace t = Constants::StateMachine::QtrTracker;
+        return {
+            /*entryAtHighIndex*/ entryAtHighIndex,
+            /*onThreshold*/      Constants::QTRCalibration::kBinaryThreshold,
+            /*offThreshold*/     Constants::QTRCalibration::kBinaryThreshold - t::kOffThresholdMargin,
+            /*entryMaxProgress*/ t::kEntryMaxProgress,
+            /*centerProgress*/   centerProgress,
+            /*centerTolerance*/  t::kCenterTolerance,
+            /*maxRegress*/       t::kMaxRegress,
+            /*confirmReads*/     t::kConfirmReads,
+            /*onReads*/          t::kOnReads,
+            /*lostReads*/        t::kLostReads,
+        };
+    }
 
     explicit QtrEntryTracker(QTR& qtr, const Config& cfg) : qtr_(qtr), cfg_(cfg) {}
 

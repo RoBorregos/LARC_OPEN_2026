@@ -36,7 +36,6 @@ extern QTR qtrFront;
 extern QTR qtrRear;
 
 
-extern PIDController linePID;
 
 extern VisionLink vision;
 

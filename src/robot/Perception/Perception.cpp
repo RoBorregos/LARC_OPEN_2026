@@ -37,9 +37,6 @@ void Perception::updateQTR()
 {
     snap_.linePos = qtrFront.getPosition();
     snap_.onLine  = qtrFront.onLine();
-
-    const float lineCorr = linePID.update(snap_.linePos, Constants::LineFollower::kSetpoint);
-    snap_.vx = -lineCorr;
 }
 
 void Perception::updateToF(uint32_t now)
