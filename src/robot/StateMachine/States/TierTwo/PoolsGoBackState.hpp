@@ -19,6 +19,7 @@ public:
         noObstacleStartMs = 0;
         sideDetectStartMs = 0;
         poolStateStartMs = 0;
+        keepRight = false;
         poolSeen = false;
     }
 
@@ -87,10 +88,15 @@ private:
     uint32_t noObstacleStartMs = 0;
     uint32_t sideDetectStartMs = 0;
     uint32_t poolStateStartMs = 0;
+    bool     keepRight = false; // left border already hit: keep avoiding right until the obstacle is passed
     bool     poolSeen = false; // a pool was avoided in this state
 
     void setSubState(PoolSubState newState) {
         if (currentSubState == newState) return;
+        if (currentSubState == PoolSubState::AVOID_LEFT && newState == PoolSubState::AVOID_RIGHT)
+            keepRight = true;
+        else if (currentSubState == PoolSubState::AVOID_RIGHT && newState == PoolSubState::AVOID_LEFT)
+            keepRight = false;
         currentSubState = newState;
         clearStartMs = 0;
         sideDetectStartMs = 0;
@@ -115,7 +121,7 @@ private:
 
         if (rearObstacle) {
             noObstacleStartMs = 0;
-            setSubState(PoolSubState::AVOID_LEFT);
+            setSubState(keepRight ? PoolSubState::AVOID_RIGHT : PoolSubState::AVOID_LEFT);
             return;
         }
 
@@ -123,6 +129,9 @@ private:
 
         if (noObstacleStartMs == 0)
             noObstacleStartMs = now;
+
+        if ((now - noObstacleStartMs) >= kKeepRightResetMs)
+            keepRight = false;
 
         const uint32_t exitMs = poolSeen ? kNoObstacleToCornerMs
                                          : Constants::StateMachine::PoolsGoBack::kFirstPoolTimeoutMs;
