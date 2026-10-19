@@ -23,7 +23,7 @@ static constexpr uint32_t REPORT_PERIOD_US  = 20000; // 50 Hz, matches bno085_st
 // handshake fails even though the bus ACKs fine. We reset RST ourselves with
 // a generous startup margin and never let the library touch the pin (the
 // Adafruit_BNO08x default constructor below is never given a reset pin).
-static constexpr uint8_t  kRstPin              = Pins::kBnoRstReserved; // see pins.h: possible SERVO5 conflict, confirmed as BNO RST for now
+static constexpr uint8_t  kRstPin              = Pins::kBnoRstReserved; // 255 = no reset pin (see pins.h)
 static constexpr uint8_t  kAddressWaitAttempts = 20;
 static constexpr uint32_t kAddressWaitDelayMs  = 100;
 static constexpr uint8_t  kBeginAttempts       = 5;
@@ -44,13 +44,15 @@ BNO085::BNO085() : initialized(false)
 
 void BNO085::manualReset()
 {
-    pinMode(kRstPin, OUTPUT);
-    digitalWrite(kRstPin, HIGH);
-    delay(10);
-    digitalWrite(kRstPin, LOW);
-    delay(10);
-    digitalWrite(kRstPin, HIGH);
-    delay(10);
+    if (kRstPin != 255) {
+        pinMode(kRstPin, OUTPUT);
+        digitalWrite(kRstPin, HIGH);
+        delay(10);
+        digitalWrite(kRstPin, LOW);
+        delay(10);
+        digitalWrite(kRstPin, HIGH);
+        delay(10);
+    }
 
     delay(kResetStartupDelayMs); // SH-2 firmware startup margin
 }

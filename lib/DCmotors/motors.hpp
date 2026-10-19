@@ -54,6 +54,7 @@ class DCMotor
         void  resetEncoder();
         float getDistanceMeters() const;   
         void  setPPR(float ppr);     // to configure the motor
+        void  setPwmFrequency(float hz);
 
         void testForwardBackward(const char* label = "motor");
 

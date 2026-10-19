@@ -42,4 +42,34 @@ namespace Constants
         static constexpr float kYawRateClosingDegS = 5.0f; // turning toward the target faster than this: no minimum push
         static constexpr float kcurrentVelocity = 0.30f; // Velocity according to PID
     } // namespace PID
+
+    // Per-wheel RPM loop. Values copied from the sketches marked "Calibrated A7 440: check"
+    // in src/test_sensors/byMotor/{UL,UR,LL,LR}EncoderCalibration.cpp.
+    // RPM is in calibration units: quadrature edges / (4 * ppr).
+    namespace WheelPID
+    {
+        struct WheelGains
+        {
+            float kp, ki, kd;
+            float ffOffset, ffSlope; // PWM = ffOffset + ffSlope * rpm
+            float ppr;
+            float iMaxPwm;           // cap on Ki * integral
+        };
+
+        //                         kp    ki     kd    ffOff  ffSlope  ppr     iMax
+        constexpr WheelGains kUL = {0.5f, 0.6f,  0.0f, 32.0f, 1.05f,  190.0f, 255.0f};
+        constexpr WheelGains kUR = {0.5f, 0.6f,  0.0f, 30.0f, 1.05f,  188.0f, 255.0f};
+        constexpr WheelGains kLL = {0.5f, 0.18f, 0.0f,  8.0f, 1.85f,  188.0f,  40.0f};
+        constexpr WheelGains kLR = {0.5f, 0.8f,  0.0f, 32.0f, 1.30f,  189.0f, 255.0f};
+
+        constexpr uint32_t kTsMs     = 50;     // same Ts as the calibration
+        constexpr float    kRpmAlpha = 0.2f;   // EMA on measured rpm
+        constexpr float    kSpRamp   = 90.0f;  // rpm/s
+        // 0 = Teensy default. 25000 (used in the calibration sketches) left the robot unable to drive backward/sideways under Drive.
+        constexpr uint32_t kPwmFreq  = 0;
+
+        // Wheel command 1.0 from the kinematics maps to this rpm.
+        // 120 keeps kcurrentVelocity (0.30) at ~25 rpm per wheel, close to the old open-loop speed.
+        constexpr float kMaxWheelRpm = 120.0f;
+    } // namespace WheelPID
 } // namespace Constants

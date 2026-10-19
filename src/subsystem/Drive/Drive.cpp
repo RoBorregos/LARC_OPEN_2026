@@ -11,6 +11,11 @@ Drive::Drive()
      m3_ll_(37, 38, 10, true, 32, 31, diameter), //M2
      m4_lr_(39, 40, 11, false, 21, 20, diameter), //M4
       omni_(m1_ul_, m2_ur_, m3_ll_, m4_lr_),
+      motors_{&m1_ul_, &m2_ur_, &m3_ll_, &m4_lr_},
+      wheelCtl_{WheelSpeedController(Constants::WheelPID::kUL),
+                WheelSpeedController(Constants::WheelPID::kUR),
+                WheelSpeedController(Constants::WheelPID::kLL),
+                WheelSpeedController(Constants::WheelPID::kLR)},
       yawPid_(P, I, D, -kOmegaMax, +kOmegaMax),
       linePid_(0.00008f, 0.000005f, 0.0f, -kLinePidMax, +kLinePidMax)
 {}
@@ -22,6 +27,8 @@ void Drive::begin() {
 
     analogWriteResolution(8);
     m1_ul_.begin(); m2_ur_.begin(); m3_ll_.begin(); m4_lr_.begin();
+    if (Constants::WheelPID::kPwmFreq > 0)
+        for (DCMotor* m : motors_) m->setPwmFrequency(Constants::WheelPID::kPwmFreq);
 
     Wire.begin();
     bno_.begin();
@@ -52,9 +59,10 @@ void Drive::begin() {
     vyCmd_          = 0.0f;
 
     resetOdometry();
+    resetWheelControllers();
 }
 
-//  update - call always without delay 
+//  update - call always without delay
 void Drive::update() {
     const uint32_t now = millis();
     if (now - lastControl_ < kControlMs) return;
@@ -111,8 +119,22 @@ void Drive::update() {
     }
     omega = clampf(omega, -kOmegaMax, +kOmegaMax);
 
-    // 4) Movermotors
-    if (rpmModeEnabled_) {
+    // 4) Move motors
+    if (closedLoop_) {
+        float target[4];
+        if (rpmModeEnabled_) {
+            // Same yaw term as the kinematics path (-omega on every wheel)
+            const float w = -omega * kMaxWheelRpm;
+            target[0] = rpmSetUL_ + w;
+            target[1] = rpmSetUR_ + w;
+            target[2] = rpmSetLL_ + w;
+            target[3] = rpmSetLR_ + w;
+        } else {
+            omni_.ComputeXYW(vxCmd_, vyCmd_, -omega, target);
+            for (float& t : target) t *= kMaxWheelRpm;
+        }
+        updateWheels(now, target);
+    } else if (rpmModeEnabled_) {
     m1_ul_.move((int)(fabsf(rpmSetUL_ + omega) / 60.0f * 255.0f),
                 rpmSetUL_ + omega >= 0 ? DCMotor::Direction::FORWARD
                                         : DCMotor::Direction::BACKWARD);
@@ -159,6 +181,30 @@ void Drive::updateOdometry() {
     ekf_.step(dt, rpmUL, rpmUR, rpmLL, rpmLR, bno_.getYaw());
 }
 
+//  updateWheels — per-wheel RPM PID at the calibration Ts
+void Drive::updateWheels(uint32_t now, const float targetRpm[4]) {
+    if (now - lastWheelMs_ < Constants::WheelPID::kTsMs) return;
+    lastWheelMs_ = now;
+
+    const uint32_t us = micros();
+    for (uint8_t i = 0; i < 4; i++) {
+        const int pwm = wheelCtl_[i].update(targetRpm[i], motors_[i]->getEncoderCount(), us);
+        motors_[i]->move(pwm);
+    }
+}
+
+void Drive::resetWheelControllers() {
+    const uint32_t us = micros();
+    for (uint8_t i = 0; i < 4; i++)
+        wheelCtl_[i].reset(motors_[i]->getEncoderCount(), us);
+    lastWheelMs_ = millis();
+}
+
+void Drive::setClosedLoop(bool enable) {
+    if (enable && !closedLoop_) resetWheelControllers();
+    closedLoop_ = enable;
+}
+
 //  resetOdometry
 void Drive::resetOdometry() {
     ekf_.resetPose();
@@ -167,6 +213,7 @@ void Drive::resetOdometry() {
     m2_ur_.resetEncoder();
     m3_ll_.resetEncoder();
     m4_lr_.resetEncoder();
+    for (WheelSpeedController& c : wheelCtl_) c.rebaseTicks(0);
 }
 
 //  updateBusy — gestiona driveDistance / strafeDistance / turnTo
@@ -268,6 +315,7 @@ void Drive::setTranslation(float vx, float vy) { vxCmd_ = vx; vyCmd_ = vy; }
 
 void Drive::brake() {
     m1_ul_.stop(); m2_ur_.stop(); m3_ll_.stop(); m4_lr_.stop();
+    resetWheelControllers();
 }
 
 //  Yaw hold
