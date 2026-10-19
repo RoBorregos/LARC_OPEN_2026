@@ -18,6 +18,7 @@ public:
         noObstacleStartMs = 0;
         sideDetectStartMs = 0;
         poolStateStartMs = 0;
+        keepRight = false;
     }
 
     void update(uint32_t now, bool obstacle, bool leftDetected, bool rightDetected,
@@ -59,9 +60,14 @@ private:
     uint32_t noObstacleStartMs = 0;
     uint32_t sideDetectStartMs = 0;
     uint32_t poolStateStartMs = 0;
+    bool     keepRight = false; // left border already hit: keep avoiding right until the obstacle is passed
 
     void setSubState(PoolSubState newState) {
         if (currentSubState == newState) return;
+        if (currentSubState == PoolSubState::AVOID_LEFT && newState == PoolSubState::AVOID_RIGHT)
+            keepRight = true;
+        else if (currentSubState == PoolSubState::AVOID_RIGHT && newState == PoolSubState::AVOID_LEFT)
+            keepRight = false;
         currentSubState = newState;
         clearStartMs = 0;
         sideDetectStartMs = 0;
@@ -101,12 +107,15 @@ private:
 
         if (obstacle) {
             noObstacleStartMs = 0;
-            setSubState(PoolSubState::AVOID_LEFT);
+            setSubState(keepRight ? PoolSubState::AVOID_RIGHT : PoolSubState::AVOID_LEFT);
             return;
         }
 
         if (noObstacleStartMs == 0)
             noObstacleStartMs = now;
+
+        if ((now - noObstacleStartMs) >= kKeepRightResetMs)
+            keepRight = false;
 
         if (rightDetected) {
             lineCorrectionActive  = true;

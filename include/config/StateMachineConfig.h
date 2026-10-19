@@ -35,6 +35,7 @@ namespace Constants
             static constexpr uint32_t kStartIgnoreTimeMs    = 4500; // Time to ignore IR's at the START point
             static constexpr uint32_t kClearDelayMs         = 500;  // Obstacle clear this long -> back to FORWARD
             static constexpr uint32_t kNoObstacleToCornerMs = 1000; // No obstacle this long -> leave the pools state
+            static constexpr uint32_t kKeepRightResetMs     = 800;  // FORWARD clear this long -> next obstacle is avoided left again
 
             static constexpr uint32_t kMinAvoidTimeMs       = 250;
             static constexpr uint32_t kSideDetectHoldMs     = 80;
