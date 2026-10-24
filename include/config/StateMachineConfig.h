@@ -165,7 +165,7 @@ namespace Constants
         namespace Debug
         {
             static constexpr uint32_t kPrintPeriodMs = 100;
-            static constexpr bool     kFrontLineTeleplot = true; // qtrFront PD signals in Teleplot format, every control tick
+            static constexpr bool     kFrontLineTeleplot = false; // qtrFront PD signals in Teleplot format, every control tick
         } // namespace Debug
     } // namespace StateMachine
 } // namespace Constants
