@@ -36,7 +36,7 @@ void Perception::updateIR()
 void Perception::updateQTR()
 {
     snap_.linePos = qtrFront.getPosition();
-    snap_.onLine  = qtrFront.onLine();
+    snap_.onLine  = qtrFront.onLine(Constants::StateMachine::Common::kFrontOnLineThreshold);
 }
 
 void Perception::updateToF(uint32_t now)

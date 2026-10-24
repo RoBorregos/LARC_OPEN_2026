@@ -51,7 +51,7 @@ namespace Constants
         // PROVISIONAL (missing mechanical tests)
         // test/servos/02_pca9685_channel_test.cpp before trusting them.
         static constexpr ServoCalib kCalib[SERVO_COUNT] = {
-            { Pins::Servos::kIntakeUpperCh, 500, 2500, 85, 137 }, // INTAKE_UPPER
+            { Pins::Servos::kIntakeUpperCh, 500, 2500, 65, 137 }, // INTAKE_UPPER
             { Pins::Servos::kIntakeLowerCh, 500, 2500, 65, 168 }, // INTAKE_LOWER
             { Pins::Servos::kSeparatorCh,   500, 2500, 58, 149 }, // SEPARATOR
             { Pins::Servos::kBenefit1Ch,    500, 2500, 0, 150 }, // BENEFIT_1
@@ -59,10 +59,10 @@ namespace Constants
         };
 
         // Positions (deg) 
-        static constexpr uint8_t kIntakeUpperHome   = 97;
+        static constexpr uint8_t kIntakeUpperHome   = 65;
         static constexpr uint8_t kIntakeUpperDeploy = 143;
 
-        static constexpr uint8_t kIntakeLowerHome   = 69;
+        static constexpr uint8_t kIntakeLowerHome   = 65;
         static constexpr uint8_t kIntakeLowerDeploy = 110;
 
         static constexpr uint8_t kSeparatorNeutral  = 99;
@@ -72,7 +72,7 @@ namespace Constants
         static constexpr uint8_t kBenefit2Closed    = 153;
         static constexpr uint8_t kBenefit2Open      = 67;
         static constexpr uint8_t kBenefit1Closed    = 24;
-        static constexpr uint8_t kBenefit1Open      = 107;
+        static constexpr uint8_t kBenefit1Open      = 120;
 
         // Time for benefit doors to stay open before closing automatically (ms)
         static constexpr uint32_t kBenefitOpenMs = 2500;

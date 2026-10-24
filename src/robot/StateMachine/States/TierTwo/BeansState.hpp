@@ -13,7 +13,7 @@ public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
-        cornerCorrFiltered = 0.0f;
+        lineCorr_.reset();
     }
 
     void update(uint32_t now, bool cornerRIGHTDetected, bool onLine,
@@ -66,10 +66,8 @@ public:
 
                 action_start_time = 0;
 
-                const float corrTarget = frontCornerCorrTarget(onLine);
-                cornerCorrFiltered += (corrTarget - cornerCorrFiltered) * kCornerCorrAlpha;
-
-                LARC.setTranslation(-cornerCorrFiltered, -kVelocity);
+                const float corr = lineCorr_.update(now, onLine);
+                LARC.setTranslation(-corr, -kVelocity);
                 break;
             }
 
@@ -88,5 +86,5 @@ public:
 private:
     int action_stage = 0;
     uint32_t action_start_time = 0;
-    float cornerCorrFiltered = 0.0f;
+    StateCommon::FrontLineCorrection lineCorr_;
 };
