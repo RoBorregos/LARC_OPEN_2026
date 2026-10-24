@@ -23,14 +23,25 @@ namespace Constants
             static constexpr float kManeuverSpeed = 0.30f; // backups, strafes and line corrections
 
             // Line center for each QTR, in that QTR's own lPos units (debug print).
-            static constexpr float kQtrFrontSetpoint = 2587.0f; // qtrFront: 0..6000
+            static constexpr float kQtrFrontSetpoint = 1500.0f; // 1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000-2000
             static constexpr float kQtrRearSetpoint  = 2583.3f; // qtrRear:  0..5000 (same as the old 2900 mirrored)
             static constexpr float kCornerKp        = 0.00012f; // qtrRear
-            static constexpr float kFrontCornerKp   = 0.00008f; // qtrFront; lower than rear because it wobbled at 0.00012
-            static constexpr float kFrontCornerDeadband = 150.0f; // lPos error ignored around the setpoint
             static constexpr float kCornerCorrMax   = 0.20f;
-            static constexpr float kCornerCorrAlpha = 0.15f;
             static constexpr float kRearCorrAlpha   = 0.15f;
+
+            // qtrFront line correction (StateCommon::FrontLineCorrection), error in mm
+            static constexpr float    kQtrPitchMm           = 9.525f; // QTR-8A sensor spacing
+            static constexpr uint16_t kFrontFloorNorm       = 300;    // background norm ignored by the position (C4 floor ~210)
+            static constexpr uint16_t kFrontOnLineThreshold = 400;    // floor reads up to ~210 on C4
+            static constexpr float    kFrontLineKp          = 0.0084f; // per mm (old 0.00008 per lPos)
+            static constexpr float    kFrontLineKi          = 0.0f;
+            static constexpr float    kFrontLineKd          = 0.0f;
+            static constexpr float    kFrontLineDTauS       = 0.03f;
+            static constexpr float    kFrontLineDeadbandMm  = 1.4f;    // old 150 lPos
+            static constexpr float    kFrontLineSlewPerS    = 2.0f;    // output units per second
+            static constexpr uint32_t kFrontLinePeriodMs    = 10;
+            static constexpr uint32_t kFrontLostRecoverMs   = 300;     // push toward the lost side this long
+            static constexpr float    kFrontLostEdgeMm      = 15.0f;   // only if the line was lost this far off center
 
             static constexpr uint32_t kStartIgnoreTimeMs    = 4500; // Time to ignore IR's at the START point
             static constexpr uint32_t kClearDelayMs         = 500;  // Obstacle clear this long -> back to FORWARD
@@ -154,6 +165,7 @@ namespace Constants
         namespace Debug
         {
             static constexpr uint32_t kPrintPeriodMs = 100;
+            static constexpr bool     kFrontLineTeleplot = true; // qtrFront PD signals in Teleplot format, every control tick
         } // namespace Debug
     } // namespace StateMachine
 } // namespace Constants

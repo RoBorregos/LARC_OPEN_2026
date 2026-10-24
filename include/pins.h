@@ -97,7 +97,7 @@ namespace Pins
 
         // TCA9548A channel the PCA9685 is plugged into (0-7).
         // 255 = PCA9685 wired straight to the bus, no multiplexer.
-        constexpr uint8_t kTcaChannel    = 255;
+        constexpr uint8_t kTcaChannel    = 1;
 
         static_assert(kTcaChannel <= 7 || kTcaChannel == 255,
                       "Pins::Servos::kTcaChannel must be 0-7, or 255 for no mux");
@@ -110,11 +110,11 @@ namespace Pins
                       "Pins::Servos: kI2cBus does not match kI2cSda/kI2cScl");
 
         // (PROVISIONAL (missing full test of all servos)
-        constexpr uint8_t kIntakeUpperCh = 12;
-        constexpr uint8_t kIntakeLowerCh = 8;
-        constexpr uint8_t kSeparatorCh   = 4;
-        constexpr uint8_t kBenefit1Ch    = 15;
-        constexpr uint8_t kBenefit2Ch    = 0;
+        constexpr uint8_t kIntakeUpperCh = 6;
+        constexpr uint8_t kIntakeLowerCh = 4;
+        constexpr uint8_t kSeparatorCh   = 3;
+        constexpr uint8_t kBenefit1Ch    = 1; // left, seen from the front
+        constexpr uint8_t kBenefit2Ch    = 2; // right, seen from the front
 
         constexpr uint8_t kChannels[] = {
             kIntakeUpperCh, kIntakeLowerCh, kSeparatorCh, kBenefit1Ch, kBenefit2Ch

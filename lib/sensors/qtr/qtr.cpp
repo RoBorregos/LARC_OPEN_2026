@@ -13,7 +13,7 @@
 static constexpr bool LINE_IS_BLACK = false;
 
 QTR::QTR(uint8_t firstChannel, Mux74HC4067& mux_, uint8_t sensorCount)
-    : firstCh(firstChannel), count(sensorCount > N ? N : sensorCount), initialized(false), learning(false), ambientDelta(0), mux(mux_), position(0), posHistoryIdx(0), lastRawPos(0)
+    : firstCh(firstChannel), count(sensorCount > N ? N : sensorCount), initialized(false), learning(false), ambientDelta(0), posFloor(0), mux(mux_), position(0), posHistoryIdx(0), lastRawPos(0)
 {
     for (uint8_t i = 0; i < count; i++)
     {
@@ -282,7 +282,7 @@ void QTR::update()
 
     for (uint8_t i = 0; i < count; i++)
     {
-        const uint16_t v = norm[i];
+        const uint16_t v = (norm[i] > posFloor) ? (uint16_t)(norm[i] - posFloor) : 0;
         sum      += v;
         weighted += (uint32_t)v * (uint32_t)(i * 1000);
     }
