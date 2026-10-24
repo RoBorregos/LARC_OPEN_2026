@@ -81,6 +81,11 @@ public:
 
     uint8_t size() const { return count; }
 
+    // Subtracted from each norm[i] (clamped at 0) only when computing the
+    // position, so background reflectance does not pull it toward the center.
+    // 0 = disabled. getNorm() and onLine() are not affected.
+    void setFloor(uint16_t floorNorm) { posFloor = floorNorm; }
+
     // Pos on the array from 0 (first sensor) to (size()-1)*1000 (last sensor)
     int getPosition() const;
 
@@ -142,6 +147,7 @@ private:
     bool            initialized;
     bool            learning;
     int16_t         ambientDelta;
+    uint16_t        posFloor;
 
     Mux74HC4067&    mux;
 

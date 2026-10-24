@@ -84,6 +84,7 @@ private:
     void printBootReport() const;
 
     // Boot results, printed once by debugPrint(true).
+    bool     i2cBusFreeOk_      = false;
     bool     i2cMuxOk_          = false;
     bool     servosOk_          = false;
     bool     tofOk_[4]          = {};

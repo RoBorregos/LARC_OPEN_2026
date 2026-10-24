@@ -40,7 +40,10 @@ ServoSystem::ServoSystem(bool timedBenefits, TCA9548A *i2cMux)
 void ServoSystem::begin()
 {
     _pwm.setOscillatorHz(kPcaOscillatorHz);
-    _pwm.begin(kServoPwmFreqHz); // bus clock left alone: shared with the TCA9548A
+    // Bus clock left alone: shared with the TCA9548A. Retried because the
+    // first transaction after a reset can still fail.
+    for (uint8_t attempt = 0; attempt < 3 && !_pwm.begin(kServoPwmFreqHz); attempt++)
+        delay(5);
     safeState();                 // write safe angles first...
     _pwm.enableOutputs();        // ...then let the pulses out (if OE is wired)
 }

@@ -3,6 +3,7 @@
 #include "robot/instances/instances.hpp"
 #include "constants.h"
 #include "VisionLink.hpp"
+#include "I2cRecovery.hpp"
 
 namespace
 {
@@ -55,6 +56,7 @@ void LARCStateMachine::begin()
     elevator.begin();
 
     // TCA9548A + PCA9685 share Wire (18/19); 100 kHz as validated with the ToFs.
+    i2cBusFreeOk_ = recoverI2cBus(Pins::Servos::kI2cSda, Pins::Servos::kI2cScl);
     TwoWire& i2cBus = PCA9685::busFromIndex(Pins::I2cMux::kBus);
     i2cBus.begin();
     i2cBus.setClock(100000);
@@ -78,6 +80,7 @@ void LARCStateMachine::begin()
     //QTR
     qtrFront.begin();
     qtrFront.useDefaultCalibration(0);   // FRONT qtr
+    qtrFront.setFloor(Constants::StateMachine::Common::kFrontFloorNorm);
 
     ir.begin();
     qtrRear.begin();
@@ -271,6 +274,7 @@ void LARCStateMachine::printBootReport() const
     auto okFail = [](bool ok) { return ok ? "OK" : "FAIL"; };
     const char* tofNames[] = {"tofLeft (UL)", "tofRight (UR)", "tofBackLeft (LL)", "tofBackRight (LR)"};
 
+    Serial.printf("i2c bus free (SDA released): %s\n", okFail(i2cBusFreeOk_));
     Serial.printf("i2cMux init: %s\n", okFail(i2cMuxOk_));
     Serial.printf("servos (PCA9685) init: %s\n", okFail(servosOk_));
     for (uint8_t i = 0; i < 4; i++)
