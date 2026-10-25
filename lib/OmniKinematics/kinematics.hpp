@@ -21,6 +21,9 @@ public:
 
   void MoveXYW(float vx, float vy, float omega);
 
+  // Wheel commands in [-1, 1] (UL, UR, LL, LR) without driving the motors
+  void ComputeXYW(float vx, float vy, float omega, float out[4]);
+
   void Stop() {
     upper_left_.stop();
     upper_right_.stop();

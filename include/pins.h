@@ -148,7 +148,8 @@ namespace Pins
     constexpr uint8_t kHolderServo      = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
 
     // BNO RST/INT
-    static constexpr uint8_t kBnoRstReserved = 2;  // posible conflicto con SERVO5 -- confirmar
+    // 255 = not driven. Pin 2 is the UR encoder (ENA_M2); RST is probably on SERVO4 (kServoPin4), pending confirmation.
+    static constexpr uint8_t kBnoRstReserved = 255;
     static constexpr uint8_t kBnoIntReserved = 13; // posible conflicto con SERVO1 -- confirmar
 
     // LEGACY ULTRASONICS

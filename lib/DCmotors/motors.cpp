@@ -145,6 +145,10 @@ void DCMotor::setPPR(float ppr) {
     ppr_ = ppr;
 }
 
+void DCMotor::setPwmFrequency(float hz) {
+    analogWriteFrequency(pwm_pin, hz);
+}
+
 double DCMotor::getPRotation() {
     return (encoder_ != nullptr) ? (double)encoder_->read() / ppr_ : 0.0;
 }

@@ -23,7 +23,23 @@ namespace Constants
             static constexpr float kManeuverSpeed = 0.30f; // backups, strafes and line corrections
 
             // Line center for each QTR, in that QTR's own lPos units (debug print).
-            static constexpr float kQtrFrontSetpoint = 1500.0f; // 1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000-2000
+            /*
+                1) Como calibrarlo: En activa true en Teleplot o en debug prints true:
+                2) Despues (ya calibrado el qtr) colora el robot de acuerdo a que tan cerca lo quieres del arbol
+                3) Sumale + 1500 a ese setPoint y ese valor colocalo en kQtrFrontSetpoint
+
+                 Por que: Ya que la correccion en LookForCorner es mas alejada
+                 y en Beans se suele pegar mas el qtr al arbol, si dejas el valor
+                 real al que tanto quieres el robot cerca del arbol, la realidad es que \
+                 en el estad BEANS, va a chocar. Por eso sumas los 1500 y eso es lo que pones
+                 asi en LookForCorner esta mas despegado del arbol, y en BEANS va a la distancia que lo querias.
+                 - Conveniendte porque asi no choca con los arboles cuando recien llega a linea
+                    de LookForLine.
+
+                    Ejemplo: Originalmente lo queria a 1500 el SetPoint, pero terino usando 
+                            3000 como el actual SetPoint value.
+            */
+            static constexpr float kQtrFrontSetpoint = 3000.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
             static constexpr float kQtrRearSetpoint  = 2583.3f; // qtrRear:  0..5000 (same as the old 2900 mirrored)
             static constexpr float kCornerKp        = 0.00012f; // qtrRear
             static constexpr float kCornerCorrMax   = 0.20f;

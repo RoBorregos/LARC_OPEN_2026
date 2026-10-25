@@ -9,6 +9,7 @@
 #include "motors.hpp"
 #include "kinematics.hpp"
 #include "PIDController.hpp"
+#include "WheelSpeedController.hpp"
 #include "qtr.hpp"
 #include "OdometryEKF.hpp"
 
@@ -92,6 +93,13 @@ public:
 
     void setRPMs(float ul, float ur, float ll, float lr);
 
+    // Per-wheel RPM loop (index 0..3 = UL, UR, LL, LR)
+    void  setClosedLoop(bool enable);
+    bool  isClosedLoop() const { return closedLoop_; }
+    float getWheelRpm(uint8_t i) const      { return i < 4 ? wheelCtl_[i].getRpm() : 0.0f; }
+    float getWheelSetpoint(uint8_t i) const { return i < 4 ? wheelCtl_[i].getSetpoint() : 0.0f; }
+    int   getWheelPwm(uint8_t i) const      { return i < 4 ? wheelCtl_[i].getOutput() : 0; }
+
 private:
     static float rad2deg(float r);
     static float deg2rad(float d);
@@ -100,11 +108,20 @@ private:
 
     void updateOdometry();
     void updateBusy(uint32_t now);
+    void updateWheels(uint32_t now, const float targetRpm[4]);
+    void resetWheelControllers();
 
     // Hardware
     BNO085     bno_;
     DCMotor    m1_ul_, m2_ur_, m3_ll_, m4_lr_;
     OmniMotors omni_;
+    DCMotor*   motors_[4];
+
+    // Wheel RPM loop
+    static constexpr float kMaxWheelRpm = Constants::WheelPID::kMaxWheelRpm;
+    WheelSpeedController wheelCtl_[4];
+    bool     closedLoop_  = true;
+    uint32_t lastWheelMs_ = 0;
 
     // Yaw PID 
     static constexpr float P         = Constants::PID::kKp;
