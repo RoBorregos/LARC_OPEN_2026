@@ -24,6 +24,8 @@ int WheelSpeedController::update(float targetRpm, long ticks, uint32_t nowUs)
     if (dtUs == 0) return output_;
     const float dt = dtUs * 1e-6f;
 
+    if (fabsf(targetRpm) < kMinRpm) targetRpm = 0.0f;
+
     const long dTicks = ticks - lastTicks_;
     lastTicks_ = ticks;
     lastUs_    = nowUs;

@@ -65,11 +65,18 @@ namespace Constants
         constexpr uint32_t kTsMs     = 50;     // same Ts as the calibration
         constexpr float    kRpmAlpha = 0.2f;   // EMA on measured rpm
         constexpr float    kSpRamp   = 90.0f;  // rpm/s
+        // Targets below this are treated as 0: otherwise yaw-hold noise while stopped
+        // flips tiny targets and the feedforward offset (~30 PWM) rocks the robot.
+        constexpr float    kMinRpm   = 3.0f;
         // 0 = Teensy default. 25000 (used in the calibration sketches) left the robot unable to drive backward/sideways under Drive.
         constexpr uint32_t kPwmFreq  = 0;
 
         // Wheel command 1.0 from the kinematics maps to this rpm.
         // 120 keeps kcurrentVelocity (0.30) at ~25 rpm per wheel, close to the old open-loop speed.
         constexpr float kMaxWheelRpm = 120.0f;
+
+        // LARCStateMachine drive mode. false = open loop (same as main): the closed
+        // loop fails the 150 ms right-side corrections in LOOKFORLINE (ramp + weak LL feedforward).
+        constexpr bool kStateMachineClosedLoop = true;
     } // namespace WheelPID
 } // namespace Constants

@@ -114,7 +114,9 @@ void Drive::update() {
         const float yawErr  = wrapAngle(targetYaw_ - yaw);
         const bool  closing = (yawErr * yawRate_) > 0.0f && fabsf(yawRate_) > kYawRateClosing;
 
-        if (fabsf(yawErr) > kYawDeadband && fabsf(omega) < kOmegaMin && !closing)
+        // Open loop only: in closed loop the wheel feedforward already beats the deadband,
+        // and kOmegaMin * kMaxWheelRpm (~14 rpm) makes the robot overshoot and wobble while stopped.
+        if (!closedLoop_ && fabsf(yawErr) > kYawDeadband && fabsf(omega) < kOmegaMin && !closing)
             omega = (yawErr > 0.0f) ? kOmegaMin : -kOmegaMin;
     }
     omega = clampf(omega, -kOmegaMax, +kOmegaMax);

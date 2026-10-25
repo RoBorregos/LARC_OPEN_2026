@@ -87,6 +87,7 @@ void LARCStateMachine::begin()
     qtrRear.useDefaultCalibration(1);
 
     LARC.begin();
+    LARC.setClosedLoop(Constants::WheelPID::kStateMachineClosedLoop);
     // Drive maps the UR encoder onto the limit switch pins and enables INPUT_PULLUP there;
     // the switches have external pull-ups, so restore INPUT or released can read as pressed.
     pinMode(Pins::kLimitSwitch, INPUT);

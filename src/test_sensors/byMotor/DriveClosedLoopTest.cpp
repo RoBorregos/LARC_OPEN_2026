@@ -16,8 +16,8 @@ Drive drive;
 
 static constexpr bool     CLOSED_LOOP = true;
 static constexpr float    kSpeed      = Constants::PID::kcurrentVelocity;
-static constexpr uint32_t PHASE_MS    = 3000;
-static constexpr uint32_t STOP_MS     = 1500;
+static constexpr uint32_t PHASE_MS    = 1700;
+static constexpr uint32_t STOP_MS     = 1000;
 static constexpr uint32_t PRINT_MS    = 100;
 
 static const char* kNames[4] = {"UL", "UR", "LL", "LR"};
