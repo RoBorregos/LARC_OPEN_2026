@@ -63,7 +63,8 @@ void LARCStateMachine::begin()
     i2cMuxOk_ = i2cMux.begin();
 
     // Servos after the bus and mux are up; vision.begin() parks them safe.
-    servos.begin();
+    // Starting in START, the intakes ramp up instead of jumping home.
+    servos.begin(kInitialState == STATES::START);
     servosOk_ = servos.driverOk();
     vision.begin();
     vision.requestStatus();

@@ -51,10 +51,14 @@ public:
     explicit ServoSystem(bool timedBenefits = false, TCA9548A *i2cMux = nullptr);
 
     // Lifecycle
-    void begin();
+    // rampIntakes true: the intakes start at their deploy angle and climb to
+    // home kIntakeRampStepDeg every kIntakeRampStepMs (stepped by update()).
+    void begin(bool rampIntakes = false);
     bool driverOk() const { return _pwm.ok(); } // PCA9685 answered in begin()
     void update(); // uses millis()
-    void update(uint32_t nowMs); // rollover safe, does nothing untimed
+    void update(uint32_t nowMs); // rollover safe; steps the intake ramp, times the doors
+
+    bool intakeRampActive() const { return _ramp[0].active || _ramp[1].active; }
 
     // Commands (immediate, idempotent)
     void setIntakeUpper(bool deployed);
@@ -91,6 +95,13 @@ private:
         uint32_t     openedAtMs;
     };
 
+    struct IntakeRamp
+    {
+        bool    active;
+        uint8_t angle;
+        uint8_t target;
+    };
+
     TCA9548A _ownMux; // fallback when no shared mux is given
     PCA9685  _pwm;
 
@@ -98,8 +109,16 @@ private:
     bool         _intakeLower;
     SeparatorPos _separator;
     BenefitState _benefit[2];
+    IntakeRamp   _ramp[2]; // by servo index: INTAKE_UPPER, INTAKE_LOWER
+    uint32_t     _rampLastStepMs;
     uint8_t      _lastAngle[Constants::ServoConfig::SERVO_COUNT];
     bool         _timedBenefits;
+
+    // A command for the angle the ramp is already heading to keeps the ramp;
+    // any other angle cancels it and is written at once.
+    void _setIntake(uint8_t servoIndex, uint8_t angleDeg);
+    void _startIntakeRamps();
+    void _stepIntakeRamps(uint32_t nowMs);
 
     // Skips the I2C write when the angle is already applied.
     void _writeAngle(uint8_t servoIndex, uint8_t angleDeg);

@@ -11,6 +11,9 @@ using namespace Constants::ServoConfig;
 static constexpr uint8_t kBenefitIndex[2]  = { BENEFIT_1,       BENEFIT_2       };
 static constexpr uint8_t kBenefitClosed[2] = { kBenefit1Closed, kBenefit2Closed };
 static constexpr uint8_t kBenefitOpen[2]   = { kBenefit1Open,   kBenefit2Open   };
+static constexpr uint8_t kIntakeRampFrom[2] = { kIntakeUpperDeploy, kIntakeLowerDeploy };
+static constexpr uint8_t kIntakeRampTo[2]   = { kIntakeUpperHome,   kIntakeLowerHome   };
+static_assert(INTAKE_UPPER == 0 && INTAKE_LOWER == 1, "_ramp is indexed by servo index");
 
 // Lifecycle
 
@@ -22,6 +25,7 @@ ServoSystem::ServoSystem(bool timedBenefits, TCA9548A *i2cMux)
     , _intakeUpper(false)
     , _intakeLower(false)
     , _separator(SeparatorPos::NEUTRAL)
+    , _rampLastStepMs(0)
     , _timedBenefits(timedBenefits)
 {
     if (Pins::Servos::kTcaChannel != 255)
@@ -34,16 +38,19 @@ ServoSystem::ServoSystem(bool timedBenefits, TCA9548A *i2cMux)
     {
         _benefit[i].phase      = BenefitPhase::ARMED;
         _benefit[i].openedAtMs = 0;
+        _ramp[i] = { false, 0, 0 };
     }
 }
 
-void ServoSystem::begin()
+void ServoSystem::begin(bool rampIntakes)
 {
     _pwm.setOscillatorHz(kPcaOscillatorHz);
     // Bus clock left alone: shared with the TCA9548A. Retried because the
     // first transaction after a reset can still fail.
     for (uint8_t attempt = 0; attempt < 3 && !_pwm.begin(kServoPwmFreqHz); attempt++)
         delay(5);
+    if (rampIntakes)
+        _startIntakeRamps();     // safeState() below keeps the ramp running
     safeState();                 // write safe angles first...
     _pwm.enableOutputs();        // ...then let the pulses out (if OE is wired)
 }
@@ -55,6 +62,8 @@ void ServoSystem::update()
 
 void ServoSystem::update(uint32_t nowMs)
 {
+    _stepIntakeRamps(nowMs);
+
     if (!_timedBenefits)
         return;
 
@@ -74,13 +83,13 @@ void ServoSystem::update(uint32_t nowMs)
 void ServoSystem::setIntakeUpper(bool deployed)
 {
     _intakeUpper = deployed;
-    _writeAngle(INTAKE_UPPER, deployed ? kIntakeUpperDeploy : kIntakeUpperHome);
+    _setIntake(INTAKE_UPPER, deployed ? kIntakeUpperDeploy : kIntakeUpperHome);
 }
 
 void ServoSystem::setIntakeLower(bool deployed)
 {
     _intakeLower = deployed;
-    _writeAngle(INTAKE_LOWER, deployed ? kIntakeLowerDeploy : kIntakeLowerHome);
+    _setIntake(INTAKE_LOWER, deployed ? kIntakeLowerDeploy : kIntakeLowerHome);
 }
 
 void ServoSystem::setSeparator(SeparatorPos pos)
@@ -155,6 +164,57 @@ uint32_t ServoSystem::benefitOpenRemainingMs(uint8_t which, uint32_t nowMs) cons
 uint8_t ServoSystem::lastAngle(uint8_t servoIndex) const
 {
     return (servoIndex < SERVO_COUNT) ? _lastAngle[servoIndex] : 255;
+}
+
+// Intake ramp
+
+void ServoSystem::_setIntake(uint8_t servoIndex, uint8_t angleDeg)
+{
+    IntakeRamp &r = _ramp[servoIndex];
+    if (r.active)
+    {
+        if (angleDeg == r.target)
+            return;
+        r.active = false;
+    }
+    _writeAngle(servoIndex, angleDeg);
+}
+
+void ServoSystem::_startIntakeRamps()
+{
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        _writeAngle(i, kIntakeRampFrom[i]);
+        _ramp[i] = { true, kIntakeRampFrom[i], kIntakeRampTo[i] };
+    }
+    _rampLastStepMs = millis();
+}
+
+void ServoSystem::_stepIntakeRamps(uint32_t nowMs)
+{
+    if (!intakeRampActive() || (nowMs - _rampLastStepMs) < kIntakeRampStepMs)
+        return;
+    _rampLastStepMs = nowMs;
+
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        IntakeRamp &r = _ramp[i];
+        if (!r.active)
+            continue;
+
+        const uint8_t diff = (r.angle > r.target) ? (r.angle - r.target) : (r.target - r.angle);
+        if (diff <= kIntakeRampStepDeg)
+        {
+            r.angle  = r.target;
+            r.active = false;
+        }
+        else
+        {
+            r.angle = (r.angle > r.target) ? (r.angle - kIntakeRampStepDeg)
+                                           : (r.angle + kIntakeRampStepDeg);
+        }
+        _writeAngle(i, r.angle);
+    }
 }
 
 // Output

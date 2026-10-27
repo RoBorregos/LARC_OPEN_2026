@@ -58,6 +58,9 @@ namespace Constants
             { Pins::Servos::kBenefit2Ch,    500, 2500, 10, 160 }  // BENEFIT_2
         };
 
+        // START only: intakes climb from deploy to home this many degrees per step.
+        static constexpr uint8_t  kIntakeRampStepDeg = 3;
+        static constexpr uint32_t kIntakeRampStepMs  = 30;
         // Positions (deg) 
         static constexpr uint8_t kIntakeUpperHome   = 65;
         static constexpr uint8_t kIntakeUpperDeploy = 143;
