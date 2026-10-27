@@ -106,6 +106,13 @@ namespace Constants
             static constexpr uint32_t kElevatorUpMs   = 9000;
             static constexpr uint32_t kElevatorStopMs = 700;  // minimum stop before driving; also waits for a stable yaw
             static constexpr float    kForwardSpeed   = 0.28f;
+
+            // Once the elevator is up, the intakes go through kIntakeSteps positions,
+            // each held kIntakeStepMs, and then back to home (ServoConfig::kIntake*Home).
+            static constexpr uint8_t  kIntakeSteps                    = 4;
+            static constexpr uint8_t  kIntakeUpperSteps[kIntakeSteps] = { 145, 120, 95, 65 };
+            static constexpr uint8_t  kIntakeLowerSteps[kIntakeSteps] = { 135, 120, 95, 80 };
+            static constexpr uint32_t kIntakeStepMs                = 1500;
         } // namespace Start
 
         namespace Pool

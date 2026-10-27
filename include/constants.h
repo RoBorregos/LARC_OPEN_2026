@@ -51,21 +51,18 @@ namespace Constants
         // PROVISIONAL (missing mechanical tests)
         // test/servos/02_pca9685_channel_test.cpp before trusting them.
         static constexpr ServoCalib kCalib[SERVO_COUNT] = {
-            { Pins::Servos::kIntakeUpperCh, 500, 2500, 65, 137 }, // INTAKE_UPPER
-            { Pins::Servos::kIntakeLowerCh, 500, 2500, 65, 168 }, // INTAKE_LOWER
+            { Pins::Servos::kIntakeUpperCh, 500, 2500, 50, 137 }, // INTAKE_UPPER
+            { Pins::Servos::kIntakeLowerCh, 500, 2500, 50, 168 }, // INTAKE_LOWER
             { Pins::Servos::kSeparatorCh,   500, 2500, 58, 149 }, // SEPARATOR
             { Pins::Servos::kBenefit1Ch,    500, 2500, 0, 150 }, // BENEFIT_1
             { Pins::Servos::kBenefit2Ch,    500, 2500, 10, 160 }  // BENEFIT_2
         };
 
-        // START only: intakes climb from deploy to home this many degrees per step.
-        static constexpr uint8_t  kIntakeRampStepDeg = 3;
-        static constexpr uint32_t kIntakeRampStepMs  = 30;
         // Positions (deg) 
-        static constexpr uint8_t kIntakeUpperHome   = 65;
-        static constexpr uint8_t kIntakeUpperDeploy = 143;
+        static constexpr uint8_t kIntakeUpperHome   = 50;
+        static constexpr uint8_t kIntakeUpperDeploy = 120;
 
-        static constexpr uint8_t kIntakeLowerHome   = 65;
+        static constexpr uint8_t kIntakeLowerHome   = 57;
         static constexpr uint8_t kIntakeLowerDeploy = 110;
 
         static constexpr uint8_t kSeparatorNeutral  = 101;
