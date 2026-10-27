@@ -37,7 +37,7 @@ enum class STATES
 };
 
 // State the robot starts in after begin(). Change it to test a single state.
-static constexpr STATES kInitialState = STATES::START;
+static constexpr STATES kInitialState = STATES::LOOKFORLINE;
 
 class LARCStateMachine
 {
