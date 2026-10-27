@@ -94,6 +94,9 @@ namespace Constants
         // BENEFITS routine: the box must stay centred this long while driving
         // before the robot stops (ms). Filters a one-frame CENTER at the edge.
         static constexpr uint32_t kBenefitApproachMs = 100;
+
+        // A servo write that failed on I2C is retried this often until it lands (ms).
+        static constexpr uint32_t kServoRetryMs = 10;
     } // namespace ServoConfig
 
     namespace VisionConfig
@@ -101,7 +104,8 @@ namespace Constants
         // How many consecutive, fully valid, non-duplicate
         // frames must carry the SAME (phase, payload) before the Teensy
         // acts on it. 
-        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 1; // (unchanged, good readings but not fully tested)
+        // 2 ignores single-frame flickers (ball bouncing in the ROI while moving), at the cost of one frame of delay.
+        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 2;
 
         // No valid new frame for this long, then every actuator goes safe 
         static constexpr uint32_t kLinkTimeoutMs = 500;

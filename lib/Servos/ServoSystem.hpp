@@ -54,7 +54,7 @@ public:
     void begin();
     bool driverOk() const { return _pwm.ok(); } // PCA9685 answered in begin()
     void update(); // uses millis()
-    void update(uint32_t nowMs); // rollover safe, does nothing untimed
+    void update(uint32_t nowMs); // rollover safe; retries failed writes, times the doors
 
     // Commands (immediate, idempotent)
     void setIntakeUpper(bool deployed);
@@ -106,11 +106,16 @@ private:
     SeparatorPos _separator;
     BenefitState _benefit[2];
     uint8_t      _lastAngle[Constants::ServoConfig::SERVO_COUNT];
+    uint8_t      _pendingAngle[Constants::ServoConfig::SERVO_COUNT]; // failed write to retry, 255 = none
+    uint32_t     _lastRetryMs = 0;
     bool         _timedBenefits;
     bool         _intakesHeld;
 
     // Skips the I2C write when the angle is already applied.
     void _writeAngle(uint8_t servoIndex, uint8_t angleDeg, bool useLimits = true);
+    // Writes an already clamped angle; a failed write is left pending.
+    void _applyAngle(uint8_t servoIndex, uint8_t angleDeg);
+    void _retryPending(uint32_t nowMs);
 };
 
 #endif

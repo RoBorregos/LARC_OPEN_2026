@@ -81,6 +81,9 @@ namespace Constants
         static constexpr uint16_t kTofMaxRangeMm      = 1000;
         static constexpr uint16_t kObstacleDistanceMm = 215;
         static constexpr uint32_t kTofWarmupMs        = 500;
+        // ToFs are only read in START/POOL/POOLSGOBACK; after a pause, obstacles are
+        // ignored this long so the stale reading left in the sensor is not used.
+        static constexpr uint32_t kTofResumeBlankMs   = 150;
 
         // Obstacle latch (front UL/UR -> POOL, rear LL/LR -> POOLSGOBACK)
         static constexpr uint32_t kObstacleReleaseMs  = 400;

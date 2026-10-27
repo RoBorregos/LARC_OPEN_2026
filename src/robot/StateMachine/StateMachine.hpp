@@ -37,7 +37,7 @@ enum class STATES
 };
 
 // State the robot starts in after begin(). Change it to test a single state.
-static constexpr STATES kInitialState = STATES::LOOKFORLINE;
+static constexpr STATES kInitialState = STATES::LOOKFORCORNER;
 
 class LARCStateMachine
 {
@@ -82,6 +82,16 @@ private:
     // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
     void debugPrint(bool enabled);
     void printBootReport() const;
+    // Loop time stats (Debug::kLoopTiming), printed every kLoopTimingPeriodMs.
+    void loopTiming(uint32_t now, uint32_t loopStartUs, uint32_t perceptionUs, uint32_t visionUs);
+
+    uint32_t timingLastStartUs_     = 0;
+    uint32_t timingWindowMs_        = 0;
+    uint32_t timingCount_           = 0;
+    uint32_t timingPeriodSumUs_     = 0;
+    uint32_t timingPeriodMaxUs_     = 0;
+    uint32_t timingPerceptionMaxUs_ = 0;
+    uint32_t timingVisionMaxUs_     = 0;
 
     // Boot results, printed once by debugPrint(true).
     bool     i2cBusFreeOk_      = false;

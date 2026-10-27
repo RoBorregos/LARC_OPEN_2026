@@ -101,8 +101,16 @@ void LARCStateMachine::begin()
 void LARCStateMachine::update()
 {
     const uint32_t now = millis();
-    perception_.update(now);
+    const uint32_t t0  = micros();
+
+    // Only these states use the ToFs; elsewhere the shared I2C bus stays free for the servos.
+    const bool readTof = currentState == STATES::START || currentState == STATES::POOL ||
+                         currentState == STATES::POOLSGOBACK;
+    perception_.update(now, readTof);
+    const uint32_t t1 = micros();
     vision.update();
+    const uint32_t t2 = micros();
+    loopTiming(now, t0, t1 - t0, t2 - t1);
     startStateTime();
 
     const PerceptionSnapshot &p = perception_.get();
@@ -366,6 +374,42 @@ void LARCStateMachine::debugPrint(bool enabled)
     printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
 
     Serial.println();
+}
+
+// Period between update() calls (includes updateControl()), plus the perception and
+// vision sections. Plain ASCII on Serial: the dispatcher ignores non-command bytes.
+void LARCStateMachine::loopTiming(uint32_t now, uint32_t loopStartUs, uint32_t perceptionUs, uint32_t visionUs)
+{
+    if (!Constants::StateMachine::Debug::kLoopTiming)
+        return;
+
+    if (timingLastStartUs_ != 0)
+    {
+        const uint32_t periodUs = loopStartUs - timingLastStartUs_;
+        timingPeriodSumUs_ += periodUs;
+        timingPeriodMaxUs_  = max(timingPeriodMaxUs_, periodUs);
+        timingCount_++;
+    }
+    timingLastStartUs_     = loopStartUs;
+    timingPerceptionMaxUs_ = max(timingPerceptionMaxUs_, perceptionUs);
+    timingVisionMaxUs_     = max(timingVisionMaxUs_, visionUs);
+
+    if (timingWindowMs_ == 0)
+        timingWindowMs_ = now;
+    if ((now - timingWindowMs_) < Constants::StateMachine::Debug::kLoopTimingPeriodMs || timingCount_ == 0)
+        return;
+
+    Serial.printf("LOOP st=%d n=%lu avg=%luus max=%luus perception_max=%luus vision_max=%luus\n",
+                  (int)currentState, (unsigned long)timingCount_,
+                  (unsigned long)(timingPeriodSumUs_ / timingCount_), (unsigned long)timingPeriodMaxUs_,
+                  (unsigned long)timingPerceptionMaxUs_, (unsigned long)timingVisionMaxUs_);
+
+    timingWindowMs_        = now;
+    timingCount_           = 0;
+    timingPeriodSumUs_     = 0;
+    timingPeriodMaxUs_     = 0;
+    timingPerceptionMaxUs_ = 0;
+    timingVisionMaxUs_     = 0;
 }
 
 void LARCStateMachine::settleImu()

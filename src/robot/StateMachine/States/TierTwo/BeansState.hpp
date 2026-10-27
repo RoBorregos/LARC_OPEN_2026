@@ -66,8 +66,9 @@ public:
 
                 action_start_time = 0;
 
-                const float corr = lineCorr_.update(now, onLine);
-                LARC.setTranslation(-corr, -kVelocity);
+                const float corrMax = cfg::kCorrMaxRatio * cfg::kVelocity;
+                const float corr = constrain(lineCorr_.update(now, onLine), -corrMax, corrMax);
+                LARC.setTranslation(-corr, -cfg::kVelocity);
                 break;
             }
 

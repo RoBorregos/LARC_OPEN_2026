@@ -39,7 +39,7 @@ namespace Constants
                     Ejemplo: Originalmente lo queria a 1500 el SetPoint, pero terino usando 
                             3000 como el actual SetPoint value.
             */
-            static constexpr float kQtrFrontSetpoint = 3000.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
+            static constexpr float kQtrFrontSetpoint = 2200.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
             static constexpr float kQtrRearSetpoint  = 2583.3f; // qtrRear:  0..5000 (same as the old 2900 mirrored)
             static constexpr float kCornerKp        = 0.00012f; // qtrRear
             static constexpr float kCornerCorrMax   = 0.20f;
@@ -145,6 +145,12 @@ namespace Constants
         {
             static constexpr uint32_t kLostLineTimeoutMs = 1200;
             static constexpr uint32_t kCornerStopMs      = 1000;
+            // Travel speed along the trees (vy) only; the QTR line correction (vx) is unchanged.
+            // Below ~0.12 the wheels drop under ~10 rpm and the closed loop gets jerky (few encoder pulses per Ts).
+            static constexpr float    kVelocity          = 0.15f; // Velocidad para BEANS
+            // Line correction capped to this fraction of kVelocity. With 45 deg wheels a wheel
+            // reverses when |vx| > |vy|; each reversal resets its ramp/integral and makes the robot sway.
+            static constexpr float    kCorrMaxRatio      = 0.8f;
         } // namespace Beans
 
         namespace PoolsGoBack
@@ -189,6 +195,8 @@ namespace Constants
         {
             static constexpr uint32_t kPrintPeriodMs = 100;
             static constexpr bool     kFrontLineTeleplot = false; // qtrFront PD signals in Teleplot format, every control tick
+            static constexpr bool     kLoopTiming         = false; // "LOOP ..." line with loop time stats
+            static constexpr uint32_t kLoopTimingPeriodMs = 1000;
         } // namespace Debug
     } // namespace StateMachine
 } // namespace Constants

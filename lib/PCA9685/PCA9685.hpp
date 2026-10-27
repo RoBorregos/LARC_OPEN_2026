@@ -52,13 +52,14 @@ public:
     float frequency() const; // actual frequency after prescaler rounding
 
     // Raw 12-bit PWM: output goes high at tick `on`, low at tick `off`.
-    void setPWM(uint8_t channel, uint16_t on, uint16_t off);
+    // These return false when the I2C write failed (nothing was applied).
+    bool setPWM(uint8_t channel, uint16_t on, uint16_t off);
 
     // Servo-style pulse width in microseconds (0 = channel off).
-    void     writeMicroseconds(uint8_t channel, uint16_t us);
+    bool     writeMicroseconds(uint8_t channel, uint16_t us);
     uint16_t usToTicks(uint16_t us) const;
 
-    void off(uint8_t channel); // full OFF: no pulses, servo goes limp
+    bool off(uint8_t channel); // full OFF: no pulses, servo goes limp
     void allOff();             // every channel full OFF in one write
 
     void sleep();  // oscillator off, all outputs stop
@@ -97,11 +98,12 @@ private:
     TCA9548A *_mux;
     uint8_t   _muxChannel;
 
-    void    _select();
+    bool    _select();
+    bool    _endTransmission(); // invalidates the mux channel on failure
 
     bool    _write8(uint8_t reg, uint8_t value);
     uint8_t _read8(uint8_t reg);
-    void    _write4(uint8_t reg, uint16_t on, uint16_t off);
+    bool    _write4(uint8_t reg, uint16_t on, uint16_t off);
 };
 
 #endif
