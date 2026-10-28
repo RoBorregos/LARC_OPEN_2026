@@ -11,14 +11,16 @@ bool TCA9548A::begin() {
     return (wire_.endTransmission() == 0);
 }
 
-void TCA9548A::selectChannel(uint8_t channel) {
-    if (channel > 7 || channel == currentChannel_) return;
-    
+bool TCA9548A::selectChannel(uint8_t channel) {
+    if (channel > 7) return false;
+    if (channel == currentChannel_) return true;
+
     wire_.beginTransmission(address_);
     wire_.write(1 << channel);
-    wire_.endTransmission();
-    
-    currentChannel_ = channel;
+    // Only cache on success, so a failed switch is retried on the next call.
+    const bool ok = (wire_.endTransmission() == 0);
+    currentChannel_ = ok ? channel : 255;
+    return ok;
 }
 
 void TCA9548A::disableAll() {

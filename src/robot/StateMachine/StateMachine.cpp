@@ -63,6 +63,9 @@ void LARCStateMachine::begin()
     i2cMuxOk_ = i2cMux.begin();
 
     // Servos after the bus and mux are up; vision.begin() parks them safe.
+    // Starting in START, the intakes are not written (no home) until the ramp when POOL begins.
+    if (kInitialState == STATES::START)
+        servos.holdIntakes(true);
     servos.begin();
     servosOk_ = servos.driverOk();
     vision.begin();
@@ -101,8 +104,17 @@ void LARCStateMachine::begin()
 void LARCStateMachine::update()
 {
     const uint32_t now = millis();
-    perception_.update(now);
+    const uint32_t t0  = micros();
+
+    // Only these states use the ToFs; elsewhere the shared I2C bus stays free for the servos.
+    const bool readTof = currentState == STATES::START || currentState == STATES::POOL ||
+                         currentState == STATES::POOLSGOBACK;
+    perception_.update(now, readTof);
+    const uint32_t t1 = micros();
     vision.update();
+    const uint32_t t2 = micros();
+    loopTiming(now, t0, t1 - t0, t2 - t1);
+    intakeRamp_.update(now);
     startStateTime();
 
     const PerceptionSnapshot &p = perception_.get();
@@ -179,8 +191,9 @@ void LARCStateMachine::update()
     {
         bool transitionToBenefitsStartCorner = false;
         lookForLineBackwardsState_.update(now, p.FL, p.FR, p.BL, p.BR, transitionToBenefitsStartCorner);
+        // Straight to BENEFITS: the blue-priority search starts on the line, no corner first.
         if (transitionToBenefitsStartCorner)
-            setState(STATES::BENEFITSSTARTCORNER);
+            setState(STATES::BENEFITS);
         break;
     }
 
@@ -196,7 +209,7 @@ void LARCStateMachine::update()
     case STATES::BENEFITS:
     {
         bool transitionToStop = false;
-        benefitsState_.update(now, p.frontRightDetectedLine, transitionToStop);
+        benefitsState_.update(now, p.frontLeftDetectedLine, p.frontRightDetectedLine, transitionToStop);
         if (transitionToStop)
             setState(STATES::STOP);
         break;
@@ -230,6 +243,12 @@ void LARCStateMachine::setState(STATES newState)
         vision.resetGuards();
         vision.stop();
     }
+
+    // Intake ramp runs on its own once POOL starts; BEANS needs the intakes free.
+    if (currentState == STATES::START && newState == STATES::POOL)
+        intakeRamp_.start(millis());
+    else if (newState == STATES::BEANS)
+        intakeRamp_.finish();
 
     currentState = newState;
     state_start_time = millis();
@@ -363,6 +382,42 @@ void LARCStateMachine::debugPrint(bool enabled)
     printRawNorm(F(" | rearRaw:"), F(" rearNorm:"), qtrRear);
 
     Serial.println();
+}
+
+// Period between update() calls (includes updateControl()), plus the perception and
+// vision sections. Plain ASCII on Serial: the dispatcher ignores non-command bytes.
+void LARCStateMachine::loopTiming(uint32_t now, uint32_t loopStartUs, uint32_t perceptionUs, uint32_t visionUs)
+{
+    if (!Constants::StateMachine::Debug::kLoopTiming)
+        return;
+
+    if (timingLastStartUs_ != 0)
+    {
+        const uint32_t periodUs = loopStartUs - timingLastStartUs_;
+        timingPeriodSumUs_ += periodUs;
+        timingPeriodMaxUs_  = max(timingPeriodMaxUs_, periodUs);
+        timingCount_++;
+    }
+    timingLastStartUs_     = loopStartUs;
+    timingPerceptionMaxUs_ = max(timingPerceptionMaxUs_, perceptionUs);
+    timingVisionMaxUs_     = max(timingVisionMaxUs_, visionUs);
+
+    if (timingWindowMs_ == 0)
+        timingWindowMs_ = now;
+    if ((now - timingWindowMs_) < Constants::StateMachine::Debug::kLoopTimingPeriodMs || timingCount_ == 0)
+        return;
+
+    Serial.printf("LOOP st=%d n=%lu avg=%luus max=%luus perception_max=%luus vision_max=%luus\n",
+                  (int)currentState, (unsigned long)timingCount_,
+                  (unsigned long)(timingPeriodSumUs_ / timingCount_), (unsigned long)timingPeriodMaxUs_,
+                  (unsigned long)timingPerceptionMaxUs_, (unsigned long)timingVisionMaxUs_);
+
+    timingWindowMs_        = now;
+    timingCount_           = 0;
+    timingPeriodSumUs_     = 0;
+    timingPeriodMaxUs_     = 0;
+    timingPerceptionMaxUs_ = 0;
+    timingVisionMaxUs_     = 0;
 }
 
 void LARCStateMachine::settleImu()

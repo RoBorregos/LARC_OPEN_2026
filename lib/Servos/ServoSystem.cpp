@@ -23,12 +23,16 @@ ServoSystem::ServoSystem(bool timedBenefits, TCA9548A *i2cMux)
     , _intakeLower(false)
     , _separator(SeparatorPos::NEUTRAL)
     , _timedBenefits(timedBenefits)
+    , _intakesHeld(false)
 {
     if (Pins::Servos::kTcaChannel != 255)
         _pwm.attachMux(i2cMux ? i2cMux : &_ownMux, Pins::Servos::kTcaChannel);
 
     for (uint8_t i = 0; i < SERVO_COUNT; i++)
-        _lastAngle[i] = 255; // unknown until begin() writes something
+    {
+        _lastAngle[i]    = 255; // unknown until begin() writes something
+        _pendingAngle[i] = 255;
+    }
 
     for (uint8_t i = 0; i < 2; i++)
     {
@@ -55,6 +59,8 @@ void ServoSystem::update()
 
 void ServoSystem::update(uint32_t nowMs)
 {
+    _retryPending(nowMs);
+
     if (!_timedBenefits)
         return;
 
@@ -74,13 +80,21 @@ void ServoSystem::update(uint32_t nowMs)
 void ServoSystem::setIntakeUpper(bool deployed)
 {
     _intakeUpper = deployed;
-    _writeAngle(INTAKE_UPPER, deployed ? kIntakeUpperDeploy : kIntakeUpperHome);
+    if (!_intakesHeld)
+        _writeAngle(INTAKE_UPPER, deployed ? kIntakeUpperDeploy : kIntakeUpperHome);
 }
 
 void ServoSystem::setIntakeLower(bool deployed)
 {
     _intakeLower = deployed;
-    _writeAngle(INTAKE_LOWER, deployed ? kIntakeLowerDeploy : kIntakeLowerHome);
+    if (!_intakesHeld)
+        _writeAngle(INTAKE_LOWER, deployed ? kIntakeLowerDeploy : kIntakeLowerHome);
+}
+
+void ServoSystem::setIntakeAngles(uint8_t upperDeg, uint8_t lowerDeg)
+{
+    _writeAngle(INTAKE_UPPER, upperDeg, false);
+    _writeAngle(INTAKE_LOWER, lowerDeg, false);
 }
 
 void ServoSystem::setSeparator(SeparatorPos pos)
@@ -159,22 +173,58 @@ uint8_t ServoSystem::lastAngle(uint8_t servoIndex) const
 
 // Output
 
-void ServoSystem::_writeAngle(uint8_t servoIndex, uint8_t angleDeg)
+void ServoSystem::_writeAngle(uint8_t servoIndex, uint8_t angleDeg, bool useLimits)
 {
     if (servoIndex >= SERVO_COUNT || !_pwm.ok())
         return; // no board: do not pretend the angle was applied
 
     const ServoCalib &c = kCalib[servoIndex];
 
-    // Mechanical limits win over any commanded angle, always.
-    if (angleDeg < c.minAngleDeg) angleDeg = c.minAngleDeg;
-    if (angleDeg > c.maxAngleDeg) angleDeg = c.maxAngleDeg;
+    // Mechanical limits win over any commanded angle, except the START sequence.
+    if (useLimits)
+    {
+        if (angleDeg < c.minAngleDeg) angleDeg = c.minAngleDeg;
+        if (angleDeg > c.maxAngleDeg) angleDeg = c.maxAngleDeg;
+    }
+    if (angleDeg > 180) angleDeg = 180;
 
+    _applyAngle(servoIndex, angleDeg);
+}
+
+void ServoSystem::_applyAngle(uint8_t servoIndex, uint8_t angleDeg)
+{
     if (angleDeg == _lastAngle[servoIndex])
-        return; 
+    {
+        _pendingAngle[servoIndex] = 255;
+        return;
+    }
+
+    const ServoCalib &c = kCalib[servoIndex];
     const uint16_t us = (uint16_t)(c.minPulseUs +
         ((uint32_t)(c.maxPulseUs - c.minPulseUs) * angleDeg) / 180U);
 
-    _pwm.writeMicroseconds(c.channel, us);
-    _lastAngle[servoIndex] = angleDeg;
+    if (_pwm.writeMicroseconds(c.channel, us))
+    {
+        _lastAngle[servoIndex]    = angleDeg;
+        _pendingAngle[servoIndex] = 255;
+    }
+    else
+    {
+        // Unknown physical position: update() retries until the write lands.
+        _lastAngle[servoIndex]    = 255;
+        _pendingAngle[servoIndex] = angleDeg;
+    }
+}
+
+void ServoSystem::_retryPending(uint32_t nowMs)
+{
+    if ((nowMs - _lastRetryMs) < kServoRetryMs || !_pwm.ok())
+        return;
+    _lastRetryMs = nowMs;
+
+    for (uint8_t i = 0; i < SERVO_COUNT; i++)
+    {
+        if (_pendingAngle[i] != 255)
+            _applyAngle(i, _pendingAngle[i]);
+    }
 }

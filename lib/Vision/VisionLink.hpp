@@ -71,6 +71,9 @@ public:
     // stays open until closeBenefit(). While one is held the Orin cannot
     // pick another.
     void openBenefit();
+    // Opens door `which` (0 or 1) now, decided earlier by the caller (the box
+    // may no longer be centred). Same hold rules as openBenefit().
+    void openBenefit(uint8_t which);
     void closeBenefit();
 
     // true: the stream only reports the box (benefitSeen()), a door opens

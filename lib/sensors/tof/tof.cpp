@@ -113,7 +113,11 @@ void ToF::update()
                            sensorL1X.VL53L1X_GetDistance(&raw) == 0;
         sensorL1X.clearInterrupt();
 
-        if (!i2cOk) return; // keep last value
+        if (!i2cOk) {
+            // The mux may not be on our channel any more: force a re-select next time.
+            if (useMux && mux_) mux_->invalidate();
+            return; // keep last value
+        }
 
         // Con status invalido el raw es basura (ej. wraparound reporta
         // ~300 mm cuando no hay nada en ~4 m), asi que no se usa como

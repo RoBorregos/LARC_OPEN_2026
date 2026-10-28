@@ -28,12 +28,12 @@ void setup() {
     qtrRear.begin();
 
     Serial.println("Calibrating FRONT move robot over line for 10s...");
-    qtrFront.calibrate(10000);
-    qtrFront.printCalibration("FRONT");
+    //qtrFront.calibrate(10000);
+    //qtrFront.printCalibration("FRONT");
 
-    //Serial.println("Calibrating REAR move robot over line for 10s...");
-    //qtrRear.calibrate(10000);
-    //qtrRear.printCalibration("REAR");
+    Serial.println("Calibrating REAR move robot over line for 10s...");
+    qtrRear.calibrate(10000);
+    qtrRear.printCalibration("REAR");
 
     Serial.println("Done — copy values to constants.h");
 }

@@ -22,12 +22,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-             {69, 66, 66, 69, 93, 80, 76},          // On white
-             {847, 848, 805, 823, 853, 875, 859}}; // black (up and DOWN)
+             {67, 67, 65, 65, 70, 69, 66},          // On white
+             {831, 863, 839, 837, 872, 881, 899}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-              {73, 76, 106, 167, 250, 166},
-            {842, 880, 918, 946, 897, 897}};
+              {67, 74, 164, 343, 230, 123},
+            {914, 905, 917, 958, 910, 913}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -81,6 +81,9 @@ namespace Constants
         static constexpr uint16_t kTofMaxRangeMm      = 1000;
         static constexpr uint16_t kObstacleDistanceMm = 215;
         static constexpr uint32_t kTofWarmupMs        = 500;
+        // ToFs are only read in START/POOL/POOLSGOBACK; after a pause, obstacles are
+        // ignored this long so the stale reading left in the sensor is not used.
+        static constexpr uint32_t kTofResumeBlankMs   = 150;
 
         // Obstacle latch (front UL/UR -> POOL, rear LL/LR -> POOLSGOBACK)
         static constexpr uint32_t kObstacleReleaseMs  = 400;

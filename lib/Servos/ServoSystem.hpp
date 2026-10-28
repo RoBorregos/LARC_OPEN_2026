@@ -54,7 +54,7 @@ public:
     void begin();
     bool driverOk() const { return _pwm.ok(); } // PCA9685 answered in begin()
     void update(); // uses millis()
-    void update(uint32_t nowMs); // rollover safe, does nothing untimed
+    void update(uint32_t nowMs); // rollover safe; retries failed writes, times the doors
 
     // Commands (immediate, idempotent)
     void setIntakeUpper(bool deployed);
@@ -69,6 +69,13 @@ public:
 
     // Everything harmless, immediately. The one definition of "safe".
     void safeState();
+
+    // START sequence: while held, setIntake*() and safeState() leave the
+    // intakes alone and only setIntakeAngles() moves them.
+    // setIntakeAngles() ignores the kCalib angle limits (only 0-180 applies).
+    void holdIntakes(bool hold) { _intakesHeld = hold; }
+    bool intakesHeld() const    { return _intakesHeld; }
+    void setIntakeAngles(uint8_t upperDeg, uint8_t lowerDeg);
 
     // Status
     bool         intakeUpperDeployed() const { return _intakeUpper; }
@@ -99,10 +106,16 @@ private:
     SeparatorPos _separator;
     BenefitState _benefit[2];
     uint8_t      _lastAngle[Constants::ServoConfig::SERVO_COUNT];
+    uint8_t      _pendingAngle[Constants::ServoConfig::SERVO_COUNT]; // failed write to retry, 255 = none
+    uint32_t     _lastRetryMs = 0;
     bool         _timedBenefits;
+    bool         _intakesHeld;
 
     // Skips the I2C write when the angle is already applied.
-    void _writeAngle(uint8_t servoIndex, uint8_t angleDeg);
+    void _writeAngle(uint8_t servoIndex, uint8_t angleDeg, bool useLimits = true);
+    // Writes an already clamped angle; a failed write is left pending.
+    void _applyAngle(uint8_t servoIndex, uint8_t angleDeg);
+    void _retryPending(uint32_t nowMs);
 };
 
 #endif

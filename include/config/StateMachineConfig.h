@@ -39,7 +39,7 @@ namespace Constants
                     Ejemplo: Originalmente lo queria a 1500 el SetPoint, pero terino usando 
                             3000 como el actual SetPoint value.
             */
-            static constexpr float kQtrFrontSetpoint = 3000.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
+            static constexpr float kQtrFrontSetpoint = 2200.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
             static constexpr float kQtrRearSetpoint  = 2583.3f; // qtrRear:  0..5000 (same as the old 2900 mirrored)
             static constexpr float kCornerKp        = 0.00012f; // qtrRear
             static constexpr float kCornerCorrMax   = 0.20f;
@@ -106,6 +106,13 @@ namespace Constants
             static constexpr uint32_t kElevatorUpMs   = 9000;
             static constexpr uint32_t kElevatorStopMs = 700;  // minimum stop before driving; also waits for a stable yaw
             static constexpr float    kForwardSpeed   = 0.28f;
+
+            // When POOL starts (after START), the intakes go through kIntakeSteps positions,
+            // each held kIntakeStepMs, and then back to home (ServoConfig::kIntake*Home).
+            static constexpr uint8_t  kIntakeSteps                    = 4;
+            static constexpr uint8_t  kIntakeUpperSteps[kIntakeSteps] = { 145, 120, 95, 65 };
+            static constexpr uint8_t  kIntakeLowerSteps[kIntakeSteps] = { 135, 120, 95, 80 };
+            static constexpr uint32_t kIntakeStepMs                = 1500;
         } // namespace Start
 
         namespace Pool
@@ -138,6 +145,12 @@ namespace Constants
         {
             static constexpr uint32_t kLostLineTimeoutMs = 1200;
             static constexpr uint32_t kCornerStopMs      = 1000;
+            // Travel speed along the trees (vy) only; the QTR line correction (vx) is unchanged.
+            // Below ~0.12 the wheels drop under ~10 rpm and the closed loop gets jerky (few encoder pulses per Ts).
+            static constexpr float    kVelocity          = 0.15f; // Velocidad para BEANS
+            // Line correction capped to this fraction of kVelocity. With 45 deg wheels a wheel
+            // reverses when |vx| > |vy|; each reversal resets its ramp/integral and makes the robot sway.
+            static constexpr float    kCorrMaxRatio      = 0.8f;
         } // namespace Beans
 
         namespace PoolsGoBack
@@ -166,7 +179,16 @@ namespace Constants
         namespace Benefits
         {
             static constexpr uint32_t kVisionRetryMs = 1000; // re-send START_BENEFITS while waiting
-            static constexpr uint32_t kCornerStopMs  = 1000;
+            // false: unload at each box as soon as it is found. true: blue first, a red box found
+            // before it is flagged and visited after (check kBlue/kRed in BenefitsState first).
+            static constexpr bool     kBluePriority = false;
+            // Box search (BenefitsState)
+            static constexpr int8_t   kStartDir   = +1;  // first direction after LOOKFORLINEBACKWARDS: +1 left (FL ends it), -1 right (FR)
+            static constexpr uint32_t kTurnStopMs = 300; // stop on a side line before reversing
+            // After a box is confirmed, keep driving this long before stopping to open the door
+            // (the camera sees the box before the door is lined up with it).
+            static constexpr uint32_t kBoxAdvanceMs = 300;
+            static constexpr uint8_t  kMaxTurns   = 4;   // give up (STOP) after this many reversals
         } // namespace Benefits
 
         // Robot stays still in begin() until the BNO085 yaw stops moving, then latches the yaw target.
@@ -182,6 +204,8 @@ namespace Constants
         {
             static constexpr uint32_t kPrintPeriodMs = 100;
             static constexpr bool     kFrontLineTeleplot = false; // qtrFront PD signals in Teleplot format, every control tick
+            static constexpr bool     kLoopTiming         = false; // "LOOP ..." line with loop time stats
+            static constexpr uint32_t kLoopTimingPeriodMs = 1000;
         } // namespace Debug
     } // namespace StateMachine
 } // namespace Constants

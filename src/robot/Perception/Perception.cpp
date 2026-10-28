@@ -1,19 +1,22 @@
 #include "Perception.hpp"
 #include "constants.h"
 
-void Perception::update(uint32_t now)
+void Perception::update(uint32_t now, bool readTof)
 {
     ir.update();
-    tofLeft.update();
-    tofRight.update();
-    tofBackLeft.update();
-    tofBackRight.update();
+    if (readTof)
+    {
+        tofLeft.update();
+        tofRight.update();
+        tofBackLeft.update();
+        tofBackRight.update();
+    }
     qtrFront.update();
     qtrRear.update();
 
     updateIR();
     updateQTR();
-    updateToF(now);
+    updateToF(now, readTof);
 }
 
 void Perception::updateIR()
@@ -39,8 +42,27 @@ void Perception::updateQTR()
     snap_.onLine  = qtrFront.onLine(Constants::StateMachine::Common::kFrontOnLineThreshold);
 }
 
-void Perception::updateToF(uint32_t now)
+void Perception::updateToF(uint32_t now, bool readTof)
 {
+    if (!readTof)
+    {
+        tofPaused_         = true;
+        frontLatch_        = ObstacleLatch{};
+        rearLatch_         = ObstacleLatch{};
+        snap_.obstacle     = false;
+        snap_.rearObstacle = false;
+        return;
+    }
+
+    // The first reading after a pause is the one left waiting in the sensor
+    // since the pause began: ignore obstacles until fresh data has come in.
+    if (tofPaused_)
+    {
+        tofPaused_   = false;
+        tofResumeMs_ = now;
+    }
+    const bool resuming = tofResumeMs_ != 0 && (now - tofResumeMs_) < kTofResumeBlankMs;
+
     if (tofReadyTimestamp_ == 0 &&
         (tofLeft.isValid() || tofRight.isValid() || tofBackLeft.isValid() || tofBackRight.isValid()))
         tofReadyTimestamp_ = now;
@@ -51,7 +73,7 @@ void Perception::updateToF(uint32_t now)
 
     auto seesObstacle = [&](const ToF &tof)
     {
-        return tofReady && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
+        return tofReady && !resuming && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
     };
 
     snap_.obstacle     = frontLatch_.update(now, seesObstacle(tofLeft) || seesObstacle(tofRight));

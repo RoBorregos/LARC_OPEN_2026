@@ -7,6 +7,7 @@
 #include "robot/instances/instances.hpp"
 #include "robot/Perception/Perception.hpp"
 #include "States/YawSettle.hpp"
+#include "States/IntakeRamp.hpp"
 
 // State machine (states) files...
 #include "States/TierOne/StartState.hpp"
@@ -73,6 +74,8 @@ private:
     BenefitsState benefitsState_;
     StopState stopState_;
 
+    IntakeRamp intakeRamp_; // started on START -> POOL, runs until done
+
     void setState(STATES newState);
     void beginState(STATES state);
     void startStateTime();
@@ -82,6 +85,16 @@ private:
     // Todos los prints de debug: debugPrint(true) imprime, debugPrint(false) no.
     void debugPrint(bool enabled);
     void printBootReport() const;
+    // Loop time stats (Debug::kLoopTiming), printed every kLoopTimingPeriodMs.
+    void loopTiming(uint32_t now, uint32_t loopStartUs, uint32_t perceptionUs, uint32_t visionUs);
+
+    uint32_t timingLastStartUs_     = 0;
+    uint32_t timingWindowMs_        = 0;
+    uint32_t timingCount_           = 0;
+    uint32_t timingPeriodSumUs_     = 0;
+    uint32_t timingPeriodMaxUs_     = 0;
+    uint32_t timingPerceptionMaxUs_ = 0;
+    uint32_t timingVisionMaxUs_     = 0;
 
     // Boot results, printed once by debugPrint(true).
     bool     i2cBusFreeOk_      = false;

@@ -15,6 +15,7 @@ public:
         action_stage = 0;
         action_start_time = millis();
         elevatorCmd_ = -1;
+
         // The elevator can brown out the BNO085 and its yaw drifts for a while after:
         // no yaw hold until the robot is about to drive, so it cannot rotate in place.
         LARC.holdYaw(false);

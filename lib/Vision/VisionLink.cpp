@@ -77,16 +77,25 @@ void VisionLink::update()
         if (!ev.accepted)
             continue;
 
-        _status           = ev.cmd.status;
-        _separatorInvalid = ev.cmd.separatorInvalid;
-        _latchFaults(ev.cmd.status);
+        VisionProto::Command cmd = ev.cmd;
+        // The Orin's door bits are the opposite of the physical doors.
+        if (Constants::VisionConfig::kSwapBenefitDoors)
+        {
+            const bool b1    = cmd.benefit1Open;
+            cmd.benefit1Open = cmd.benefit2Open;
+            cmd.benefit2Open = b1;
+        }
+
+        _status           = cmd.status;
+        _separatorInvalid = cmd.separatorInvalid;
+        _latchFaults(cmd.status);
 
         // Safety first, and without waiting for confirmation.
-        _applySafetyImmediate(ev.cmd);
+        _applySafetyImmediate(cmd);
 
         // Everything else has to earn REQUIRED_CONFIRMATION_FRAMES.
-        if (_confirm.sample((uint8_t)ev.cmd.phase, ev.cmd.rawPayload, kConfirmFrames))
-            _applyCommand(ev.cmd);
+        if (_confirm.sample((uint8_t)cmd.phase, cmd.rawPayload, kConfirmFrames))
+            _applyCommand(cmd);
     }
 
     // Watchdog: the Orin went quiet
@@ -167,6 +176,16 @@ void VisionLink::openBenefit()
     }
 
     _openRequest = true;
+}
+
+void VisionLink::openBenefit(uint8_t which)
+{
+    if (_heldBenefit != kNoBenefit || which > 1 || _appliedPhase != Phase::BENEFITS)
+        return;
+
+    _heldBenefit = which;
+    _openRequest = false;
+    _servos.setBenefit(_heldBenefit, true);
 }
 
 void VisionLink::closeBenefit()

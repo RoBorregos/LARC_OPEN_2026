@@ -72,6 +72,9 @@ namespace Pins
     static constexpr uint8_t kIrChBLMux = 7;  // back-left  -- free channel of the front block (C0..C7)
     static constexpr uint8_t kIrChBRMux = 15; // back-right -- free channel of the rear block (C8..C15)
 
+    // LED STRIP (WS2812 / NeoPixel)
+    //static constexpr uint8_t kLedStripPin = 14; // same pin as kIrChFR (L2) -- confirm
+
     // TOF SENSORS (TCA9548A channels)
     static constexpr uint8_t kToFchFR = 0; // UR -- Front Right
     static constexpr uint8_t kToFchFL = 2; // UL -- Front Left

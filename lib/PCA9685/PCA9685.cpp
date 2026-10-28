@@ -36,10 +36,21 @@ void PCA9685::attachMux(TCA9548A *mux, uint8_t channel)
     _muxChannel = channel;
 }
 
-void PCA9685::_select()
+bool PCA9685::_select()
 {
     if (_mux)
-        _mux->selectChannel(_muxChannel); // no-op if already open
+        return _mux->selectChannel(_muxChannel); // no-op if already open
+    return true;
+}
+
+bool PCA9685::_endTransmission()
+{
+    if (_wire.endTransmission() == 0)
+        return true;
+    // The mux may not be on our channel any more: force a re-select next time.
+    if (_mux)
+        _mux->invalidate();
+    return false;
 }
 
 // Lifecycle
@@ -106,11 +117,11 @@ float PCA9685::frequency() const
 
 // Output
 
-void PCA9685::setPWM(uint8_t channel, uint16_t on, uint16_t off)
+bool PCA9685::setPWM(uint8_t channel, uint16_t on, uint16_t off)
 {
     if (channel >= kChannels)
-        return;
-    _write4(REG_LED0_ON_L + 4 * channel, on, off);
+        return false;
+    return _write4(REG_LED0_ON_L + 4 * channel, on, off);
 }
 
 uint16_t PCA9685::usToTicks(uint16_t us) const
@@ -124,19 +135,16 @@ uint16_t PCA9685::usToTicks(uint16_t us) const
     return (uint16_t)ticks;
 }
 
-void PCA9685::writeMicroseconds(uint8_t channel, uint16_t us)
+bool PCA9685::writeMicroseconds(uint8_t channel, uint16_t us)
 {
     if (us == 0)
-    {
-        off(channel);
-        return;
-    }
-    setPWM(channel, 0, usToTicks(us));
+        return off(channel);
+    return setPWM(channel, 0, usToTicks(us));
 }
 
-void PCA9685::off(uint8_t channel)
+bool PCA9685::off(uint8_t channel)
 {
-    setPWM(channel, 0, kFullScale); // bit 12 of OFF = full OFF
+    return setPWM(channel, 0, kFullScale); // bit 12 of OFF = full OFF
 }
 
 void PCA9685::allOff()
@@ -174,11 +182,12 @@ void PCA9685::disableOutputs()
 
 bool PCA9685::_write8(uint8_t reg, uint8_t value)
 {
-    _select();
+    if (!_select())
+        return false;
     _wire.beginTransmission(_addr);
     _wire.write(reg);
     _wire.write(value);
-    return _wire.endTransmission() == 0;
+    return _endTransmission();
 }
 
 uint8_t PCA9685::_read8(uint8_t reg)
@@ -193,14 +202,15 @@ uint8_t PCA9685::_read8(uint8_t reg)
     return (uint8_t)_wire.read();
 }
 
-void PCA9685::_write4(uint8_t reg, uint16_t on, uint16_t off)
+bool PCA9685::_write4(uint8_t reg, uint16_t on, uint16_t off)
 {
-    _select();
+    if (!_select())
+        return false;
     _wire.beginTransmission(_addr);
     _wire.write(reg);
     _wire.write((uint8_t)(on & 0xFF));
     _wire.write((uint8_t)(on >> 8));
     _wire.write((uint8_t)(off & 0xFF));
     _wire.write((uint8_t)(off >> 8));
-    _wire.endTransmission();
+    return _endTransmission();
 }

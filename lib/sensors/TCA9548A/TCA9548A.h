@@ -35,8 +35,15 @@ public:
     
     /**
      * Seleccionar un canal (0-7)
+     * @return false si el TCA no respondio (el canal no queda cacheado)
      */
-    void selectChannel(uint8_t channel);
+    bool selectChannel(uint8_t channel);
+
+    /**
+     * Forget the cached channel so the next selectChannel() really writes
+     * (call it after a failed transaction behind the mux).
+     */
+    void invalidate() { currentChannel_ = 255; }
     
     /**
      * Desactivar todos los canales

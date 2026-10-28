@@ -51,21 +51,21 @@ namespace Constants
         // PROVISIONAL (missing mechanical tests)
         // test/servos/02_pca9685_channel_test.cpp before trusting them.
         static constexpr ServoCalib kCalib[SERVO_COUNT] = {
-            { Pins::Servos::kIntakeUpperCh, 500, 2500, 65, 137 }, // INTAKE_UPPER
-            { Pins::Servos::kIntakeLowerCh, 500, 2500, 65, 168 }, // INTAKE_LOWER
+            { Pins::Servos::kIntakeUpperCh, 500, 2500, 50, 137 }, // INTAKE_UPPER
+            { Pins::Servos::kIntakeLowerCh, 500, 2500, 50, 168 }, // INTAKE_LOWER
             { Pins::Servos::kSeparatorCh,   500, 2500, 58, 149 }, // SEPARATOR
             { Pins::Servos::kBenefit1Ch,    500, 2500, 0, 150 }, // BENEFIT_1
             { Pins::Servos::kBenefit2Ch,    500, 2500, 10, 160 }  // BENEFIT_2
         };
 
         // Positions (deg) 
-        static constexpr uint8_t kIntakeUpperHome   = 65;
-        static constexpr uint8_t kIntakeUpperDeploy = 143;
+        static constexpr uint8_t kIntakeUpperHome   = 50;
+        static constexpr uint8_t kIntakeUpperDeploy = 110;
 
-        static constexpr uint8_t kIntakeLowerHome   = 65;
-        static constexpr uint8_t kIntakeLowerDeploy = 110;
+        static constexpr uint8_t kIntakeLowerHome   = 57;
+        static constexpr uint8_t kIntakeLowerDeploy = 90;
 
-        static constexpr uint8_t kSeparatorNeutral  = 99;
+        static constexpr uint8_t kSeparatorNeutral  = 101;
         static constexpr uint8_t kSeparatorLeft     = 57; // mature
         static constexpr uint8_t kSeparatorRight    = 148; // overmature
 
@@ -94,6 +94,9 @@ namespace Constants
         // BENEFITS routine: the box must stay centred this long while driving
         // before the robot stops (ms). Filters a one-frame CENTER at the edge.
         static constexpr uint32_t kBenefitApproachMs = 100;
+
+        // A servo write that failed on I2C is retried this often until it lands (ms).
+        static constexpr uint32_t kServoRetryMs = 10;
     } // namespace ServoConfig
 
     namespace VisionConfig
@@ -101,10 +104,14 @@ namespace Constants
         // How many consecutive, fully valid, non-duplicate
         // frames must carry the SAME (phase, payload) before the Teensy
         // acts on it. 
-        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 1; // (unchanged, good readings but not fully tested)
+        // 2 ignores single-frame flickers (ball bouncing in the ROI while moving), at the cost of one frame of delay.
+        static constexpr uint8_t REQUIRED_CONFIRMATION_FRAMES = 2;
 
         // No valid new frame for this long, then every actuator goes safe 
         static constexpr uint32_t kLinkTimeoutMs = 500;
+
+        // true: BENEFIT_1 bit from the Orin opens door 2 and vice versa (each box was getting the other's balls).
+        static constexpr bool kSwapBenefitDoors = true;
         static constexpr uint32_t kSerialBaud = 115200;
     } // namespace VisionConfig
 
