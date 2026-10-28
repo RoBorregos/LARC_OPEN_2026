@@ -1,0 +1,55 @@
+# LARC OPEN 2026 — vision dispatcher
+# Watch:    journalctl -u larc-dispatcher -f
+# Restart:  sudo systemctl restart larc-dispatcher
+# Edit User=, WorkingDirectory= and ExecStart= if the repo is not at
+# /home/orin/LARC_OPEN_2026. Nothing else needs to change.
+
+[Unit]
+Description=LARC OPEN 2026 vision dispatcher (Orin <-> Teensy)
+Documentation=file:/home/orin/LARC_OPEN_2026/lib/Vision/PROTOCOL.md
+After=multi-user.target
+
+# Optional: only run while the Teensy is actually plugged in. Needs the
+# udev rule that creates /dev/ttyTeensy. Leave commented out — the
+# dispatcher already retries the port on its own, and binding to a missing
+# device makes a missing cable look like a broken service.
+# BindsTo=dev-ttyTeensy.device
+# After=dev-ttyTeensy.device
+
+[Service]
+Type=simple
+User=orin
+Group=orin
+
+# dialout = permission to open the Teensy serial port
+# video   = permission to open /dev/video*
+SupplementaryGroups=dialout video
+
+WorkingDirectory=/home/orin/LARC_OPEN_2026/vision_orin
+ExecStart=/home/orin/LARC_OPEN_2026/vision_orin/.venv-model/bin/python -u /home/orin/LARC_OPEN_2026/vision_orin/tools/run_vision.py
+
+Environment=PYTHONUNBUFFERED=1
+# Uncomment to override where the dispatcher looks for things:
+# Environment=LARC_TEENSY_DEV=/dev/ttyTeensy
+# Environment=LARC_CAMERAS_JSON=/home/orin/LARC_OPEN_2026/vision_orin/cameras.json
+# Environment=LARC_INTAKE_PY=/home/orin/LARC_OPEN_2026/vision_orin/main_vision/orin_vision.py
+# Environment=LARC_SEPARATOR_PY=/home/orin/LARC_OPEN_2026/vision_orin/separator/separator_vision.py
+# Environment=LARC_BENEFITS_PY=/home/orin/LARC_OPEN_2026/vision_orin/benefits/benefits.py
+
+# SIGTERM makes the dispatcher park the robot in IDLE and kill the vision
+# scripts before it exits, so `systemctl stop` never leaves a servo out.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=15
+
+Restart=always
+RestartSec=2
+# Do not give up after repeated crashes during a match.
+StartLimitIntervalSec=0
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=larc-dispatcher
+
+[Install]
+WantedBy=multi-user.target
