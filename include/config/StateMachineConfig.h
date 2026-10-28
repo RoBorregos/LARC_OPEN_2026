@@ -107,7 +107,7 @@ namespace Constants
             static constexpr uint32_t kElevatorStopMs = 700;  // minimum stop before driving; also waits for a stable yaw
             static constexpr float    kForwardSpeed   = 0.28f;
 
-            // Once the elevator is up, the intakes go through kIntakeSteps positions,
+            // When POOL starts (after START), the intakes go through kIntakeSteps positions,
             // each held kIntakeStepMs, and then back to home (ServoConfig::kIntake*Home).
             static constexpr uint8_t  kIntakeSteps                    = 4;
             static constexpr uint8_t  kIntakeUpperSteps[kIntakeSteps] = { 145, 120, 95, 65 };
@@ -179,7 +179,16 @@ namespace Constants
         namespace Benefits
         {
             static constexpr uint32_t kVisionRetryMs = 1000; // re-send START_BENEFITS while waiting
-            static constexpr uint32_t kCornerStopMs  = 1000;
+            // false: unload at each box as soon as it is found. true: blue first, a red box found
+            // before it is flagged and visited after (check kBlue/kRed in BenefitsState first).
+            static constexpr bool     kBluePriority = false;
+            // Box search (BenefitsState)
+            static constexpr int8_t   kStartDir   = +1;  // first direction after LOOKFORLINEBACKWARDS: +1 left (FL ends it), -1 right (FR)
+            static constexpr uint32_t kTurnStopMs = 300; // stop on a side line before reversing
+            // After a box is confirmed, keep driving this long before stopping to open the door
+            // (the camera sees the box before the door is lined up with it).
+            static constexpr uint32_t kBoxAdvanceMs = 300;
+            static constexpr uint8_t  kMaxTurns   = 4;   // give up (STOP) after this many reversals
         } // namespace Benefits
 
         // Robot stays still in begin() until the BNO085 yaw stops moving, then latches the yaw target.

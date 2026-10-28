@@ -7,6 +7,7 @@
 #include "robot/instances/instances.hpp"
 #include "robot/Perception/Perception.hpp"
 #include "States/YawSettle.hpp"
+#include "States/IntakeRamp.hpp"
 
 // State machine (states) files...
 #include "States/TierOne/StartState.hpp"
@@ -37,7 +38,7 @@ enum class STATES
 };
 
 // State the robot starts in after begin(). Change it to test a single state.
-static constexpr STATES kInitialState = STATES::LOOKFORCORNER;
+static constexpr STATES kInitialState = STATES::START;
 
 class LARCStateMachine
 {
@@ -72,6 +73,8 @@ private:
     BenefitsStartCornerState benefitsStartCornerState_;
     BenefitsState benefitsState_;
     StopState stopState_;
+
+    IntakeRamp intakeRamp_; // started on START -> POOL, runs until done
 
     void setState(STATES newState);
     void beginState(STATES state);

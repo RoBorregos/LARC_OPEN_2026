@@ -21,19 +21,12 @@ public:
         LARC.holdYaw(false);
     }
 
-    // Leaving START mid sequence: intakes straight to home.
-    void end() {
-        if (servos.intakesHeld())
-            finishIntakes();
-    }
-
     void update(uint32_t now, bool obstacle, bool tofReady, bool& transitionToPool) {
         using namespace StateCommon;
         namespace cfg = Constants::StateMachine::Start;
         transitionToPool = false;
 
         vision.stop();
-        updateIntakes(now);
 
         const bool limitPressed = kLimitSwitchConnected && (digitalRead(Pins::kLimitSwitch) == kLimitPressedLevel);
 
@@ -53,7 +46,6 @@ public:
                         // Finishes going up - elevetor goes to "stop" state
                         action_start_time = now;
                         yawSettle_.reset(now, LARC.getYaw());
-                        startIntakes(now);
                         action_stage = 4;
                     }
                 }
@@ -90,41 +82,6 @@ private:
     bool lastLimitPressed = false;
     int  elevatorCmd_ = -1;
     YawSettle yawSettle_;
-    uint8_t  intakeStep_ = 0;
-    uint32_t intakeStepTime_ = 0;
-
-    void startIntakes(uint32_t now) {
-        servos.holdIntakes(true);
-        intakeStep_ = 0;
-        intakeStepTime_ = now;
-        writeIntakeStep();
-    }
-
-    void writeIntakeStep() {
-        namespace cfg = Constants::StateMachine::Start;
-        servos.setIntakeAngles(cfg::kIntakeUpperSteps[intakeStep_], cfg::kIntakeLowerSteps[intakeStep_]);
-    }
-
-    // One position every kIntakeStepMs; after the last one, home.
-    void updateIntakes(uint32_t now) {
-        namespace cfg = Constants::StateMachine::Start;
-        if (!servos.intakesHeld() || (now - intakeStepTime_) < cfg::kIntakeStepMs)
-            return;
-
-        if (intakeStep_ + 1 < cfg::kIntakeSteps) {
-            intakeStep_++;
-            intakeStepTime_ = now;
-            writeIntakeStep();
-        } else {
-            finishIntakes();
-        }
-    }
-
-    void finishIntakes() {
-        servos.holdIntakes(false);
-        servos.setIntakeUpper(false);
-        servos.setIntakeLower(false);
-    }
 
     void setElevator(int cmd) {
         using namespace StateCommon;

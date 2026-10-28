@@ -63,6 +63,9 @@ void LARCStateMachine::begin()
     i2cMuxOk_ = i2cMux.begin();
 
     // Servos after the bus and mux are up; vision.begin() parks them safe.
+    // Starting in START, the intakes are not written (no home) until the ramp when POOL begins.
+    if (kInitialState == STATES::START)
+        servos.holdIntakes(true);
     servos.begin();
     servosOk_ = servos.driverOk();
     vision.begin();
@@ -111,6 +114,7 @@ void LARCStateMachine::update()
     vision.update();
     const uint32_t t2 = micros();
     loopTiming(now, t0, t1 - t0, t2 - t1);
+    intakeRamp_.update(now);
     startStateTime();
 
     const PerceptionSnapshot &p = perception_.get();
@@ -187,8 +191,9 @@ void LARCStateMachine::update()
     {
         bool transitionToBenefitsStartCorner = false;
         lookForLineBackwardsState_.update(now, p.FL, p.FR, p.BL, p.BR, transitionToBenefitsStartCorner);
+        // Straight to BENEFITS: the blue-priority search starts on the line, no corner first.
         if (transitionToBenefitsStartCorner)
-            setState(STATES::BENEFITSSTARTCORNER);
+            setState(STATES::BENEFITS);
         break;
     }
 
@@ -204,7 +209,7 @@ void LARCStateMachine::update()
     case STATES::BENEFITS:
     {
         bool transitionToStop = false;
-        benefitsState_.update(now, p.frontRightDetectedLine, transitionToStop);
+        benefitsState_.update(now, p.frontLeftDetectedLine, p.frontRightDetectedLine, transitionToStop);
         if (transitionToStop)
             setState(STATES::STOP);
         break;
@@ -239,8 +244,11 @@ void LARCStateMachine::setState(STATES newState)
         vision.stop();
     }
 
-    if (currentState == STATES::START)
-        startState_.end();
+    // Intake ramp runs on its own once POOL starts; BEANS needs the intakes free.
+    if (currentState == STATES::START && newState == STATES::POOL)
+        intakeRamp_.start(millis());
+    else if (newState == STATES::BEANS)
+        intakeRamp_.finish();
 
     currentState = newState;
     state_start_time = millis();

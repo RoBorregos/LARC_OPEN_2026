@@ -109,6 +109,9 @@ namespace Constants
 
         // No valid new frame for this long, then every actuator goes safe 
         static constexpr uint32_t kLinkTimeoutMs = 500;
+
+        // true: BENEFIT_1 bit from the Orin opens door 2 and vice versa (each box was getting the other's balls).
+        static constexpr bool kSwapBenefitDoors = true;
         static constexpr uint32_t kSerialBaud = 115200;
     } // namespace VisionConfig
 
