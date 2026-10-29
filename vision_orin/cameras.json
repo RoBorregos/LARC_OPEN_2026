@@ -1,0 +1,53 @@
+{
+  "_config": "cameras.json",
+  "_purpose": "Which physical camera plays which role, and how to open it. Matched by identity (VID:PID / serial), never by /dev/video number \u2014 those get reshuffled on every boot.",
+  "_filled_from": "camera_probe.py on orin-desktop, 2026-08-20",
+  "_verify": "python3 tools/camera_open_by_name.py --all --headless",
+  "_hardware_found": {
+    "ZED 2": "2b03:f780, port 1-2.1.1, no serial, was /dev/video2",
+    "C920 rev 08e5": "046d:08e5, port 1-2.2, no serial, was /dev/video0  -> separator",
+    "C920 rev 0892": "046d:0892, port 1-2.4, serial 0E9612EF, was /dev/video4  -> benefits",
+    "_note": "The two C920s report the SAME product name but DIFFERENT product IDs (08e5 vs 0892), so VID:PID alone tells them apart. No USB-port pinning needed \u2014 these cables can move freely."
+  },
+  "_bandwidth": {
+    "problem": "All three cameras sit on ONE USB 2.0 hub (bus 001, 480 Mbps shared). Uncompressed YUYV 640x480@30 reserves ~18 MB/s PER C920; add the ZED's ~15 MB/s and the bus is over budget. That is why /dev/video2 threw select() timeouts and every feed collapsed to under 1 fps.",
+    "fix": "fourcc MJPG on both C920s below \u2014 compressed, ~1-2 MB/s each instead of 18. The ZED offers only YUYV so it cannot be compressed; it gets the headroom instead.",
+    "even_better": "Move the ZED to a USB 3 port on a different controller. Its port path changes from 1-... to 2-..., or the speed field in camera_probe.py jumps from 480 to 5000. Nothing in this file needs to change when you do \u2014 that is the point of matching on VID:PID."
+  },
+  "intake": {
+    "_camera": "ZED 2 stereo \u2014 the main bean intake camera",
+    "_why": "only 2b03:f780 device on the machine; 2b03:f781 is its HID interface and has no video node",
+    "_mac": "on a Mac there is no VID:PID matching, so the debug tools resolve this role by name instead",
+    "name_contains": "ZED",
+    "_modes": "this camera offers exactly one: YUYV 1344x376 @ 15 fps",
+    "vid": "2b03",
+    "pid": "f780",
+    "width": 1344,
+    "height": 376
+  },
+  "separator": {
+    "_camera": "Logitech C920 (older revision, no serial) over the separator chute",
+    "_why": "pid 08e5 is unique to this unit",
+    "_mac": "on a Mac there is no VID:PID matching, so the debug tools resolve this role by name instead",
+    "name_contains": "C920",
+    "vid": "046d",
+    "pid": "08e5",
+    "fourcc": "MJPG",
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "benefits": {
+    "_camera": "Logitech C920 (newer revision, serial 0E9612EF) looking at the benefit boxes",
+    "_why": "matched on serial as well as pid \u2014 the strongest match available",
+    "_mac": "on a Mac there is no VID:PID matching, so the debug tools resolve this role by name instead",
+    "name_contains": "C920",
+    "vid": "046d",
+    "pid": "0892",
+    "serial": "0E9612EF",
+    "fourcc": "MJPG",
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  }
+}

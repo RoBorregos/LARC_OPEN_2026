@@ -68,6 +68,7 @@ void LARCStateMachine::begin()
         servos.holdIntakes(true);
     servos.begin();
     servosOk_ = servos.driverOk();
+    vision.setEnabled(kVisionEnabled);
     vision.begin();
     vision.requestStatus();
 

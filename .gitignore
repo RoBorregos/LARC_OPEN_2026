@@ -7,3 +7,14 @@
 .DS_Store
 **/.DS_Store
 **/Notations/*.md
+
+# Python (Orin)
+.venv*/
+__pycache__/
+*.pyc
+
+.venv*/
+__pycache__/
+*.pyc
+vision_orin/dataset/
+*.before-model-preview
