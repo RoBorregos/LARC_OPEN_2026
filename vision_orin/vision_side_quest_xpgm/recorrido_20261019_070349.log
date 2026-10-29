@@ -1,0 +1,3 @@
+GRABANDO recorrido_20261019_070349.avi (1344x376) por 180s ...
+[ WARN:0@180.405] global cap_v4l.cpp:889 requestBuffers VIDEOIO(V4L2:/dev/video_zed): failed VIDIOC_REQBUFS: errno=19 (No such device)
+LISTO: recorrido_20261019_070349.avi | 2030 frames | 180.0s | ~11.3 fps reales

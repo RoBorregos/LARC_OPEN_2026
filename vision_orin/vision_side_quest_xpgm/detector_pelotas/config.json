@@ -1,0 +1,46 @@
+{
+  "width": 640,
+  "regions": {
+    "arriba": [
+      0.05,
+      0.08,
+      0.95,
+      0.49
+    ],
+    "abajo": [
+      0.05,
+      0.51,
+      0.95,
+      0.95
+    ]
+  },
+  "min_radius": 40,
+  "max_radius": 70,
+  "ball_colors": {
+    "rojo": [
+      [
+        0,
+        10
+      ],
+      [
+        170,
+        179
+      ]
+    ],
+    "verde": [
+      [
+        40,
+        100
+      ]
+    ]
+  },
+  "min_ball_saturation": 90,
+  "min_ball_value": 15,
+  "min_fill": 0.5,
+  "edge_threshold": 100,
+  "hough_votes": 24,
+  "min_arc_support": 0.6,
+  "min_sectors": 6,
+  "confirm_frames": 3,
+  "max_gap_ms": 250
+}
