@@ -26,8 +26,14 @@ def load_roi(role):
         cfg.update({f'roi_{k}': cfg['roi'][k] for k in ('x', 'y', 'w', 'h')})
     return cfg
 
+def knn_enabled():
+    return os.environ.get('LARC_COLOR') == 'knn'
+
 def settings(path=None, weights=None, device=None):
     cfg = read_json(path or os.environ.get('LARC_MODEL_CONFIG', ROOT / 'model_config.json'))
+    if knn_enabled():
+        from model_runtime import knn
+        cfg['weights'] = knn.WEIGHTS[knn.SOURCE]
     p = Path(weights or os.environ.get('LARC_MODEL_WEIGHTS', cfg['weights'])).expanduser()
     cfg['weights'] = str(p if p.is_absolute() else ROOT / p)
     if device is not None:
@@ -121,10 +127,18 @@ class Detector:
             self.model = YOLO(options['weights'])
         if self.model.task not in ('detect', 'segment'):
             raise ValueError('Expected an Ultralytics detection or segmentation model')
-        names = set(self.model.names.values())
-        required = set(options['required_classes'])
-        if not required <= names or names - set(options['allowed_classes']):
-            raise ValueError(f'Incompatible classes: {sorted(names)}. Expected {sorted(required)}; update model_config.json deliberately for new classes.')
+        self.knn = None
+        if knn_enabled():
+            # KNN names the colour, so the model's own class names do not matter.
+            from model_runtime import knn
+            if knn.SOURCE == 'seg' and self.model.task != 'segment':
+                raise ValueError(f"knn.SOURCE is 'seg' but {options['weights']} is a {self.model.task} model")
+            self.knn = knn.KnnColor()
+        else:
+            names = set(self.model.names.values())
+            required = set(options['required_classes'])
+            if not required <= names or names - set(options['allowed_classes']):
+                raise ValueError(f'Incompatible classes: {sorted(names)}. Expected {sorted(required)}; update model_config.json deliberately for new classes.')
         cameras = read_json(os.environ.get('LARC_CAMERAS_JSON', ROOT/'cameras.json'))
         self.expected = {r: (cameras[r]['width'], cameras[r]['height']) for r in ROI_PATHS}
 
@@ -154,7 +168,14 @@ class Detector:
             if polygons is not None and len(polygons[i]) >= 3:
                 (cx,cy),r = cv2.minEnclosingCircle(np.asarray(polygons[i], dtype=np.float32))
                 circle = (cx,cy,r)
-            detections.append({'name': result.names[int(cls)], 'confidence': confidence,
+            name = result.names[int(cls)]
+            if self.knn:
+                from model_runtime import knn
+                polygon = polygons[i] if polygons is not None and knn.SOURCE == 'seg' else None
+                name = self.knn.name(frame, (x1,y1,x2,y2), polygon)
+                if name is None:
+                    continue
+            detections.append({'name': name, 'confidence': confidence,
                                'box': [x1,y1,x2,y2], 'circle': list(circle)})
         out = decide(role, detections, cfg, frame.shape, self.options, self.expected[role])
         decision_at = time.monotonic()
@@ -176,5 +197,9 @@ class Detector:
         if annotate:
             for x1,y1,x2,y2 in out['regions']:
                 cv2.rectangle(image, (int(x1),int(y1)), (int(x2),int(y2)), (0,255,255), 2)
+            if self.knn:
+                for d in detections:
+                    cv2.putText(image, 'knn:'+d['name'].removeprefix('ball_'), (int(d['box'][0]),int(d['box'][3])+18),
+                                cv2.FONT_HERSHEY_SIMPLEX, .55, (0,255,0), 2)
             cv2.putText(image, out['message'], (10,25), cv2.FONT_HERSHEY_SIMPLEX, .65, (255,255,255),2)
         return out, image

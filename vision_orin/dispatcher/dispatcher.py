@@ -40,14 +40,25 @@ import vision_protocol as vp
 from teensy_link import TeensyLink, find_teensy
 
 # Vision switches. Change these two values.
-# USE_MODEL       True  = YOLO model scripts (orin_vision_model.py, separator_model.py)
-#                 False = OpenCV scripts (orin_vision.py, separator_vision.py)
+# VISION_MODE     "model"     = YOLO finds the ball AND names its colour (model_config.json weights)
+#                 "knn"       = YOLO finds the ball, the point cloud names its colour
+#                               (edit model_runtime/knn.py: box/seg, circle size, K)
+#                 "autocalib" = OpenCV scripts (orin_vision.py, separator_vision.py)
 # GREEN_LIFT_MODE True  = intake servos lift only when a green ball is in their ROI
 #                 False = intake servos lift for every ball in intake_pick_classes
-#                 GREEN_LIFT_MODE has an effect only when USE_MODEL is True.
-# The env variables LARC_INTAKE_PY / LARC_SEPARATOR_PY / LARC_GREEN_LIFT override these.
-USE_MODEL = True
+#                 GREEN_LIFT_MODE has an effect only in "model" and "knn".
+# SEPARATOR_AUTOCALIB True  = separator always runs separator_vision.py (autocalib),
+#                             whatever VISION_MODE the intake uses
+#                     False = separator follows VISION_MODE like the intake
+# The env variables LARC_VISION_MODE / LARC_INTAKE_PY / LARC_SEPARATOR_PY / LARC_GREEN_LIFT override these.
+VISION_MODE = os.environ.get("LARC_VISION_MODE", "model")
 GREEN_LIFT_MODE = True
+SEPARATOR_AUTOCALIB = False
+
+if VISION_MODE not in ("model", "knn", "autocalib"):
+    raise ValueError(f'VISION_MODE must be "model", "knn" or "autocalib", not {VISION_MODE!r}')
+USE_MODEL = VISION_MODE != "autocalib"
+os.environ["LARC_COLOR"] = "knn" if VISION_MODE == "knn" else "model"
 
 # USE_XPGM_TEST   True  = intake AND separator roles run xpgm-testVision's
 #                         bridge scripts (dev/test detector + HSV/RGB
@@ -66,11 +77,13 @@ SCRIPTS = {
                                           REPO / "main_vision" / ("orin_vision_model.py" if USE_MODEL else "orin_vision.py")))),
     "separator": (Path(REPO / "xpgm-testVision" / "separator-bridge-xpgm.py") if USE_XPGM_TEST
                  else Path(os.environ.get("LARC_SEPARATOR_PY",
-                                          REPO / "separator" / ("separator_model.py" if USE_MODEL else "separator_vision.py")))),
+                                          REPO / "separator" / ("separator_model.py" if USE_MODEL and not SEPARATOR_AUTOCALIB
+                                                                else "separator_vision.py")))),
     "benefits":  Path(os.environ.get("LARC_BENEFITS_PY",
                                      REPO / "benefits" / "benefits.py")),
 }
 
+print(f"[{time.strftime('%H:%M:%S')}] vision mode: {'xpgm-test (USE_XPGM_TEST overrides VISION_MODE)' if USE_XPGM_TEST else VISION_MODE}", flush=True)
 if USE_XPGM_TEST:
     print(f"[{time.strftime('%H:%M:%S')}] [XPGM-TEST] intake role -> {SCRIPTS['intake']}", flush=True)
     print(f"[{time.strftime('%H:%M:%S')}] [XPGM-TEST] separator role -> {SCRIPTS['separator']} "
@@ -100,6 +113,8 @@ STALE_MS = {"intake": 500, "separator": 500, "benefits": 800}
 
 # How long the separator holds a side after the last hit for that side.
 SEPARATOR_HOLD_MS = 100
+# Consecutive frames that must agree on a side before the separator moves (1 = no confirmation).
+SEPARATOR_CONFIRM_FRAMES = 3
 
 # Semantic mapping — the only place these meanings are written down
 INTAKE_UPPER_BIT = 0x01
@@ -109,7 +124,7 @@ WARM_IS = vp.SEP_LEFT # warm ball - separator LEFT  (mature)
 COOL_IS = vp.SEP_RIGHT # cool ball - separator RIGHT (overmature)
 
 BOX_NONE, BOX_RED, BOX_BLUE = 0, 1, 2
-BOX_DOOR = {BOX_RED: 1, BOX_BLUE: 0}   # box type - which door opens
+BOX_DOOR = {BOX_RED: 0, BOX_BLUE: 1}   # box type - which door opens
 BOX_NAMES = {BOX_NONE: "NONE", BOX_RED: "RED", BOX_BLUE: "BLUE"}
 
 FAULT_BIT = {
@@ -143,6 +158,8 @@ class VisionState:
         self.sep_side = vp.SEP_NEUTRAL
         self.sep_until_ms = 0
         self.separator_ms = 0
+        self.sep_candidate = vp.SEP_NEUTRAL
+        self.sep_streak = 0
 
         self.box = BOX_NONE
         self.box_visible = False
@@ -171,8 +188,14 @@ class VisionState:
             if source == "separator" and len(fields) == 3 and fields[0] == 0xFD:
                 warm, cool = bool(fields[1]), bool(fields[2])
                 if warm != cool:
-                    self.sep_side = WARM_IS if warm else COOL_IS
-                    self.sep_until_ms = stamp + SEPARATOR_HOLD_MS
+                    side = WARM_IS if warm else COOL_IS
+                    self.sep_streak = self.sep_streak + 1 if side == self.sep_candidate else 1
+                    self.sep_candidate = side
+                    if self.sep_streak >= SEPARATOR_CONFIRM_FRAMES:
+                        self.sep_side = side
+                        self.sep_until_ms = stamp + SEPARATOR_HOLD_MS
+                else:
+                    self.sep_streak = 0
                 self.separator_ms = stamp
                 self.reports[source] = stamp
                 return True
@@ -197,6 +220,7 @@ class VisionState:
             elif source == 'separator':
                 self.sep_side = vp.SEP_NEUTRAL
                 self.sep_until_ms = 0
+                self.sep_streak = 0
 
     def note_launched(self, sources) -> None:
         stamp = now_ms()
@@ -216,6 +240,7 @@ class VisionState:
             self.intake_upper = self.intake_lower = False
             self.sep_side = vp.SEP_NEUTRAL
             self.sep_until_ms = 0
+            self.sep_streak = 0
             self.box = BOX_NONE
             self.box_visible = False
             self.stale.clear()
