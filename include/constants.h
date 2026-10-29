@@ -59,10 +59,10 @@ namespace Constants
         };
 
         // Positions (deg) 
-        static constexpr uint8_t kIntakeUpperHome   = 50;
-        static constexpr uint8_t kIntakeUpperDeploy = 110;
+        static constexpr uint8_t kIntakeUpperHome   = 54;
+        static constexpr uint8_t kIntakeUpperDeploy = 93;
 
-        static constexpr uint8_t kIntakeLowerHome   = 57;
+        static constexpr uint8_t kIntakeLowerHome   = 61;
         static constexpr uint8_t kIntakeLowerDeploy = 90;
 
         static constexpr uint8_t kSeparatorNeutral  = 101;
@@ -70,9 +70,9 @@ namespace Constants
         static constexpr uint8_t kSeparatorRight    = 148; // overmature
 
         static constexpr uint8_t kBenefit2Closed    = 153;
-        static constexpr uint8_t kBenefit2Open      = 67;
+        static constexpr uint8_t kBenefit2Open      = 72;
         static constexpr uint8_t kBenefit1Closed    = 24;
-        static constexpr uint8_t kBenefit1Open      = 120;
+        static constexpr uint8_t kBenefit1Open      = 111;
 
         // Time for benefit doors to stay open before closing automatically (ms)
         static constexpr uint32_t kBenefitOpenMs = 2500;
