@@ -126,7 +126,7 @@ void LARCStateMachine::update()
     case STATES::START:
     {
         bool transitionToPool = false;
-        startState_.update(now, p.obstacle, p.tofReady, transitionToPool);
+        startState_.update(now, p.obstacle, p.tofReady, p.BL, p.BR, transitionToPool);
         if (transitionToPool)
             setState(STATES::POOL);
         break;

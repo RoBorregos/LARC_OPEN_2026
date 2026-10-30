@@ -21,7 +21,8 @@ public:
         LARC.holdYaw(false);
     }
 
-    void update(uint32_t now, bool obstacle, bool tofReady, bool& transitionToPool) {
+    void update(uint32_t now, bool obstacle, bool tofReady, bool backLeft, bool backRight,
+                bool& transitionToPool) {
         using namespace StateCommon;
         namespace cfg = Constants::StateMachine::Start;
         transitionToPool = false;
@@ -58,18 +59,33 @@ public:
                 if (yawSettle_.update(now, LARC.getYaw(), cfg::kElevatorStopMs)) {
                     LARC.holdYaw(true);
                     action_start_time = now;
+                    blSeen_ = false;
+                    brSeen_ = false;
                     action_stage = 5;
                 }
                 break;
 
-            // ── Stage 5: Avanzar y transicionar a POOL ───────────────────────
-            // IRs are ignored for kStartIgnoreTimeMs (start square lines), the ToFs are not:
-            // a pool ahead goes straight to POOL.
+            // ── Stage 5: Avanzar hasta que BL y BR vean la linea del START ───
+            // Only the rear IRs end this stage; obstacles are ignored here.
             case 5:
                 setElevator(kElevatorStop);
                 LARC.forward(cfg::kForwardSpeed);
 
-                if ((tofReady && obstacle) || (now - action_start_time) >= kStartIgnoreTimeMs) {
+                blSeen_ = blSeen_ || backLeft;
+                brSeen_ = brSeen_ || backRight;
+                if (blSeen_ && brSeen_) {
+                    action_start_time = now;
+                    action_stage = 6;
+                }
+                break;
+
+            // ── Stage 6: Avanzar kAfterRearLineMs mas y transicionar a POOL ──
+            // A pool ahead goes straight to POOL to be avoided there.
+            case 6:
+                setElevator(kElevatorStop);
+                LARC.forward(cfg::kForwardSpeed);
+
+                if ((tofReady && obstacle) || (now - action_start_time) >= cfg::kAfterRearLineMs) {
                     transitionToPool = true;
                 }
                 break;
@@ -82,6 +98,8 @@ private:
     bool lastLimitPressed = false;
     int  elevatorCmd_ = -1;
     YawSettle yawSettle_;
+    bool blSeen_ = false;
+    bool brSeen_ = false;
 
     void setElevator(int cmd) {
         using namespace StateCommon;

@@ -106,6 +106,7 @@ namespace Constants
             static constexpr uint32_t kElevatorUpMs   = 9000;
             static constexpr uint32_t kElevatorStopMs = 700;  // minimum stop before driving; also waits for a stable yaw
             static constexpr float    kForwardSpeed   = 0.28f;
+            static constexpr uint32_t kAfterRearLineMs = 800; // keep driving straight after BL+BR see the line (a pool ahead cuts it short)
 
             // When POOL starts (after START), the intakes go through kIntakeSteps positions,
             // each held kIntakeStepMs, and then back to home (ServoConfig::kIntake*Home).
