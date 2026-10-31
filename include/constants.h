@@ -59,10 +59,10 @@ namespace Constants
         };
 
         // Positions (deg) 
-        static constexpr uint8_t kIntakeUpperHome   = 50;
-        static constexpr uint8_t kIntakeUpperDeploy = 110;
+        static constexpr uint8_t kIntakeUpperHome   = 54;
+        static constexpr uint8_t kIntakeUpperDeploy = 94;
 
-        static constexpr uint8_t kIntakeLowerHome   = 57;
+        static constexpr uint8_t kIntakeLowerHome   = 61;
         static constexpr uint8_t kIntakeLowerDeploy = 90;
 
         static constexpr uint8_t kSeparatorNeutral  = 101;

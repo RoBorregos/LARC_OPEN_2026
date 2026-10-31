@@ -73,7 +73,8 @@ void Perception::updateToF(uint32_t now, bool readTof)
 
     auto seesObstacle = [&](const ToF &tof)
     {
-        return tofReady && !resuming && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
+        return !Constants::PerceptionConfig::kIgnoreObstacles &&
+               tofReady && !resuming && tof.isValid() && tof.getDistanceMm() < kObstacleDistanceMm;
     };
 
     snap_.obstacle     = frontLatch_.update(now, seesObstacle(tofLeft) || seesObstacle(tofRight));

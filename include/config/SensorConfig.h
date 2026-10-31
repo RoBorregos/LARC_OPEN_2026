@@ -88,5 +88,8 @@ namespace Constants
         // Obstacle latch (front UL/UR -> POOL, rear LL/LR -> POOLSGOBACK)
         static constexpr uint32_t kObstacleReleaseMs  = 400;
         static constexpr uint32_t kObstacleConfirmMs  = 0;
+
+        // Test only: true = obstacle/rearObstacle always false (no pools), ToFs still read and printed.
+        static constexpr bool     kIgnoreObstacles    = true;
     } // namespace PerceptionConfig
 } // namespace Constants
