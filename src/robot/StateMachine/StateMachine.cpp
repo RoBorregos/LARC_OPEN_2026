@@ -90,7 +90,7 @@ void LARCStateMachine::begin()
     qtrRear.begin();
     qtrRear.useDefaultCalibration(1);
 
-    // Verbose during init so BNO085 begin/recovery failures are printed; debugPrint() overrides it later.
+    // Verbose during init so BNO085 begin/recovery failures are printed.
     LARC.setImuVerbose(true);
     LARC.begin();
     LARC.setClosedLoop(Constants::WheelPID::kStateMachineClosedLoop);
@@ -122,7 +122,7 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(true); // true = imprime, false = no imprime
+    debugPrint(false); // true = imprime, false = no imprime
 
     switch (currentState)
     {
