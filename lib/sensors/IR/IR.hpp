@@ -54,9 +54,12 @@ public:
 
 private:
     bool    initialized;
+    bool    firstRead = true;
     uint8_t pins[N];
     bool    rawState[N];
     bool    lineState[N];
+    bool     pending[N];
+    uint32_t pendingSinceMs[N];
     uint8_t invertedMask;
 
     // Solo usados por los sensores en modo mux (useMux[i] == true).

@@ -53,9 +53,9 @@ namespace Constants
         static constexpr ServoCalib kCalib[SERVO_COUNT] = {
             { Pins::Servos::kIntakeUpperCh, 500, 2500, 50, 137 }, // INTAKE_UPPER
             { Pins::Servos::kIntakeLowerCh, 500, 2500, 50, 168 }, // INTAKE_LOWER
-            { Pins::Servos::kSeparatorCh,   500, 2500, 58, 149 }, // SEPARATOR
-            { Pins::Servos::kBenefit1Ch,    500, 2500, 0, 150 }, // BENEFIT_1
-            { Pins::Servos::kBenefit2Ch,    500, 2500, 10, 160 }  // BENEFIT_2
+            { Pins::Servos::kSeparatorCh,   500, 2500, 40, 160 }, // SEPARATOR
+            { Pins::Servos::kBenefit1Ch,    500, 2500, 27, 160 }, // BENEFIT_1
+            { Pins::Servos::kBenefit2Ch,    500, 2500, 30, 144 }  // BENEFIT_2
         };
 
         // Positions (deg) 
@@ -65,14 +65,14 @@ namespace Constants
         static constexpr uint8_t kIntakeLowerHome   = 61;
         static constexpr uint8_t kIntakeLowerDeploy = 90;
 
-        static constexpr uint8_t kSeparatorNeutral  = 105;
-        static constexpr uint8_t kSeparatorLeft     = 60; // mature
-        static constexpr uint8_t kSeparatorRight    = 148; // overmature
+        static constexpr uint8_t kSeparatorNeutral  = 103;
+        static constexpr uint8_t kSeparatorLeft     = 53; // mature
+        static constexpr uint8_t kSeparatorRight    = 156; // overmature
 
-        static constexpr uint8_t kBenefit2Closed    = 153;
-        static constexpr uint8_t kBenefit2Open      = 72;
-        static constexpr uint8_t kBenefit1Closed    = 24;
-        static constexpr uint8_t kBenefit1Open      = 111;
+        static constexpr uint8_t kBenefit2Closed    = 144;
+        static constexpr uint8_t kBenefit2Open      = 47;
+        static constexpr uint8_t kBenefit1Closed    = 30;
+        static constexpr uint8_t kBenefit1Open      = 129;
 
         // Time for benefit doors to stay open before closing automatically (ms)
         static constexpr uint32_t kBenefitOpenMs = 2500;

@@ -14,13 +14,14 @@ namespace StateCommon
     using namespace Constants::StateMachine::Common;
     using namespace Constants::StateMachine::Elevator;
 
-    static constexpr int kQtrPosMax = (QTR::N - 1) * 1000; // 6000 (indice 6 * 1000)
-
-    // qtrFront -> vx correction (same sign as the old P: the states apply -correction).
-    // Call every loop; it only recomputes every kFrontLinePeriodMs.
-    class FrontLineCorrection
+    // QTR -> vx correction; the states apply -correction. Used for qtrFront and qtrRear
+    // (rear is mirrored, so the same sign works). Call every loop; it only recomputes every kFrontLinePeriodMs.
+    class LineCorrection
     {
     public:
+        LineCorrection(QTR& qtr, float setpoint, bool teleplot = false)
+            : qtr_(qtr), setpoint_(setpoint), teleplot_(teleplot) {}
+
         void reset()
         {
             pd_.reset();
@@ -45,13 +46,13 @@ namespace StateCommon
             started_    = true;
             lastTickMs_ = now;
 
-            const int pos = qtrFront.getPosition();
+            const int pos = qtr_.getPosition();
             float errMm = 0.0f;
 
             if (onLine)
             {
                 lost_      = false;
-                errMm      = (kQtrFrontSetpoint - pos) / 1000.0f * kQtrPitchMm;
+                errMm      = (setpoint_ - pos) / 1000.0f * kQtrPitchMm;
                 lastErrMm_ = errMm;
                 // Shrinking the error by the deadband (instead of zeroing it) keeps the correction continuous.
                 const float shrunk = (errMm > 0.0f) ? max(errMm - kFrontLineDeadbandMm, 0.0f)
@@ -71,17 +72,17 @@ namespace StateCommon
                 pd_.hold(recovering ? push : 0.0f, dt);
             }
 
-            if (Constants::StateMachine::Debug::kFrontLineTeleplot)
+            if (teleplot_)
             {
-                plot(F("sp"), now, kQtrFrontSetpoint, 0);
+                plot(F("sp"), now, setpoint_, 0);
                 plot(F("pos"), now, pos, 0);
                 plot(F("errMm"), now, errMm, 2);
                 plot(F("u"), now, pd_.command(), 4);
                 plot(F("out"), now, pd_.output(), 4);
                 plot(F("onLine"), now, onLine ? 1.0f : 0.0f, 0);
 
-                const uint16_t* norm = qtrFront.getNorm();
-                for (uint8_t i = 0; i < qtrFront.size(); i++)
+                const uint16_t* norm = qtr_.getNorm();
+                for (uint8_t i = 0; i < qtr_.size(); i++)
                 {
                     Serial.print(F(">n"));
                     Serial.print(i);
@@ -99,6 +100,9 @@ namespace StateCommon
         static constexpr LinePD::Gains kGains = {
             kFrontLineKp, kFrontLineKi, kFrontLineKd, kFrontLineDTauS, kCornerCorrMax, kFrontLineSlewPerS};
 
+        QTR&     qtr_;
+        float    setpoint_;
+        bool     teleplot_;
         LinePD   pd_{kGains};
         bool     started_     = false;
         bool     lost_        = false;
@@ -118,15 +122,5 @@ namespace StateCommon
         }
     };
 
-    // qtrRear is wired mirrored to qtrFront
-    inline float rearCornerCorrTarget()
-    {
-        if (!qtrRear.onLine())
-            return 0.0f;
-        // Mirrored sign; rear has fewer sensors, so the error is rescaled to the
-        // front 0..kQtrPosMax range to share kCornerKp.
-        const int   rearPosMax = (qtrRear.size() - 1) * 1000;
-        const float error = ((float)qtrRear.getPosition() - kQtrRearSetpoint) * kQtrPosMax / rearPosMax;
-        return constrain(error * kCornerKp, -kCornerCorrMax, kCornerCorrMax);
-    }
+    inline bool rearOnLine() { return qtrRear.onLine(kRearOnLineThreshold); }
 }

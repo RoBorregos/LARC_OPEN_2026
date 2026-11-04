@@ -18,7 +18,9 @@ public:
     void begin() {
         stage_ = Stage::SEARCH;
         stageStartMs_ = 0;
-        rearCorrFiltered = 0.0f;
+        lineCorr_.reset();
+        wallPd_.reset();
+        wallLastMs_ = 0;
 
         dir_ = Constants::StateMachine::Benefits::kStartDir;
         blueDone_ = false;
@@ -38,9 +40,20 @@ public:
     }
 
     // FL/FR: side lines that end the line when going left (+vy) / right (-vy).
-    void update(uint32_t now, bool FL, bool FR, bool& transitionToStop) {
+    // rearLeftMm/rearRightMm: LL/LR distance (0 = no reading), drives vx while searching.
+    void update(uint32_t now, bool FL, bool FR, uint16_t rearLeftMm, uint16_t rearRightMm, bool& transitionToStop) {
         namespace cfg = Constants::StateMachine::Benefits;
         transitionToStop = false;
+
+        // Closer of the sensors that see a box (0 or > kWallNoBoxMm = no box)
+        rearDistValid_ = false;
+        rearDistMm_    = 0;
+        for (const uint16_t d : {rearLeftMm, rearRightMm}) {
+            if (d != 0 && d <= cfg::kWallNoBoxMm && (!rearDistValid_ || d < rearDistMm_)) {
+                rearDistMm_    = d;
+                rearDistValid_ = true;
+            }
+        }
 
         // Doors open only through openBenefit(); the stream just reports the box.
         vision.setBenefitsOnRequest(true);
@@ -89,6 +102,9 @@ public:
         }
     }
 
+    // The doors share the I2C bus with the ToFs: no ToF reads while unloading.
+    bool wantsTof() const { return Constants::StateMachine::Benefits::kUseRearTof && stage_ != Stage::AT_BOX; }
+
     bool blueDone()   const { return blueDone_; }
     bool redPending() const { return redPending_; }
 
@@ -102,7 +118,16 @@ private:
 
     Stage    stage_ = Stage::SEARCH;
     uint32_t stageStartMs_ = 0;
-    float    rearCorrFiltered = 0.0f;
+    StateCommon::LineCorrection lineCorr_{qtrRear, Constants::StateMachine::Common::kQtrRearSetpoint};
+
+    static constexpr uint32_t kWallMaxGapMs = 100; // longer without a ToF update -> restart the wall PD
+    static constexpr LinePD::Gains kWallGains = {
+        Constants::StateMachine::Benefits::kWallKp, 0.0f, 0.0f, 0.03f,
+        Constants::StateMachine::Benefits::kWallCorrMax, Constants::StateMachine::Benefits::kWallSlewPerS};
+    LinePD   wallPd_{kWallGains};
+    uint32_t wallLastMs_    = 0;
+    bool     rearDistValid_ = false;
+    uint16_t rearDistMm_    = 0;
 
     int8_t   dir_ = 1;         // +1 = left (+vy), -1 = right (-vy)
     bool     blueDone_ = false;   // blue door opened: blue boxes are driven past from now on
@@ -144,7 +169,7 @@ private:
             return;
         }
 
-        drive();
+        drive(now);
 
         // Re-arm only once the box has FULLY left the camera for kBenefitRearmMs,
         // so a box sliding out slowly cannot cause a second stop.
@@ -184,12 +209,36 @@ private:
         stage_ = Stage::ADVANCE;
     }
 
-    // Line following along the boxes with qtrRear, in the current direction.
-    void drive() {
+    // Drive along the boxes in the current direction. vx keeps the rear ToF distance at
+    // kWallTargetMm; without a valid ToF reading it falls back to the qtrRear line.
+    void drive(uint32_t now) {
         using namespace StateCommon;
-        const float corrTarget = rearCornerCorrTarget();
-        rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
-        LARC.setTranslation(rearCorrFiltered, dir_ * kVelocity);
+        namespace cfg = Constants::StateMachine::Benefits;
+
+        float vx;
+        if (cfg::kUseRearTof && rearDistValid_ && wallLastMs_ != 0 && now == wallLastMs_) {
+            vx = -wallPd_.output();
+        } else if (cfg::kUseRearTof && rearDistValid_) {
+            const bool restart = wallLastMs_ == 0 || (now - wallLastMs_) > kWallMaxGapMs;
+            if (restart)
+                wallPd_.reset();
+            const float dt = restart ? 0.01f : (now - wallLastMs_) / 1000.0f;
+            wallLastMs_ = now;
+
+            if (rearDistMm_ < cfg::kWallMinMm) {
+                // Too close: move away (+vx) at full correction
+                vx = -wallPd_.hold(-cfg::kWallCorrMax, dt);
+            } else {
+                // > 0: too far from the boxes -> back up (-vx)
+                const float errMm  = (float)rearDistMm_ - (float)cfg::kWallTargetMm;
+                const float shrunk = (errMm > 0.0f) ? max(errMm - cfg::kWallDeadbandMm, 0.0f)
+                                                    : min(errMm + cfg::kWallDeadbandMm, 0.0f);
+                vx = -wallPd_.update(shrunk, dt);
+            }
+        } else {
+            vx = -lineCorr_.update(now, rearOnLine());
+        }
+        LARC.setTranslation(vx, dir_ * kVelocity);
     }
 
     // Box confirmed: keep going kBoxAdvanceMs so the door lines up, then stop and unload.
@@ -198,7 +247,7 @@ private:
         namespace cfg = Constants::StateMachine::Benefits;
 
         if ((now - stageStartMs_) < cfg::kBoxAdvanceMs && !(dir_ > 0 ? FL : FR)) {
-            drive();
+            drive(now);
             return;
         }
 

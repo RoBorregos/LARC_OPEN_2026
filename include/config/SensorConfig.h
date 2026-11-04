@@ -22,12 +22,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-             {67, 67, 65, 65, 70, 69, 66},          // On white
-             {831, 863, 839, 837, 872, 881, 899}}; // black (up and DOWN)
+              {74, 73, 75, 73, 114, 86, 73},          // On white
+             {784, 766, 750, 821, 831, 808, 752}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-              {67, 74, 164, 343, 230, 123},
-            {914, 905, 917, 958, 910, 913}};
+               {63, 60, 63, 70, 80, 69},
+            {628, 673, 696, 836, 809, 777}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -57,8 +57,12 @@ namespace Constants
         static constexpr uint16_t kThreshBL = 112; // Back-Left  (mux C7)
         static constexpr uint16_t kThreshBR = 50;  // Back-Right (mux C15)
 
-        static constexpr uint16_t kHysteresis = 5;    // Hysteresis margin (same for all sensors)
-        static constexpr uint16_t kDebounceCount = 3; // Number of consecutive readings to confirm state change
+        static constexpr uint16_t kHysteresis = 20;   // +/- margin around the threshold (mux sensors BL/BR only)
+        static constexpr uint16_t kDebounceCount = 3; // Used by IR_mux only
+        // IRLine time-based debounce: the new state must hold this long to be accepted.
+        static constexpr uint32_t kOffDebounceMs    = 10; // all sensors: line -> no line
+        static constexpr uint32_t kOnDebounceMs     = 10; // FL/FR: no line -> line
+        static constexpr uint32_t kBackOnDebounceMs = 35; // BL/BR: no line -> line (stricter)
     } // namespace IRCalibration
 
     namespace UltrasonicConstants
@@ -79,7 +83,7 @@ namespace Constants
     namespace PerceptionConfig
     {
         static constexpr uint16_t kTofMaxRangeMm      = 1000;
-        static constexpr uint16_t kObstacleDistanceMm = 215;
+        static constexpr uint16_t kObstacleDistanceMm = 215; //Distancia a la que detecta obsaculos
         static constexpr uint32_t kTofWarmupMs        = 500;
         // ToFs are only read in START/POOL/POOLSGOBACK; after a pause, obstacles are
         // ignored this long so the stale reading left in the sensor is not used.

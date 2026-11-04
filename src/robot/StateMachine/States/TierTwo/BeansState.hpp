@@ -87,5 +87,5 @@ public:
 private:
     int action_stage = 0;
     uint32_t action_start_time = 0;
-    StateCommon::FrontLineCorrection lineCorr_;
+    StateCommon::LineCorrection lineCorr_{qtrFront, Constants::StateMachine::Common::kQtrFrontSetpoint, Constants::StateMachine::Debug::kFrontLineTeleplot};
 };

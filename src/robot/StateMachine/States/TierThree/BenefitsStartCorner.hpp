@@ -13,7 +13,7 @@ public:
     void begin() {
         action_stage = 0;
         action_start_time = 0;
-        rearCorrFiltered = 0.0f;
+        lineCorr_.reset();
     }
 
     void update(uint32_t now, bool cornerLeftDetected, bool& transitionToBenefits) {
@@ -30,10 +30,8 @@ public:
                     return;
                 }
 
-                const float corrTarget = rearCornerCorrTarget();
-                rearCorrFiltered += (corrTarget - rearCorrFiltered) * kRearCorrAlpha;
-
-                LARC.setTranslation(rearCorrFiltered, kVelocity);
+                const float corr = lineCorr_.update(now, rearOnLine());
+                LARC.setTranslation(-corr, kVelocity);
                 break;
             }
 
@@ -51,5 +49,5 @@ public:
 private:
     int action_stage = 0;
     uint32_t action_start_time = 0;
-    float rearCorrFiltered = 0.0f;
+    StateCommon::LineCorrection lineCorr_{qtrRear, Constants::StateMachine::Common::kQtrRearSetpoint};
 };

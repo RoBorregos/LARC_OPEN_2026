@@ -25,6 +25,7 @@ IRLine::IRLine(uint8_t flPin, uint8_t frPin, uint8_t blPin, uint8_t brPin,
     {
         rawState[i]  = false;
         lineState[i] = false;
+        pending[i] = false;
         useMux[i]    = false;
     }
 }
@@ -39,6 +40,7 @@ IRLine::IRLine(const uint8_t pins_[N], uint8_t invertedMask)
         pins[i]      = pins_[i];
         rawState[i]  = false;
         lineState[i] = false;
+        pending[i] = false;
         useMux[i]    = false;
     }
 }
@@ -65,6 +67,7 @@ IRLine::IRLine(uint8_t flPin, uint8_t frPin, Mux74HC4067& mux_,
     {
         rawState[i]  = false;
         lineState[i] = false;
+        pending[i] = false;
     }
 }
 
@@ -82,6 +85,7 @@ bool IRLine::begin()
         mux->begin();
 
     initialized = true;
+    firstRead = true;
     update(); // First reading
     return true;
 }
@@ -93,19 +97,47 @@ void IRLine::update()
     if (!initialized)
         return;
 
+    const uint16_t hyst = Constants::IRCalibration::kHysteresis;
+    const uint32_t now = millis();
+
     for (uint8_t i = 0; i < N; i++)
     {
-        bool raw;
+        bool raw = rawState[i];
         if (useMux[i])
-            raw = (mux->read(muxCh[i]) >= threshold[i]); // analog + umbral
+        {
+            const uint16_t value = mux->read(muxCh[i]);
+            const uint16_t high = threshold[i] + hyst;
+            const uint16_t low  = (threshold[i] > hyst) ? threshold[i] - hyst : 0;
+            if (value >= high)     raw = true;
+            else if (value <= low) raw = false;
+        }
         else
-            raw = (digitalRead(pins[i]) == HIGH); // HIGH true
-
+        {
+            raw = (digitalRead(pins[i]) == HIGH);
+        }
         rawState[i] = raw;
 
         const bool isInverted = (invertedMask >> i) & 0x01;
-        lineState[i] = isInverted ? (!raw) : raw;
+        const bool candidate = isInverted ? (!raw) : raw;
+
+        if (!firstRead && candidate != lineState[i])
+        {
+            if (!pending[i])
+            {
+                pending[i] = true;
+                pendingSinceMs[i] = now;
+            }
+            const bool isBack = (i == BL || i == BR);
+            const uint32_t neededMs = !candidate ? Constants::IRCalibration::kOffDebounceMs
+                                    : isBack     ? Constants::IRCalibration::kBackOnDebounceMs
+                                                 : Constants::IRCalibration::kOnDebounceMs;
+            if ((now - pendingSinceMs[i]) < neededMs)
+                continue;
+        }
+        lineState[i] = candidate;
+        pending[i] = false;
     }
+    firstRead = false;
 }
 
 // Getters

@@ -89,6 +89,7 @@ void LARCStateMachine::begin()
     ir.begin();
     qtrRear.begin();
     qtrRear.useDefaultCalibration(1);
+    qtrRear.setFloor(Constants::StateMachine::Common::kRearFloorNorm);
 
     // Verbose during init so BNO085 begin/recovery failures are printed.
     LARC.setImuVerbose(true);
@@ -110,8 +111,10 @@ void LARCStateMachine::update()
     const uint32_t t0  = micros();
 
     // Only these states use the ToFs; elsewhere the shared I2C bus stays free for the servos.
+    // BENEFITS: not while a door is open.
     const bool readTof = currentState == STATES::START || currentState == STATES::POOL ||
-                         currentState == STATES::POOLSGOBACK;
+                         currentState == STATES::POOLSGOBACK ||
+                         (currentState == STATES::BENEFITS && benefitsState_.wantsTof());
     perception_.update(now, readTof);
     const uint32_t t1 = micros();
     vision.update();
@@ -122,7 +125,7 @@ void LARCStateMachine::update()
 
     const PerceptionSnapshot &p = perception_.get();
 
-    debugPrint(false); // true = imprime, false = no imprime
+    debugPrint(true); // true = imprime, false = no imprime
 
     switch (currentState)
     {
@@ -212,7 +215,8 @@ void LARCStateMachine::update()
     case STATES::BENEFITS:
     {
         bool transitionToStop = false;
-        benefitsState_.update(now, p.frontLeftDetectedLine, p.frontRightDetectedLine, transitionToStop);
+        benefitsState_.update(now, p.frontLeftDetectedLine, p.frontRightDetectedLine,
+                              p.rearLeftMm, p.rearRightMm, transitionToStop);
         if (transitionToStop)
             setState(STATES::STOP);
         break;
@@ -367,7 +371,7 @@ void LARCStateMachine::debugPrint(bool enabled)
     Serial.print(F(" ❤ qtr| onLine:")); Serial.print(p.onLine);
     Serial.print(F(" lPos:")); Serial.print(p.linePos);
 
-    Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine(Constants::QTRCalibration::kBinaryThreshold));
+    Serial.print(F(" ❤ qtrRear| onLine:")); Serial.print(qtrRear.onLine(Constants::StateMachine::Common::kRearOnLineThreshold));
     Serial.print(F(" lPos:")); Serial.print(qtrRear.getPosition());
 
     auto printRawNorm = [](const __FlashStringHelper* rawLabel,

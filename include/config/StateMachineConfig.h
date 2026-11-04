@@ -40,12 +40,15 @@ namespace Constants
                             3000 como el actual SetPoint value.
             */
             static constexpr float kQtrFrontSetpoint = 2200.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
-            static constexpr float kQtrRearSetpoint  = 2583.3f; // qtrRear:  0..5000 (same as the old 2900 mirrored)
-            static constexpr float kCornerKp        = 0.00012f; // qtrRear
-            static constexpr float kCornerCorrMax   = 0.20f;
-            static constexpr float kRearCorrAlpha   = 0.15f;
+            static constexpr float kQtrRearSetpoint  = 1500.3f; // qtrRear: 0..5000, same mm PD as front
+            static constexpr float kCornerCorrMax   = 0.20f; // max |vx| correction, front and rear
 
-            // qtrFront line correction (StateCommon::FrontLineCorrection), error in mm
+            // qtrRear uses the same correction as qtrFront (gains below). Mirrored: higher setpoint = closer.
+            // Floor reads up to ~470 norm on qtrRear: check rearNorm off the line and keep these above it.
+            static constexpr uint16_t kRearFloorNorm        = 500;
+            static constexpr uint16_t kRearOnLineThreshold  = 600;
+
+            // qtrFront line correction (StateCommon::LineCorrection, front and rear), error in mm
             static constexpr float    kQtrPitchMm           = 9.525f; // QTR-8A sensor spacing
             static constexpr uint16_t kFrontFloorNorm       = 300;    // background norm ignored by the position (C4 floor ~210)
             static constexpr uint16_t kFrontOnLineThreshold = 400;    // floor reads up to ~210 on C4
@@ -169,6 +172,9 @@ namespace Constants
             // qtrRear: C8..C13 (indices 0..5), the line enters through C8 when going backwards.
             static constexpr bool  kEntryAtHighIndex = false;
             static constexpr float kCenterProgress   = 2.5f;
+
+            // Also -> BENEFITS when qtrRear.onLine(kRearOnLineThreshold) holds this long
+            static constexpr uint32_t kOnLineConfirmMs = 30;
         } // namespace LookForLineBackwards
 
         namespace BenefitsStartCorner
@@ -189,6 +195,19 @@ namespace Constants
             // (the camera sees the box before the door is lined up with it).
             static constexpr uint32_t kBoxAdvanceMs = 300;
             static constexpr uint8_t  kMaxTurns   = 4;   // give up (STOP) after this many reversals
+
+            // vx from the rear ToFs while searching: farther than the target backs up toward
+            // the box, closer moves away. Uses the closer of LL/LR; a sensor reading above
+            // kWallNoBoxMm sees no box and is ignored; neither sees one -> qtrRear line correction.
+            // Read LL/LR in the debug print with the robot where it should deposit.
+            static constexpr bool     kUseRearTof     = true;
+            static constexpr uint16_t kWallTargetMm   = 30;
+            static constexpr uint16_t kWallMinMm      = 20;  // closer than this -> move away at kWallCorrMax
+            static constexpr uint16_t kWallNoBoxMm    = 100;
+            static constexpr float    kWallDeadbandMm = 5.0f;
+            static constexpr float    kWallKp         = 0.002f; // vx per mm of error
+            static constexpr float    kWallCorrMax    = 0.15f;
+            static constexpr float    kWallSlewPerS   = 1.0f;   // vx units per second
         } // namespace Benefits
 
         // Robot stays still in begin() until the BNO085 yaw stops moving, then latches the yaw target.

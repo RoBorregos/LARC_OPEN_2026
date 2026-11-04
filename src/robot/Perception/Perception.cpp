@@ -49,8 +49,10 @@ void Perception::updateToF(uint32_t now, bool readTof)
         tofPaused_         = true;
         frontLatch_        = ObstacleLatch{};
         rearLatch_         = ObstacleLatch{};
-        snap_.obstacle     = false;
-        snap_.rearObstacle = false;
+        snap_.obstacle      = false;
+        snap_.rearObstacle  = false;
+        snap_.rearLeftMm    = 0;
+        snap_.rearRightMm   = 0;
         return;
     }
 
@@ -78,6 +80,13 @@ void Perception::updateToF(uint32_t now, bool readTof)
 
     snap_.obstacle     = frontLatch_.update(now, seesObstacle(tofLeft) || seesObstacle(tofRight));
     snap_.rearObstacle = rearLatch_.update(now, seesObstacle(tofBackLeft) || seesObstacle(tofBackRight));
+
+    auto distance = [&](const ToF &tof) -> uint16_t
+    {
+        return (tofReady && !resuming && tof.isValid()) ? tof.getDistanceMm() : 0;
+    };
+    snap_.rearLeftMm  = distance(tofBackLeft);
+    snap_.rearRightMm = distance(tofBackRight);
 }
 
 bool Perception::ObstacleLatch::update(uint32_t now, bool seenNow)

@@ -9,6 +9,7 @@
 #include "robot/instances/instances.hpp"
 #include "robot/StateMachine/States/QtrEntryTracker.hpp"
 #include "robot/StateMachine/States/IrSideLatch.hpp"
+#include "robot/StateMachine/States/StateCommon.hpp"
 
 class LookForLineBackwardsState {
 public:
@@ -19,6 +20,7 @@ public:
         correcting_      = false;
         correctionDir_   = 0;
         correctionStart_ = 0;
+        onLineSinceMs_   = 0;
     }
 
     // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
@@ -27,7 +29,16 @@ public:
         namespace cfg = Constants::StateMachine::LookForLineBackwards;
         transitionToBenefitsStartCorner = false;
 
-        if (tracker_.update() == QtrEntryTracker::Phase::ON) {
+        // Plain qtrRear onLine (kRearOnLineThreshold), held kOnLineConfirmMs to skip noise spikes
+        if (StateCommon::rearOnLine()) {
+            if (onLineSinceMs_ == 0)
+                onLineSinceMs_ = now;
+        } else {
+            onLineSinceMs_ = 0;
+        }
+        const bool onLineConfirmed = onLineSinceMs_ != 0 && (now - onLineSinceMs_) >= cfg::kOnLineConfirmMs;
+
+        if (tracker_.update() == QtrEntryTracker::Phase::ON || onLineConfirmed) {
             correcting_ = false;
             // Serial.println("[LOOKFORLINEBACKWARDS] QTR ON -> BENEFITSSTARTCORNER");
             LARC.stop();
@@ -82,6 +93,7 @@ private:
     bool     correcting_      = false;
     int8_t   correctionDir_   = 0;
     uint32_t correctionStart_ = 0;
+    uint32_t onLineSinceMs_   = 0;
 
     void startCorrection(uint32_t now, int8_t dir) {
         correcting_      = true;

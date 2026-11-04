@@ -24,6 +24,9 @@ struct PerceptionSnapshot
     bool tofReady     = false;
     bool obstacle     = false; // UL/UR -> POOL
     bool rearObstacle = false; // LL/LR -> POOLSGOBACK
+    // LL/LR distance for BENEFITS, 0 = no fresh valid reading
+    uint16_t rearLeftMm  = 0;
+    uint16_t rearRightMm = 0;
 };
 
 class Perception
