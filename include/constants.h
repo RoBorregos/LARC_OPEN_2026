@@ -65,8 +65,8 @@ namespace Constants
         static constexpr uint8_t kIntakeLowerHome   = 61;
         static constexpr uint8_t kIntakeLowerDeploy = 90;
 
-        static constexpr uint8_t kSeparatorNeutral  = 101;
-        static constexpr uint8_t kSeparatorLeft     = 57; // mature
+        static constexpr uint8_t kSeparatorNeutral  = 105;
+        static constexpr uint8_t kSeparatorLeft     = 60; // mature
         static constexpr uint8_t kSeparatorRight    = 148; // overmature
 
         static constexpr uint8_t kBenefit2Closed    = 153;
