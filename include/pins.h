@@ -140,8 +140,8 @@ namespace Pins
     constexpr uint8_t kServoPin1 = 13; // SERVO1 -- mismo net que "INT" (BNO), CONFIRMAR
     constexpr uint8_t kServoPin2 = 3;  // SERVO2 -- free (IN2_M5 moved to 17)
     constexpr uint8_t kServoPin3 = 4;  // SERVO3 -- free (IN1_M5 moved to 16)
-    constexpr uint8_t kServoPin4 = 5;  // SERVO4
-    constexpr uint8_t kServoPin5 = 2;  // SERVO5 -- mismo net que "RST" (BNO), CONFIRMAR
+    constexpr uint8_t kServoPin4 = 5;  // SERVO4 -- same net as the BNO RST (kBnoRstReserved), do not use as a servo
+    constexpr uint8_t kServoPin5 = 2;  // SERVO5 -- pin 2 is the UR encoder (ENA_M2), not the BNO RST
     // kServoPin6: placeholder, pin no identificado en el esquematico
 
     constexpr uint8_t kUpperIntakeServo = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
@@ -150,9 +150,10 @@ namespace Pins
     constexpr uint8_t kBenefitServo     = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
     constexpr uint8_t kHolderServo      = 255; // INVALIDO -- placeholder: falta mapear rol -> SERVO1-6
 
-    // BNO RST/INT
-    // 255 = not driven. Pin 2 is the UR encoder (ENA_M2); RST is probably on SERVO4 (kServoPin4), pending confirmation.
-    static constexpr uint8_t kBnoRstReserved = 255;
+    // BNO RST/INT. RST confirmed on pin 5 (SERVO4). Never pin 2 (UR encoder).
+    static constexpr uint8_t kBnoRstReserved = 5;
+    static constexpr uint8_t kBnoSda = 25; // Wire2 (SDA2)
+    static constexpr uint8_t kBnoScl = 24; // Wire2 (SCL2)
     static constexpr uint8_t kBnoIntReserved = 13; // posible conflicto con SERVO1 -- confirmar
 
     // LEGACY ULTRASONICS

@@ -21,6 +21,9 @@ public:
         lineCorr_.reset();
         wallPd_.reset();
         wallLastMs_ = 0;
+        wallSeenMs_ = 0;
+        wallSeenMm_ = 0;
+        wallSettled_ = false;
 
         dir_ = Constants::StateMachine::Benefits::kStartDir;
         blueDone_ = false;
@@ -54,6 +57,10 @@ public:
                 rearDistValid_ = true;
             }
         }
+        if (rearDistValid_) {
+            wallSeenMm_ = rearDistMm_;
+            wallSeenMs_ = now;
+        }
 
         // Doors open only through openBenefit(); the stream just reports the box.
         vision.setBenefitsOnRequest(true);
@@ -68,9 +75,9 @@ public:
         }
 
         // Wait in place until the Orin reports fresh BENEFITS results,
-        // re-sending START_BENEFITS every second.
+        // re-sending START_BENEFITS every second. vx keeps correcting meanwhile.
         if (!vision.inBenefitsPhase() || !vision.isBenefitsRunning()) {
-            LARC.stop();
+            drive(now, 0.0f);
             if (benefitRequestMs == 0 || (now - benefitRequestMs) >= cfg::kVisionRetryMs) {
                 vision.resetGuards();
                 vision.startBenefits();
@@ -105,6 +112,12 @@ public:
     // The doors share the I2C bus with the ToFs: no ToF reads while unloading.
     bool wantsTof() const { return Constants::StateMachine::Benefits::kUseRearTof && stage_ != Stage::AT_BOX; }
 
+    // Debug: what drive() used last. QTR = no box within kWallNoBoxMm.
+    enum class WallMode : uint8_t { QTR, TOF, TOO_CLOSE };
+    WallMode wallMode()   const { return wallMode_; }
+    uint16_t wallDistMm() const { return rearDistValid_ ? rearDistMm_ : 0; }
+    float    lastVx()     const { return lastVx_; }
+
     bool blueDone()   const { return blueDone_; }
     bool redPending() const { return redPending_; }
 
@@ -128,6 +141,11 @@ private:
     uint32_t wallLastMs_    = 0;
     bool     rearDistValid_ = false;
     uint16_t rearDistMm_    = 0;
+    WallMode wallMode_      = WallMode::QTR;
+    uint32_t wallSeenMs_    = 0; // last valid box reading
+    uint16_t wallSeenMm_    = 0;
+    bool     wallSettled_   = false; // within the target band, vx held at 0 (hysteresis)
+    float    lastVx_        = 0.0f;
 
     int8_t   dir_ = 1;         // +1 = left (+vy), -1 = right (-vy)
     bool     blueDone_ = false;   // blue door opened: blue boxes are driven past from now on
@@ -169,7 +187,7 @@ private:
             return;
         }
 
-        drive(now);
+        drive(now, dir_ * kVelocity);
 
         // Re-arm only once the box has FULLY left the camera for kBenefitRearmMs,
         // so a box sliding out slowly cannot cause a second stop.
@@ -211,34 +229,61 @@ private:
 
     // Drive along the boxes in the current direction. vx keeps the rear ToF distance at
     // kWallTargetMm; without a valid ToF reading it falls back to the qtrRear line.
-    void drive(uint32_t now) {
+    void drive(uint32_t now, float vy) {
         using namespace StateCommon;
         namespace cfg = Constants::StateMachine::Benefits;
 
+        // Box reading lost right after being close: the sensor is too close to measure.
+        const bool lostClose = !rearDistValid_ && wallSeenMs_ != 0 &&
+                               wallSeenMm_ < cfg::kWallTargetMm &&
+                               (now - wallSeenMs_) < cfg::kWallLostCloseMs;
+        // Box seen moments ago (ToF blank after unloading, a dropped reading): hold vx at 0
+        // instead of the qtrRear setpoint, which sits elsewhere and would pull the robot forward.
+        const bool boxRecent = !rearDistValid_ && !lostClose && wallSeenMs_ != 0 &&
+                               (now - wallSeenMs_) < cfg::kWallHoldMs;
+        const bool useTof = cfg::kUseRearTof && (rearDistValid_ || lostClose || boxRecent);
+
         float vx;
-        if (cfg::kUseRearTof && rearDistValid_ && wallLastMs_ != 0 && now == wallLastMs_) {
-            vx = -wallPd_.output();
-        } else if (cfg::kUseRearTof && rearDistValid_) {
+        if (useTof && wallLastMs_ != 0 && now == wallLastMs_) {
+            vx = lastVx_;
+        } else if (useTof) {
+            wallMode_ = WallMode::TOF;
             const bool restart = wallLastMs_ == 0 || (now - wallLastMs_) > kWallMaxGapMs;
             if (restart)
                 wallPd_.reset();
             const float dt = restart ? 0.01f : (now - wallLastMs_) / 1000.0f;
             wallLastMs_ = now;
 
-            if (rearDistMm_ < cfg::kWallMinMm) {
+            if (boxRecent) {
+                vx = -wallPd_.hold(0.0f, dt);
+            } else if (lostClose || rearDistMm_ < cfg::kWallMinMm) {
                 // Too close: move away (+vx) at full correction
-                vx = -wallPd_.hold(-cfg::kWallCorrMax, dt);
+                wallMode_ = WallMode::TOO_CLOSE;
+                wallSettled_ = false;
+                vx = -wallPd_.hold(-cfg::kWallCloseVx, dt);
             } else {
                 // > 0: too far from the boxes -> back up (-vx)
                 const float errMm  = (float)rearDistMm_ - (float)cfg::kWallTargetMm;
+                if (wallSettled_ ? fabsf(errMm) > cfg::kWallReleaseMm
+                                 : fabsf(errMm) <= cfg::kWallDeadbandMm)
+                    wallSettled_ = !wallSettled_;
                 const float shrunk = (errMm > 0.0f) ? max(errMm - cfg::kWallDeadbandMm, 0.0f)
                                                     : min(errMm + cfg::kWallDeadbandMm, 0.0f);
-                vx = -wallPd_.update(shrunk, dt);
+                if (wallSettled_) {
+                    vx = -wallPd_.hold(0.0f, dt);
+                } else {
+                    float u = wallPd_.update(shrunk, dt);
+                    if (shrunk != 0.0f && fabsf(u) < cfg::kWallMinVx)
+                        u = (shrunk > 0.0f) ? cfg::kWallMinVx : -cfg::kWallMinVx;
+                    vx = -u;
+                }
             }
         } else {
+            wallMode_ = WallMode::QTR;
             vx = -lineCorr_.update(now, rearOnLine());
         }
-        LARC.setTranslation(vx, dir_ * kVelocity);
+        lastVx_ = vx;
+        LARC.setTranslation(vx, vy);
     }
 
     // Box confirmed: keep going kBoxAdvanceMs so the door lines up, then stop and unload.
@@ -247,7 +292,7 @@ private:
         namespace cfg = Constants::StateMachine::Benefits;
 
         if ((now - stageStartMs_) < cfg::kBoxAdvanceMs && !(dir_ > 0 ? FL : FR)) {
-            drive(now);
+            drive(now, dir_ * StateCommon::kVelocity);
             return;
         }
 
@@ -303,6 +348,8 @@ private:
 
     void resumeSearch(uint32_t now) {
         benefitLastSeenMs = now; // the box must vanish for kBenefitRearmMs from here
+        if (wallSeenMs_ != 0)
+            wallSeenMs_ = now;   // no ToF reads in AT_BOX: hold vx through the resume blank
         stage_ = Stage::SEARCH;
     }
 };

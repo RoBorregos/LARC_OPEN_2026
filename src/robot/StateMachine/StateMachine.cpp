@@ -113,7 +113,7 @@ void LARCStateMachine::update()
     // Only these states use the ToFs; elsewhere the shared I2C bus stays free for the servos.
     // BENEFITS: not while a door is open.
     const bool readTof = currentState == STATES::START || currentState == STATES::POOL ||
-                         currentState == STATES::POOLSGOBACK ||
+                         currentState == STATES::POOLSGOBACK || currentState == STATES::LOOKFORLINEBACKWARDS ||
                          (currentState == STATES::BENEFITS && benefitsState_.wantsTof());
     perception_.update(now, readTof);
     const uint32_t t1 = micros();
@@ -196,7 +196,8 @@ void LARCStateMachine::update()
     case STATES::LOOKFORLINEBACKWARDS:
     {
         bool transitionToBenefitsStartCorner = false;
-        lookForLineBackwardsState_.update(now, p.FL, p.FR, p.BL, p.BR, transitionToBenefitsStartCorner);
+        lookForLineBackwardsState_.update(now, p.FL, p.FR, p.BL, p.BR, p.rearLeftMm, p.rearRightMm,
+                                          transitionToBenefitsStartCorner);
         // Straight to BENEFITS: the blue-priority search starts on the line, no corner first.
         if (transitionToBenefitsStartCorner)
             setState(STATES::BENEFITS);
@@ -360,6 +361,14 @@ void LARCStateMachine::debugPrint(bool enabled)
     printTof(F(" UL:"), tofLeft);
     printTof(F(" LL:"), tofBackLeft);
     printTof(F(" LR:"), tofBackRight);
+
+    if (currentState == STATES::BENEFITS)
+    {
+        static const char *const kWallModes[] = {"QTR", "TOF", "CLOSE"};
+        Serial.print(F(" ❤ wall| mode:")); Serial.print(kWallModes[(int)benefitsState_.wallMode()]);
+        Serial.print(F(" d:"));  Serial.print(benefitsState_.wallDistMm());
+        Serial.print(F(" vx:")); Serial.print(benefitsState_.lastVx(), 3);
+    }
 
     // IR
      Serial.print(F(" ❤ IR's❤ | FL:")); Serial.print(p.FL);

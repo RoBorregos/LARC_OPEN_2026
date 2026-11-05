@@ -60,10 +60,10 @@ namespace Constants
 
         // Positions (deg) 
         static constexpr uint8_t kIntakeUpperHome   = 54;
-        static constexpr uint8_t kIntakeUpperDeploy = 93;
+        static constexpr uint8_t kIntakeUpperDeploy = 96;
 
         static constexpr uint8_t kIntakeLowerHome   = 61;
-        static constexpr uint8_t kIntakeLowerDeploy = 90;
+        static constexpr uint8_t kIntakeLowerDeploy = 94;
 
         static constexpr uint8_t kSeparatorNeutral  = 103;
         static constexpr uint8_t kSeparatorLeft     = 53; // mature
@@ -75,11 +75,11 @@ namespace Constants
         static constexpr uint8_t kBenefit1Open      = 129;
 
         // Time for benefit doors to stay open before closing automatically (ms)
-        static constexpr uint32_t kBenefitOpenMs = 2500;
+        static constexpr uint32_t kBenefitOpenMs = 3500;
 
         // BENEFITS routine: how long the robot stays stopped at a box (ms).
         // The door opens kBenefitOpenMs of it.
-        static constexpr uint32_t kBenefitStopMs = 3000;
+        static constexpr uint32_t kBenefitStopMs = 4000;
         static_assert(kBenefitStopMs > kBenefitOpenMs, "kBenefitStopMs must be longer than kBenefitOpenMs");
 
         // BENEFITS routine: the same box colour must be seen this long while

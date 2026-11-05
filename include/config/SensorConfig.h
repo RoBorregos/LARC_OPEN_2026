@@ -22,12 +22,12 @@ namespace Constants
         };
 
         constexpr Profile Front = {
-              {74, 73, 75, 73, 114, 86, 73},          // On white
-             {784, 766, 750, 821, 831, 808, 752}}; // black (up and DOWN)
+              {74, 76, 73, 78, 124, 114, 108},          // On white
+              {823, 813, 807, 828, 854, 831, 786}}; // black (up and DOWN)
 
         constexpr Profile Rear = {
-               {63, 60, 63, 70, 80, 69},
-            {628, 673, 696, 836, 809, 777}};
+               {63, 63, 66, 91, 179, 74},
+            {601, 711, 643, 806, 810, 773}};
 
         constexpr uint16_t kBinaryThreshold = 600; // 0-1000 normalized, tune this one value
 
@@ -44,7 +44,7 @@ namespace Constants
         constexpr uint16_t kLearnMinBand      = 120; // el min aprendido no se aleja mas de esto del valor previo
         constexpr uint16_t kLearnMaxBand      = 200; // idem para el max
         constexpr uint16_t kMinSpan           = 300; // rango minimo max-min; si no se cumple, el sensor no se actualiza
-    } // namespace QTRCalibration
+    } // namespace nCalibration
 
     namespace IRCalibration
     {
@@ -61,8 +61,8 @@ namespace Constants
         static constexpr uint16_t kDebounceCount = 3; // Used by IR_mux only
         // IRLine time-based debounce: the new state must hold this long to be accepted.
         static constexpr uint32_t kOffDebounceMs    = 10; // all sensors: line -> no line
-        static constexpr uint32_t kOnDebounceMs     = 10; // FL/FR: no line -> line
-        static constexpr uint32_t kBackOnDebounceMs = 35; // BL/BR: no line -> line (stricter)
+        static constexpr uint32_t kOnDebounceMs     = 5;//10; // FL/FR: no line -> line
+        static constexpr uint32_t kBackOnDebounceMs = 10; //35; // BL/BR: no line -> line (stricter)
     } // namespace IRCalibration
 
     namespace UltrasonicConstants

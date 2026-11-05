@@ -8,6 +8,7 @@
 
 #include "BNO085/BNO085.hpp"
 #include <math.h>
+#include "I2cRecovery.hpp"
 
 // Debugged config (see src/test_sensors/bno085_standalone.cpp): the chip is
 // wired to the Teensy 4.1's second I2C bus (Wire2: SDA2=25, SCL2=24), not
@@ -18,48 +19,71 @@ static constexpr uint8_t  kAddressSecondary = 0x4B; // ADR to VCC
 static constexpr uint32_t kI2cFrequency     = 50000;
 static constexpr uint32_t REPORT_PERIOD_US  = 20000; // 50 Hz, matches bno085_standalone.cpp
 
-// begin_I2C()'s own internal hardwareReset() only holds RST for ~30ms, which
-// isn't enough for this chip's SH-2 firmware to boot on this board -- the
-// handshake fails even though the bus ACKs fine. We reset RST ourselves with
-// a generous startup margin and never let the library touch the pin (the
-// Adafruit_BNO08x default constructor below is never given a reset pin).
-static constexpr uint8_t  kRstPin              = Pins::kBnoRstReserved; // 255 = no reset pin (see pins.h)
-static constexpr uint8_t  kAddressWaitAttempts = 20;
+// We drive RST ourselves (the Adafruit_BNO08x object is never given the pin):
+// its own reset is too short for this chip, and while RST is held LOW the chip
+// cannot hold SDA, which is the moment to free Wire2 after a Teensy-only reset.
+static constexpr uint8_t  kRstPin              = Pins::kBnoRstReserved; // pin 5; 255 = no reset pin (see pins.h)
+static constexpr uint8_t  kAddressWaitAttempts = 20; // begin(): up to 2 s per address
 static constexpr uint32_t kAddressWaitDelayMs  = 100;
 static constexpr uint8_t  kBeginAttempts       = 5;
 static constexpr uint32_t kBeginRetryDelayMs   = 300;
 static constexpr uint32_t kResetStartupDelayMs = 500;
+static constexpr uint32_t kStartupResetLowMs   = 2000; // first begin(): total RST LOW, counted from holdInReset()
 static constexpr uint32_t kStallTimeoutMs      = 1500;
 static constexpr uint8_t  kMaxEventsPerUpdate  = 8; // drain the queue so the yaw is never stale
 
-// Without RST physically wired, a manual reset can't actually un-wedge the
-// chip -- retrying forever here would hang the whole robot (BNO085::update()
-// is called every Drive::update() tick). Give up after this many reset
-// cycles instead of blocking indefinitely.
-static constexpr uint8_t kMaxConnectCycles = 5;
+// BNO085::update() runs every Drive::update() tick, so a mid-run recover()
+// blocks the robot: it gets fewer and shorter cycles than the startup begin(),
+// which retries until the chip answers (the robot is not driving yet).
+static constexpr uint8_t kRecoverCycles          = 2;
+static constexpr uint8_t kRecoverAddressAttempts = 5; // 0.5 s per address
+
+// millis() when holdInReset() pulled RST LOW, 0 = not held
+static uint32_t sResetHeldSinceMs = 0;
 
 BNO085::BNO085() : initialized(false)
 {
 }
 
-void BNO085::manualReset()
+void BNO085::holdInReset()
+{
+    if (kRstPin == 255)
+        return;
+    pinMode(kRstPin, OUTPUT);
+    digitalWrite(kRstPin, LOW);
+    sResetHeldSinceMs = millis();
+    if (sResetHeldSinceMs == 0)
+        sResetHeldSinceMs = 1;
+}
+
+// RST LOW for lowMs in total, counting the time already held by holdInReset().
+void BNO085::manualReset(uint32_t lowMs)
 {
     if (kRstPin != 255) {
-        pinMode(kRstPin, OUTPUT);
-        digitalWrite(kRstPin, HIGH);
-        delay(10);
-        digitalWrite(kRstPin, LOW);
-        delay(10);
-        digitalWrite(kRstPin, HIGH);
-        delay(10);
+        if (sResetHeldSinceMs == 0)
+            holdInReset();
+        while (millis() - sResetHeldSinceMs < lowMs)
+            ;
+        sResetHeldSinceMs = 0;
     }
+
+    // A Teensy reset (e.g. an upload) does not power-cycle the BNO, which can be left
+    // holding SDA mid-transfer; held in reset it lets go, so free and restart Wire2 here.
+    if (!recoverI2cBus(Pins::kBnoSda, Pins::kBnoScl))
+        log("BNO085: SDA still held low after bus recovery");
+    Wire2.begin();
+    Wire2.setClock(kI2cFrequency);
+
+    if (kRstPin != 255)
+        digitalWrite(kRstPin, HIGH);
+    log("BNO085: RST released");
 
     delay(kResetStartupDelayMs); // SH-2 firmware startup margin
 }
 
-bool BNO085::waitForAddress(uint8_t address)
+bool BNO085::waitForAddress(uint8_t address, uint8_t attempts)
 {
-    for (uint8_t attempt = 0; attempt < kAddressWaitAttempts; ++attempt)
+    for (uint8_t attempt = 0; attempt < attempts; ++attempt)
     {
         Wire2.beginTransmission(address);
         if (Wire2.endTransmission() == 0)
@@ -70,9 +94,9 @@ bool BNO085::waitForAddress(uint8_t address)
     return false;
 }
 
-bool BNO085::tryAddress(uint8_t address)
+bool BNO085::tryAddress(uint8_t address, uint8_t addressAttempts)
 {
-    if (!waitForAddress(address))
+    if (!waitForAddress(address, addressAttempts))
         return false;
 
     for (uint8_t attempt = 0; attempt < kBeginAttempts; ++attempt)
@@ -109,37 +133,23 @@ bool BNO085::enableReports()
     return true;
 }
 
+// Blocks until the chip answers: it only runs at startup, before the robot drives.
 bool BNO085::begin()
 {
     log("BEGIN >>>> BNO085 <<<<");
 
-    Wire2.begin();
-    Wire2.setClock(kI2cFrequency);
+    // Only the first reset is long; the retries and recover() keep the short pulse.
+    manualReset(kStartupResetLowMs);
 
-    manualReset();
-
-    bool connected = false;
-    for (uint8_t cycle = 0; cycle < kMaxConnectCycles && !connected; ++cycle)
+    while (!((tryAddress(kAddressPrimary, kAddressWaitAttempts) ||
+              tryAddress(kAddressSecondary, kAddressWaitAttempts)) &&
+             enableReports()))
     {
-        connected = tryAddress(kAddressPrimary) || tryAddress(kAddressSecondary);
-
-        if (!connected)
-        {
-            log("Failed to BEGIN >>>> BNO085 <<<< (0x4A/0x4B), resetting and retrying...");
-            manualReset();
-        }
-    }
-
-    if (!connected)
-    {
-        log(">>>> BNO085 <<<< giving up (chip not responding on 0x4A/0x4B after several reset cycles)");
-        return false;
+        log("Failed to BEGIN >>>> BNO085 <<<< (0x4A/0x4B), resetting and retrying...");
+        manualReset();
     }
 
     log(">>>> BNO085 <<<< BEGINED successfully");
-
-    if (!enableReports())
-        return false;
 
     initialized     = true;
     firstYawSample_ = true;
@@ -156,17 +166,16 @@ void BNO085::recover()
     log("BNO085: stalled, forcing reset+reinit");
 
     bool connected = false;
-    manualReset();
-    for (uint8_t cycle = 0; cycle < kMaxConnectCycles && !connected; ++cycle)
+    for (uint8_t cycle = 0; cycle < kRecoverCycles && !connected; ++cycle)
     {
-        connected = tryAddress(kAddressPrimary) || tryAddress(kAddressSecondary);
-        if (!connected)
-            manualReset();
+        manualReset();
+        connected = tryAddress(kAddressPrimary, kRecoverAddressAttempts) ||
+                    tryAddress(kAddressSecondary, kRecoverAddressAttempts);
     }
 
     if (!connected)
     {
-        log("BNO085: lost for good (no RST wired to un-wedge it) -- giving up, yaw stays frozen");
+        log("BNO085: lost for good after hardware resets -- giving up, yaw stays frozen");
         initialized = false;
         return;
     }

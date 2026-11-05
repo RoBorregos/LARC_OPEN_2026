@@ -38,7 +38,7 @@ enum class STATES
 };
 
 // State the robot starts in after begin(). Change it to test a single state.
-static constexpr STATES kInitialState = STATES::START; // START, POOL, LOOKFORLINE, LOOKFORCORNER, BEANS, BEANSGOBACK, POOLSGOBACK, LOOKFORLINEBACKWARDS, BENEFITSSTARTCORNER, BENEFITS, STOP
+static constexpr STATES kInitialState = STATES::LOOKFORLINEBACKWARDS; // START, POOL, LOOKFORLINE, LOOKFORCORNER, BEANS, BEANSGOBACK, POOLSGOBACK, LOOKFORLINEBACKWARDS, BENEFITSSTARTCORNER, BENEFITS, STOP
 static constexpr bool kVisionEnabled = true;// false = no vision: servos safe, no communication with the Orin
 
 class LARCStateMachine

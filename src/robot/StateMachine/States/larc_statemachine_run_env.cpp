@@ -10,10 +10,12 @@
 
 #include <Arduino.h>
 #include "robot/StateMachine/StateMachine.hpp"
+#include "BNO085/BNO085.hpp"
 
 LARCStateMachine sm;
 
 void setup() {
+  BNO085::holdInReset(); // BNO in reset until LARC.begin() -> BNO085::begin() releases it
   Serial.begin(115200);
   delay(500);
 

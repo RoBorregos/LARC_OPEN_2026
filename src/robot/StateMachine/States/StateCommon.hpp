@@ -95,6 +95,22 @@ namespace StateCommon
             return pd_.output();
         }
 
+        // No correction: slews the output to 0 and clears the PD memory, so update()
+        // resumes without a derivative kick.
+        float pause(uint32_t now)
+        {
+            if (started_ && (now - lastTickMs_) < kFrontLinePeriodMs)
+                return pd_.output();
+
+            const bool  gap = !started_ || (now - lastTickMs_) > kMaxGapMs;
+            const float dt  = (gap ? kFrontLinePeriodMs : (now - lastTickMs_)) / 1000.0f;
+            started_    = true;
+            lastTickMs_ = now;
+            lost_       = false;
+            pd_.hold(0.0f, dt);
+            return pd_.output();
+        }
+
     private:
         static constexpr uint32_t kMaxGapMs = 5 * kFrontLinePeriodMs;
         static constexpr LinePD::Gains kGains = {

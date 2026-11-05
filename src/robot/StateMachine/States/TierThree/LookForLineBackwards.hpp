@@ -21,13 +21,25 @@ public:
         correctionDir_   = 0;
         correctionStart_ = 0;
         onLineSinceMs_   = 0;
+        slow_            = false;
     }
 
     // Lateral IR pairs: left side = FL + BL, right side = FR + BR.
+    // rearLeftMm/rearRightMm: LL/LR distance (0 = no reading).
     void update(uint32_t now, bool FL, bool FR, bool BL, bool BR,
+                uint16_t rearLeftMm, uint16_t rearRightMm,
                 bool& transitionToBenefitsStartCorner) {
         namespace cfg = Constants::StateMachine::LookForLineBackwards;
         transitionToBenefitsStartCorner = false;
+
+        // Latched: right at the box the ToF stops measuring and reads "nothing there".
+        bool atBoxes = false;
+        for (const uint16_t d : {rearLeftMm, rearRightMm}) {
+            if (d != 0 && d <= cfg::kSlowDistMm)
+                slow_ = true;
+            if (d != 0 && d <= cfg::kStopDistMm)
+                atBoxes = true;
+        }
 
         // Plain qtrRear onLine (kRearOnLineThreshold), held kOnLineConfirmMs to skip noise spikes
         if (StateCommon::rearOnLine()) {
@@ -38,10 +50,14 @@ public:
         }
         const bool onLineConfirmed = onLineSinceMs_ != 0 && (now - onLineSinceMs_) >= cfg::kOnLineConfirmMs;
 
-        if (tracker_.update() == QtrEntryTracker::Phase::ON || onLineConfirmed) {
+        // At the boxes before the line: stop here, BENEFITS fixes the distance with the ToFs.
+        if (tracker_.update() == QtrEntryTracker::Phase::ON || onLineConfirmed || atBoxes) {
             correcting_ = false;
             // Serial.println("[LOOKFORLINEBACKWARDS] QTR ON -> BENEFITSSTARTCORNER");
+            // stop() alone ramps down and coasts into the boxes; brake() alone keeps the old
+            // backward command, so the next control tick would drive backward again.
             LARC.stop();
+            LARC.brake();
             transitionToBenefitsStartCorner = true;
             return;
         }
@@ -74,7 +90,7 @@ public:
             return;
         }
 
-        LARC.backward(kSpeed);
+        LARC.backward(slow_ ? cfg::kSlowSpeed : kSpeed);
     }
 
 private:
@@ -94,6 +110,7 @@ private:
     int8_t   correctionDir_   = 0;
     uint32_t correctionStart_ = 0;
     uint32_t onLineSinceMs_   = 0;
+    bool     slow_            = false; // a rear ToF saw the boxes within kSlowDistMm
 
     void startCorrection(uint32_t now, int8_t dir) {
         correcting_      = true;

@@ -22,6 +22,10 @@ class BNO085
 public:
     BNO085();
 
+    // Pulls RST LOW right away; call first thing in setup() so the chip stays in reset
+    // while everything else starts. begin() releases it once kStartupResetLowMs have passed.
+    static void holdInReset();
+
     bool begin();
     void update();
 
@@ -70,9 +74,9 @@ private:
     void quaternionToEuler(float qw, float qx, float qy, float qz,
                            float &yaw, float &pitch, float &roll) const;
 
-    void manualReset();
-    bool waitForAddress(uint8_t address);
-    bool tryAddress(uint8_t address);
+    void manualReset(uint32_t lowMs = 10);
+    bool waitForAddress(uint8_t address, uint8_t attempts);
+    bool tryAddress(uint8_t address, uint8_t addressAttempts);
     bool enableReports();
     void recover();
 };

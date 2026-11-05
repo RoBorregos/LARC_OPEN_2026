@@ -18,7 +18,7 @@ namespace Constants
         // Shared by several states
         namespace Common
         {
-            static constexpr float kVelocity      = 0.25f;
+            static constexpr float kVelocity      = 0.35f;
             static constexpr float kBaseSpeed     = Constants::PID::kcurrentVelocity;
             static constexpr float kManeuverSpeed = 0.30f; // backups, strafes and line corrections
 
@@ -39,8 +39,8 @@ namespace Constants
                     Ejemplo: Originalmente lo queria a 1500 el SetPoint, pero terino usando 
                             3000 como el actual SetPoint value.
             */
-            static constexpr float kQtrFrontSetpoint = 2200.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
-            static constexpr float kQtrRearSetpoint  = 1500.3f; // qtrRear: 0..5000, same mm PD as front
+            static constexpr float kQtrFrontSetpoint = 1450.0f; //  1500 cerca // Entra por C6 y termina en C0; es decir si quiers que este mascerca del arbol que SetPoint vaya en rango de 1000 (mas cerca)-2000 (mas lejos)
+            static constexpr float kQtrRearSetpoint  = 1000.3f; // qtrRear: 0..5000, same mm PD as front
             static constexpr float kCornerCorrMax   = 0.20f; // max |vx| correction, front and rear
 
             // qtrRear uses the same correction as qtrFront (gains below). Mirrored: higher setpoint = closer.
@@ -154,6 +154,10 @@ namespace Constants
             // Line correction capped to this fraction of kVelocity. With 45 deg wheels a wheel
             // reverses when |vx| > |vy|; each reversal resets its ramp/integral and makes the robot sway.
             static constexpr float    kCorrMaxRatio      = 0.8f;
+            // All qtrFront sensors above kAllBlackNorm at once -> no line PID (vx slews to 0)
+            // until kAllBlackReleaseCount or fewer are still above it.
+            static constexpr uint16_t kAllBlackNorm         = Common::kFrontFloorNorm;
+            static constexpr uint8_t  kAllBlackReleaseCount = 3;
         } // namespace Beans
 
         namespace PoolsGoBack
@@ -175,6 +179,13 @@ namespace Constants
 
             // Also -> BENEFITS when qtrRear.onLine(kRearOnLineThreshold) holds this long
             static constexpr uint32_t kOnLineConfirmMs = 30;
+
+            // LL or LR at or below kSlowDistMm -> back up at kSlowSpeed (instead of kManeuverSpeed)
+            // until the line is found, so the robot does not hit the boxes.
+            static constexpr uint16_t kSlowDistMm = 50;
+            static constexpr float    kSlowSpeed  = 0.15f;
+            // LL or LR at or below this -> brake and go to BENEFITS even without the line
+            static constexpr uint16_t kStopDistMm = 25;
         } // namespace LookForLineBackwards
 
         namespace BenefitsStartCorner
@@ -193,7 +204,7 @@ namespace Constants
             static constexpr uint32_t kTurnStopMs = 300; // stop on a side line before reversing
             // After a box is confirmed, keep driving this long before stopping to open the door
             // (the camera sees the box before the door is lined up with it).
-            static constexpr uint32_t kBoxAdvanceMs = 300;
+            static constexpr uint32_t kBoxAdvanceMs = 200;
             static constexpr uint8_t  kMaxTurns   = 4;   // give up (STOP) after this many reversals
 
             // vx from the rear ToFs while searching: farther than the target backs up toward
@@ -202,12 +213,24 @@ namespace Constants
             // Read LL/LR in the debug print with the robot where it should deposit.
             static constexpr bool     kUseRearTof     = true;
             static constexpr uint16_t kWallTargetMm   = 30;
-            static constexpr uint16_t kWallMinMm      = 20;  // closer than this -> move away at kWallCorrMax
+            static constexpr uint16_t kWallMinMm      = 20;  // closer than this -> move away at kWallCloseVx
             static constexpr uint16_t kWallNoBoxMm    = 100;
             static constexpr float    kWallDeadbandMm = 5.0f;
+            // Hysteresis: once within kWallDeadbandMm of the target vx goes to 0 and stays there
+            // until the error passes kWallReleaseMm (ToF noise is about +-5 mm this close).
+            static constexpr float    kWallReleaseMm  = 15.0f;
             static constexpr float    kWallKp         = 0.002f; // vx per mm of error
             static constexpr float    kWallCorrMax    = 0.15f;
+            // Away push below kWallMinMm: small, or the robot ends up far and off the line.
+            static constexpr float    kWallCloseVx    = 0.06f;
+            // Outside the deadband vx is at least this, so a small error still moves the robot.
+            static constexpr float    kWallMinVx      = 0.06f;
             static constexpr float    kWallSlewPerS   = 1.0f;   // vx units per second
+            // Too close, the VL53L1X reports an error that reads as "nothing there" (> kWallNoBoxMm).
+            // If the last valid reading was below kWallTargetMm, keep moving away this long.
+            static constexpr uint32_t kWallLostCloseMs = 300;
+            // Box reading lost (or just unloaded) less than this ago -> vx held at 0, not the qtrRear.
+            static constexpr uint32_t kWallHoldMs      = 400;
         } // namespace Benefits
 
         // Robot stays still in begin() until the BNO085 yaw stops moving, then latches the yaw target.
